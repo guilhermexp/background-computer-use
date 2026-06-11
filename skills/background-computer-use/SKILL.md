@@ -19,7 +19,8 @@ Use this skill to start or connect to the local macOS `BackgroundComputerUse` ru
    ```text
    $TMPDIR/background-computer-use/runtime-manifest.json
    ```
-   Never assume a fixed port.
+   Never assume a fixed port. Send `authToken` from the manifest as the
+   `X-Background-Computer-Use-Token` header for every `/v1` request.
 
 3. Call `GET /v1/bootstrap`.
    - If `instructions.ready` is false, report the returned permission steps to the user.

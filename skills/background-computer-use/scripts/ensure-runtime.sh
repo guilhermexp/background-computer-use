@@ -32,6 +32,25 @@ print(value)
 PY
 }
 
+read_auth_token() {
+  python3 - "$MANIFEST_PATH" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.exists():
+    sys.exit(1)
+try:
+    value = json.loads(path.read_text()).get("authToken", "")
+except Exception:
+    sys.exit(1)
+if not value:
+    sys.exit(1)
+print(value)
+PY
+}
+
 health_ok() {
   local base_url="$1"
   curl -fsS "$base_url/health" >/dev/null 2>&1
@@ -96,4 +115,5 @@ echo "BackgroundComputerUse running at $BASE_URL"
 echo "Runtime manifest: $MANIFEST_PATH"
 echo
 echo "Bootstrap:"
-curl -fsS "$BASE_URL/v1/bootstrap" | python3 -m json.tool
+AUTH_TOKEN="$(read_auth_token)"
+curl -fsS -H "X-Background-Computer-Use-Token: $AUTH_TOKEN" "$BASE_URL/v1/bootstrap" | python3 -m json.tool

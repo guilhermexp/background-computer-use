@@ -5,6 +5,7 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import Optional
 
 
 def usage() -> int:
@@ -36,6 +37,18 @@ def base_url() -> str:
         raise SystemExit(f"Could not read baseURL from {path}: {exc}") from exc
 
 
+def auth_token() -> Optional[str]:
+    if os.environ.get("BCU_AUTH_TOKEN"):
+        return os.environ["BCU_AUTH_TOKEN"]
+    path = manifest_path()
+    try:
+        data = json.loads(path.read_text())
+        value = data.get("authToken")
+        return str(value) if value else None
+    except Exception:
+        return None
+
+
 def main(argv: list[str]) -> int:
     if len(argv) not in (3, 4):
         return usage()
@@ -47,6 +60,9 @@ def main(argv: list[str]) -> int:
 
     body = None
     headers = {"accept": "application/json"}
+    token = auth_token()
+    if token:
+        headers["X-Background-Computer-Use-Token"] = token
     if len(argv) == 4:
         try:
             parsed = json.loads(argv[3])

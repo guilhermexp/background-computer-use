@@ -4,7 +4,8 @@ enum APIDocumentation {
     static let guide = APIGuideDTO(
         summary: "Local loopback API for discovering macOS app windows, reading window state, and dispatching background-safe actions.",
         flow: [
-            "Call GET /v1/bootstrap first. Use baseURL from the response or runtime manifest and stop if instructions.ready is false.",
+            "Read $TMPDIR/background-computer-use/runtime-manifest.json first. Use baseURL from the manifest and send authToken as the X-Background-Computer-Use-Token header for every /v1 request.",
+            "Call GET /v1/bootstrap next and stop if instructions.ready is false.",
             "Call GET /v1/routes for the complete route catalog, request fields, response fields, execution policy, examples, and error codes.",
             "Call POST /v1/list_apps to find a target app, then POST /v1/list_windows with an app name or bundle ID.",
             "Call POST /v1/get_window_state with a window ID and imageMode path or base64. Use the screenshot as visual ground truth and the projected tree for semantic targets.",
@@ -76,7 +77,7 @@ enum APIDocumentation {
                 whenToUse: "Check that the loopback HTTP server is alive without touching app or window state.",
                 useAfter: ["Runtime process has started."],
                 successSignals: ["HTTP 200 and ok=true."],
-                nextSteps: ["Call /v1/bootstrap for permissions, baseURL, and route discovery."],
+                nextSteps: ["Read the runtime manifest, then call /v1/bootstrap with the manifest authToken header for permissions, baseURL, and route discovery."],
                 exampleRequest: nil
             )
         case .bootstrap:
@@ -90,7 +91,7 @@ enum APIDocumentation {
         case .routes:
             return usage(
                 whenToUse: "Discover how to call every endpoint, what each response means, and which errors to handle.",
-                useAfter: ["Call /v1/bootstrap first so you know the runtime is ready."],
+                useAfter: ["Read the runtime manifest and call /v1/bootstrap first so you know the runtime is ready."],
                 successSignals: ["HTTP 200 with a route entry for every supported id."],
                 nextSteps: ["Use route.request.fields and route.usage.exampleRequest to build calls."],
                 exampleRequest: nil

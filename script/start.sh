@@ -36,9 +36,14 @@ import json, sys
 print(json.load(open(sys.argv[1]))["baseURL"])
 PY
 )"
+AUTH_TOKEN="$(python3 - "$MANIFEST_PATH" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1])).get("authToken", ""))
+PY
+)"
 
 echo "BackgroundComputerUse running at $BASE_URL"
 echo "Runtime manifest: $MANIFEST_PATH"
 echo
 echo "Bootstrap:"
-curl -fsS "$BASE_URL/v1/bootstrap" | python3 -m json.tool
+curl -fsS -H "X-Background-Computer-Use-Token: $AUTH_TOKEN" "$BASE_URL/v1/bootstrap" | python3 -m json.tool

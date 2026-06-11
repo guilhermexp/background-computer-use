@@ -24,7 +24,7 @@ Runtime metadata is written to:
 $TMPDIR/background-computer-use/runtime-manifest.json
 ```
 
-The manifest includes `baseURL`, permission status, bootstrap instructions, and route summaries. Agents should read this file instead of assuming a fixed port.
+The manifest includes `baseURL`, `authToken`, permission status, bootstrap instructions, and route summaries. Agents should read this file instead of assuming a fixed port, then send `authToken` as the `X-Background-Computer-Use-Token` header for every `/v1` request. `/health` remains unauthenticated for local liveness checks.
 
 ## Signing And Permissions
 
@@ -132,9 +132,16 @@ print(json.load(open(path))["baseURL"])
 PY
 )"
 
-curl -s "$BASE/v1/bootstrap" | python3 -m json.tool
-curl -s "$BASE/v1/routes" | python3 -m json.tool
-curl -s -X POST "$BASE/v1/list_apps" -H 'content-type: application/json' -d '{}' | python3 -m json.tool
+TOKEN="$(python3 - <<'PY'
+import json, os
+path = os.path.join(os.environ["TMPDIR"], "background-computer-use", "runtime-manifest.json")
+print(json.load(open(path))["authToken"])
+PY
+)"
+
+curl -s -H "X-Background-Computer-Use-Token: $TOKEN" "$BASE/v1/bootstrap" | python3 -m json.tool
+curl -s -H "X-Background-Computer-Use-Token: $TOKEN" "$BASE/v1/routes" | python3 -m json.tool
+curl -s -X POST "$BASE/v1/list_apps" -H "X-Background-Computer-Use-Token: $TOKEN" -H 'content-type: application/json' -d '{}' | python3 -m json.tool
 ```
 
 ## State And Actions
@@ -143,10 +150,12 @@ Read a window:
 
 ```bash
 curl -s -X POST "$BASE/v1/list_windows" \
+  -H "X-Background-Computer-Use-Token: $TOKEN" \
   -H 'content-type: application/json' \
   -d '{"app":"Safari"}' | python3 -m json.tool
 
 curl -s -X POST "$BASE/v1/get_window_state" \
+  -H "X-Background-Computer-Use-Token: $TOKEN" \
   -H 'content-type: application/json' \
   -d '{"window":"WINDOW_ID","imageMode":"path","maxNodes":6500}' | python3 -m json.tool
 ```
@@ -155,6 +164,7 @@ Click by semantic target:
 
 ```bash
 curl -s -X POST "$BASE/v1/click" \
+  -H "X-Background-Computer-Use-Token: $TOKEN" \
   -H 'content-type: application/json' \
   -d '{"window":"WINDOW_ID","target":{"kind":"display_index","value":12},"clickCount":1,"imageMode":"path"}' | python3 -m json.tool
 ```
@@ -163,6 +173,7 @@ Click by screenshot coordinate:
 
 ```bash
 curl -s -X POST "$BASE/v1/click" \
+  -H "X-Background-Computer-Use-Token: $TOKEN" \
   -H 'content-type: application/json' \
   -d '{"window":"WINDOW_ID","x":240,"y":180,"clickCount":2,"imageMode":"path"}' | python3 -m json.tool
 ```
@@ -171,6 +182,7 @@ Type into a text target:
 
 ```bash
 curl -s -X POST "$BASE/v1/type_text" \
+  -H "X-Background-Computer-Use-Token: $TOKEN" \
   -H 'content-type: application/json' \
   -d '{"window":"WINDOW_ID","target":{"kind":"display_index","value":4},"text":"hello","focusAssistMode":"focus_and_caret_end","imageMode":"path"}' | python3 -m json.tool
 ```

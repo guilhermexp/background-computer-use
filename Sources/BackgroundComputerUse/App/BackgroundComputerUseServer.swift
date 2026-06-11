@@ -4,7 +4,14 @@ package enum BackgroundComputerUseServer {
     package static func run() {
         AppKitRuntimeBootstrap.startIfNeeded()
 
-        let bootstrap = RuntimeBootstrap()
+        let bootstrap: RuntimeBootstrap
+        do {
+            bootstrap = try RuntimeBootstrap()
+        } catch {
+            fputs("BackgroundComputerUse failed to start: \(error)\n", stderr)
+            Foundation.exit(1)
+        }
+
         let semaphore = DispatchSemaphore(value: 0)
         let resultBox = RuntimeBootResultBox()
 

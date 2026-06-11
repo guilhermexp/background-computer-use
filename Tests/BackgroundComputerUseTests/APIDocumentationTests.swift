@@ -96,11 +96,63 @@ struct APIDocumentationTests {
         #expect(recovery.contains { $0.contains("/v1/routes") })
     }
 
-    private func makeRequest(method: String, path: String, body: String = "") throws -> HTTPRequest {
+    @Test
+    func v1RoutesRequireRuntimeAuthTokenWhenEnabled() throws {
+        let request = try makeRequest(method: "GET", path: "/v1/routes")
+
+        let response = Router(auth: RuntimeAuth(token: "secret-token")).response(
+            for: request,
+            context: RouterContext(baseURL: nil, startedAt: nil)
+        )
+
+        #expect(response.statusCode == 401)
+
+        let json = try #require(JSONSerialization.jsonObject(with: response.body) as? [String: Any])
+        #expect(json["error"] as? String == "unauthorized")
+        #expect((json["message"] as? String)?.contains(RuntimeAuth.headerName) == true)
+    }
+
+    @Test
+    func v1RoutesAcceptRuntimeAuthTokenWhenEnabled() throws {
+        let request = try makeRequest(
+            method: "GET",
+            path: "/v1/routes",
+            headers: [RuntimeAuth.headerName: "secret-token"]
+        )
+
+        let response = Router(auth: RuntimeAuth(token: "secret-token")).response(
+            for: request,
+            context: RouterContext(baseURL: nil, startedAt: nil)
+        )
+
+        #expect(response.statusCode == 200)
+    }
+
+    @Test
+    func healthStaysOpenWhenRuntimeAuthIsEnabled() throws {
+        let request = try makeRequest(method: "GET", path: "/health")
+
+        let response = Router(auth: RuntimeAuth(token: "secret-token")).response(
+            for: request,
+            context: RouterContext(baseURL: nil, startedAt: nil)
+        )
+
+        #expect(response.statusCode == 200)
+    }
+
+    private func makeRequest(
+        method: String,
+        path: String,
+        body: String = "",
+        headers: [String: String] = [:]
+    ) throws -> HTTPRequest {
         let bodyData = Data(body.utf8)
         var request = "\(method) \(path) HTTP/1.1\r\n"
         request += "Host: 127.0.0.1\r\n"
         request += "Content-Type: application/json\r\n"
+        for (name, value) in headers.sorted(by: { $0.key < $1.key }) {
+            request += "\(name): \(value)\r\n"
+        }
         request += "Content-Length: \(bodyData.count)\r\n"
         request += "\r\n"
 

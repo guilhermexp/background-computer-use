@@ -91,10 +91,16 @@ public struct BootstrapInstructionsDTO: Encodable, Sendable {
     public let user: [String]
 }
 
+public struct RuntimeAuthDTO: Encodable, Sendable {
+    public let required: Bool
+    public let headerName: String
+}
+
 public struct BootstrapResponse: Encodable, Sendable {
     public let contractVersion: String
     public let baseURL: String?
     public let startedAt: String?
+    public let auth: RuntimeAuthDTO
     public let permissions: RuntimePermissionsDTO
     public let instructions: BootstrapInstructionsDTO
     public let guide: APIGuideDTO
@@ -105,6 +111,8 @@ public struct RuntimeManifestDTO: Encodable, Sendable {
     public let contractVersion: String
     public let baseURL: String
     public let startedAt: String
+    public let auth: RuntimeAuthDTO
+    public let authToken: String?
     public let permissions: RuntimePermissionsDTO
     public let instructions: BootstrapInstructionsDTO
     public let guide: APIGuideDTO

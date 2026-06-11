@@ -52,7 +52,7 @@ enum RouteRegistry {
                 readActRead: false,
                 allowsConcurrentClients: true,
                 notes: [
-                    "Agents should call bootstrap first to confirm the runtime URL, permissions, and launch readiness.",
+                    "Agents should read the local runtime manifest first, then call bootstrap with the manifest auth token to confirm runtime URL, permissions, and launch readiness.",
                     "When Accessibility or Screen Recording is missing, bootstrap returns user-facing instructions and presents a local permission alert."
                 ]
             ),
@@ -76,7 +76,7 @@ enum RouteRegistry {
                 allowsConcurrentClients: true,
                 notes: [
                     "The route registry is the machine-readable source of truth for request and response shapes.",
-                    "Call /v1/bootstrap first, then use /v1/routes to plan action calls."
+                    "Read the runtime manifest and call /v1/bootstrap first, then use /v1/routes to plan action calls."
                 ]
             ),
             implementationStatus: .implemented,

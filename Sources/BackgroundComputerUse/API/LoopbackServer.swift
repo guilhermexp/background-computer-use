@@ -7,11 +7,15 @@ final class LoopbackServer: @unchecked Sendable {
         qos: .userInitiated,
         attributes: .concurrent
     )
-    private let router = Router()
+    private let router: Router
     private var listener: NWListener?
 
     private(set) var baseURL: URL?
     private(set) var startedAt: Date?
+
+    init(auth: RuntimeAuth = .disabled) {
+        router = Router(auth: auth)
+    }
 
     func start() async throws -> URL {
         if let baseURL {
@@ -20,8 +24,9 @@ final class LoopbackServer: @unchecked Sendable {
 
         let parameters = NWParameters.tcp
         parameters.allowLocalEndpointReuse = true
+        parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(.loopback), port: .any)
 
-        let listener = try NWListener(using: parameters, on: .any)
+        let listener = try NWListener(using: parameters)
         self.listener = listener
 
         return try await withCheckedThrowingContinuation { continuation in

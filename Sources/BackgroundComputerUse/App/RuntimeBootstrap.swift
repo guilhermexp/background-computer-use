@@ -8,9 +8,12 @@ struct RuntimeBootState {
 
 final class RuntimeBootstrap: @unchecked Sendable {
     private let server: LoopbackServer
+    private let auth: RuntimeAuth
 
-    init(server: LoopbackServer = LoopbackServer()) {
-        self.server = server
+    init(auth: RuntimeAuth? = nil) throws {
+        let resolvedAuth = try auth ?? RuntimeAuth.generateRequired()
+        self.auth = resolvedAuth
+        server = LoopbackServer(auth: resolvedAuth)
     }
 
     func start() async throws -> RuntimeBootState {
@@ -36,6 +39,8 @@ final class RuntimeBootstrap: @unchecked Sendable {
             contractVersion: ContractVersion.current,
             baseURL: baseURL.absoluteString,
             startedAt: Time.iso8601String(from: startedAt),
+            auth: auth.dto,
+            authToken: auth.token,
             permissions: permissions,
             instructions: instructions,
             guide: APIDocumentation.guide,

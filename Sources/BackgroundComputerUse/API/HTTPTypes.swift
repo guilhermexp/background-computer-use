@@ -32,6 +32,13 @@ struct HTTPRequest {
     let headers: [String: String]
     let body: Data
 
+    func headerValue(named name: String) -> String? {
+        let normalizedName = name.lowercased()
+        return headers.first { key, _ in
+            key.lowercased() == normalizedName
+        }?.value
+    }
+
     static func parse(_ data: Data) -> HTTPRequestParseResult {
         let separator = Data("\r\n\r\n".utf8)
         guard let headerRange = data.range(of: separator) else {

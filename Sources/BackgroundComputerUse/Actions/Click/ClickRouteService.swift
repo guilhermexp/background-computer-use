@@ -75,45 +75,10 @@ struct ClickRouteService {
             maxNodes: request.maxNodes ?? 6500,
             imageMode: request.imageMode ?? .omit
         )
-        let stateTokenStale = suppliedStateTokenIsStale(
-            supplied: request.stateToken,
-            live: capture.envelope.response.stateToken
+        let warnings = targetResolver.stateTokenWarnings(
+            suppliedStateToken: request.stateToken,
+            liveStateToken: capture.envelope.response.stateToken
         )
-        let warnings = stateTokenStale
-            ? ["Supplied stateToken did not match the live pre-action recapture; click was rejected by the stale-coordinate guard."]
-            : []
-
-        if stateTokenStale {
-            return response(
-                classification: .verifierAmbiguous,
-                failureDomain: .targeting,
-                summary: "Supplied stateToken did not match the live pre-action recapture; refusing to click a potentially stale target.",
-                window: capture.envelope.response.window,
-                requestedTarget: requestedTarget,
-                target: nil,
-                clickCount: request.clickCount,
-                mouseButton: mouseButton,
-                finalRoute: .rejected,
-                fallbackReason: .staleCoordinateGuard,
-                axAttempt: nil,
-                coordinate: nil,
-                transports: [],
-                routeSteps: [rejectedStep("State token mismatch rejected before dispatch.")],
-                preStateToken: capture.envelope.response.stateToken,
-                postStateToken: nil,
-                cursor: AXCursorTargeting.notAttempted(
-                    requested: request.cursor,
-                    reason: "Cursor movement was not attempted because the request stateToken was stale.",
-                    options: executionOptions
-                ),
-                frontmostBundleBefore: frontmostBefore,
-                frontmostBundleBeforeDispatch: nil,
-                frontmostBundleAfter: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
-                warnings: warnings,
-                notes: notes,
-                verification: nil
-            )
-        }
 
         guard mouseButton == .left else {
             return response(
@@ -1485,14 +1450,6 @@ struct ClickRouteService {
 
     private func normalizedTargetClickCount(_ request: ClickRequest) -> Int? {
         try? normalizedClickCount(request)
-    }
-
-    private func suppliedStateTokenIsStale(supplied: String?, live: String) -> Bool {
-        guard let supplied,
-              supplied.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
-            return false
-        }
-        return supplied != live
     }
 
     private func normalizedClickCount(_ request: ClickRequest) throws -> Int {

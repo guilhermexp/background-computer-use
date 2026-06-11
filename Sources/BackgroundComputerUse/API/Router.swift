@@ -6,9 +6,18 @@ struct RouterContext {
 }
 
 struct Router {
+    private let auth: RuntimeAuth
     private let services = RuntimeServices()
 
+    init(auth: RuntimeAuth = .disabled) {
+        self.auth = auth
+    }
+
     func response(for request: HTTPRequest, context: RouterContext) -> HTTPResponse {
+        guard request.path == "/health" || auth.isAuthorized(request: request) else {
+            return unauthorizedResponse()
+        }
+
         switch (request.method, request.path) {
         case (.get, "/health"):
             return .json(
@@ -28,6 +37,7 @@ struct Router {
                     contractVersion: ContractVersion.current,
                     baseURL: context.baseURL?.absoluteString,
                     startedAt: context.startedAt.map(Time.iso8601String),
+                    auth: auth.dto,
                     permissions: permissions,
                     instructions: instructions,
                     guide: APIDocumentation.guide,
@@ -198,6 +208,22 @@ struct Router {
 
             return errorResponse(for: error, routeID: routeID)
         }
+    }
+
+    private func unauthorizedResponse() -> HTTPResponse {
+        .json(
+            ErrorResponse(
+                error: "unauthorized",
+                message: "Missing or invalid \(RuntimeAuth.headerName) header.",
+                requestID: UUID().uuidString,
+                recovery: [
+                    "Read the local runtime manifest at $TMPDIR/background-computer-use/runtime-manifest.json.",
+                    "Send the manifest authToken value as the \(RuntimeAuth.headerName) header for all /v1 requests."
+                ]
+            ),
+            statusCode: 401,
+            reasonPhrase: "Unauthorized"
+        )
     }
 
     private func includeDebugNotes<Request>(for routeID: RouteID, payload: Request) -> Bool {

@@ -20,7 +20,7 @@ When using a release zip, set `BCU_RELEASE_SHA256` when possible.
 
 ## Permission Contract
 
-macOS Accessibility and Screen Recording permissions attach to the signed app bundle. The helper scripts install and launch the app, but the user may still need to grant permissions in System Settings. Always trust the `GET /v1/bootstrap` response:
+macOS Accessibility and Screen Recording permissions attach to the signed app bundle. The helper scripts install and launch the app, but the user may still need to grant permissions in System Settings. Read the manifest first, then trust the authenticated `GET /v1/bootstrap` response:
 
 - `instructions.ready == true`: action routes are available.
 - `instructions.ready == false`: report `instructions.user` and recovery guidance to the user.
@@ -33,7 +33,7 @@ Runtime metadata is written to:
 $TMPDIR/background-computer-use/runtime-manifest.json
 ```
 
-The manifest includes `baseURL`; clients should not assume a fixed port.
+The manifest includes `baseURL` and `authToken`; clients should not assume a fixed port. Send `authToken` as the `X-Background-Computer-Use-Token` header for every `/v1` request. `/health` is intentionally unauthenticated for liveness checks.
 
 ## Route Discovery
 
