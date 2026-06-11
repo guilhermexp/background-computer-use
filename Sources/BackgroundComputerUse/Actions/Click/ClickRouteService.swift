@@ -1234,16 +1234,22 @@ struct ClickRouteService {
         let selectionSummaryChanged: Bool?
         let focusedElementChanged: Bool?
         let windowTitleChanged: Bool?
+        let modalDialogOpened: Bool?
         if let after {
             renderedTextChanged = self.renderedTextChanged(before: before, after: after)
             selectionSummaryChanged = self.selectionSummaryChanged(before: before, after: after)
             focusedElementChanged = self.focusedElementChanged(before: before, after: after)
             windowTitleChanged = before.envelope.response.window.title != after.envelope.response.window.title
+            modalDialogOpened = ClickDialogEffectVerifier.modalDialogOpened(
+                before: before.envelope.response.tree.nodes,
+                after: after.envelope.response.tree.nodes
+            )
         } else {
             renderedTextChanged = nil
             selectionSummaryChanged = nil
             focusedElementChanged = nil
             windowTitleChanged = nil
+            modalDialogOpened = nil
         }
         let beforeSelected = target?.isSelected
         let afterSelected = refreshedTarget?.isSelected
@@ -1272,6 +1278,9 @@ struct ClickRouteService {
         if targetStateChanged == true {
             verificationNotes.append("Target selected/focused/value evidence changed after click.")
         }
+        if modalDialogOpened == true {
+            verificationNotes.append(ClickDialogEffectVerifier.verificationNote)
+        }
         if foregroundBeforeDispatch != foregroundAfter {
             verificationNotes.append("Foreground changed from \(foregroundBeforeDispatch ?? "nil") to \(foregroundAfter ?? "nil").")
         }
@@ -1293,6 +1302,7 @@ struct ClickRouteService {
             selectionSummaryChanged: selectionSummaryChanged,
             focusedElementChanged: focusedElementChanged,
             windowTitleChanged: windowTitleChanged,
+            modalDialogOpened: modalDialogOpened,
             targetStateChanged: targetStateChanged,
             foregroundPreserved: foregroundBeforeDispatch == nil || foregroundAfter == nil
                 ? nil
@@ -1329,6 +1339,7 @@ struct ClickRouteService {
             verification.selectionSummaryChanged == true ||
             verification.focusedElementChanged == true ||
             verification.windowTitleChanged == true ||
+            verification.modalDialogOpened == true ||
             verification.targetStateChanged == true
     }
 
@@ -1721,6 +1732,118 @@ struct ClickRouteService {
 
     private func rect(from dto: RectDTO) -> CGRect {
         CGRect(x: dto.x, y: dto.y, width: dto.width, height: dto.height)
+    }
+}
+
+enum ClickDialogEffectVerifier {
+    static let verificationNote = "A modal/dialog surface appeared after click."
+
+    static func modalDialogOpened(
+        before: [AXPipelineV2SurfaceNodeDTO],
+        after: [AXPipelineV2SurfaceNodeDTO]
+    ) -> Bool {
+        modalDialogOpened(
+            before: before.map(ClickDialogEffectProbe.init),
+            after: after.map(ClickDialogEffectProbe.init)
+        )
+    }
+
+    static func modalDialogOpened(before: [ClickDialogEffectProbe], after: [ClickDialogEffectProbe]) -> Bool {
+        let beforeSignatures = Set(before.compactMap(dialogSignature))
+        return after.compactMap(dialogSignature).contains { beforeSignatures.contains($0) == false }
+    }
+
+    private static func dialogSignature(_ probe: ClickDialogEffectProbe) -> String? {
+        guard isDialogLike(probe) else {
+            return nil
+        }
+        return probe.signatureSignals
+            .map(normalize)
+            .filter { $0.isEmpty == false }
+            .joined(separator: "|")
+    }
+
+    private static func isDialogLike(_ probe: ClickDialogEffectProbe) -> Bool {
+        (probe.roleSignals + probe.metadataSignals).contains { signal in
+            let normalized = normalize(signal)
+            return normalized == "dialog" ||
+                normalized == "alert" ||
+                normalized == "alertdialog" ||
+                normalized == "sheet" ||
+                normalized.contains("modal") ||
+                normalized.contains("dialog") ||
+                normalized.contains("alert")
+        }
+    }
+
+    private static func normalize(_ text: String?) -> String {
+        (text ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+}
+
+struct ClickDialogEffectProbe: Hashable, Sendable {
+    let roleSignals: [String]
+    let signatureSignals: [String]
+    let metadataSignals: [String]
+
+    init(
+        roleSignals: [String],
+        signatureSignals: [String],
+        metadataSignals: [String] = []
+    ) {
+        self.roleSignals = roleSignals
+        self.signatureSignals = signatureSignals
+        self.metadataSignals = metadataSignals
+    }
+
+    init(node: AXPipelineV2SurfaceNodeDTO) {
+        let frameSignature = node.frameAppKit.map { "\($0.x),\($0.y),\($0.width),\($0.height)" }
+        roleSignals = [
+            node.displayRole,
+            node.rawRole,
+            node.rawSubrole,
+            node.description,
+            node.identifier,
+        ].compactMap { $0 }
+        signatureSignals = [
+            node.displayRole,
+            node.rawRole,
+            node.rawSubrole,
+            node.title,
+            node.description,
+            node.identifier,
+            frameSignature,
+        ].compactMap { $0 }
+        metadataSignals = node.flags + node.dialogMetadataSignals + node.transformNotes
+    }
+}
+
+private extension AXPipelineV2SurfaceNodeDTO {
+    var dialogMetadataSignals: [String] {
+        let affordanceSignals = (affordances ?? []).flatMap { affordance in
+            [
+                Optional(affordance.kind),
+                affordance.label,
+                affordance.value,
+                affordance.sourceRole,
+                affordance.sourceSubrole,
+                affordance.sourceTitle,
+                affordance.sourceURL,
+                affordance.rawAction,
+            ].compactMap { $0 }
+        }
+        let actionSignals = (availableActions ?? []).flatMap { action in
+            [
+                Optional(action.rawName),
+                action.label,
+                action.description,
+                Optional(action.category),
+            ].compactMap { $0 }
+        }
+        return affordanceSignals + actionSignals
     }
 }
 

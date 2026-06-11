@@ -111,6 +111,7 @@ public struct ClickVerificationEvidenceDTO: Encodable, Sendable {
     public let selectionSummaryChanged: Bool?
     public let focusedElementChanged: Bool?
     public let windowTitleChanged: Bool?
+    public let modalDialogOpened: Bool?
     public let targetStateChanged: Bool?
     public let foregroundPreserved: Bool?
     public let verificationNotes: [String]
