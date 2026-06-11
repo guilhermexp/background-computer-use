@@ -329,7 +329,7 @@ public struct ScrollRequest: Decodable, Sendable {
     public let stateToken: String?
     public let target: ActionTargetRequestDTO
     public let direction: ScrollDirectionDTO
-    public let pages: Int?
+    public let pages: Double?
     public let verificationMode: ActionVerificationModeDTO?
     public let cursor: CursorRequestDTO?
     public let includeMenuBar: Bool?
@@ -342,7 +342,7 @@ public struct ScrollRequest: Decodable, Sendable {
         stateToken: String? = nil,
         target: ActionTargetRequestDTO,
         direction: ScrollDirectionDTO,
-        pages: Int? = nil,
+        pages: Double? = nil,
         verificationMode: ActionVerificationModeDTO? = nil,
         cursor: CursorRequestDTO? = nil,
         includeMenuBar: Bool? = nil,
@@ -383,7 +383,7 @@ public struct ScrollRequest: Decodable, Sendable {
         stateToken = try container.decodeIfPresent(String.self, forKey: .stateToken)
         target = try container.decode(ActionTargetRequestDTO.self, forKey: .target)
         direction = try container.decode(ScrollDirectionDTO.self, forKey: .direction)
-        pages = try container.decodeIfPresent(Int.self, forKey: .pages)
+        pages = try container.decodeIfPresent(Double.self, forKey: .pages)
         verificationMode = try container.decodeIfPresent(ActionVerificationModeDTO.self, forKey: .verificationMode)
         cursor = try container.decodeIfPresent(CursorRequestDTO.self, forKey: .cursor)
         includeMenuBar = try container.decodeIfPresent(Bool.self, forKey: .includeMenuBar)

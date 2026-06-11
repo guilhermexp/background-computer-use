@@ -390,7 +390,7 @@ struct ScrollRouteService {
         capture: AXActionStateCapture,
         requestedNode: AXPipelineV2SurfaceNodeDTO,
         direction: ScrollDirectionDTO,
-        pages: Int,
+        pages: Double,
         cursorRequest: CursorRequestDTO?
     ) -> CandidateExecutionResult {
         let cursor = AXCursorTargeting.prepareScroll(
@@ -527,7 +527,7 @@ struct ScrollRouteService {
         mode: ScrollTransportModeDTO,
         candidate: ScrollCandidate,
         direction: ScrollDirectionDTO,
-        pages: Int,
+        pages: Double,
         window: ResolvedWindowDTO,
         resolvedContainer: AXActionResolvedLiveElement
     ) -> StrategyAttemptOutcome {
@@ -581,7 +581,7 @@ struct ScrollRouteService {
         mode: ScrollTransportModeDTO,
         candidate: ScrollCandidate,
         direction: ScrollDirectionDTO,
-        pages: Int,
+        pages: Double,
         resolvedContainer: AXActionResolvedLiveElement
     ) -> StrategyAttemptOutcome {
         guard let containerFrame = AXHelpers.frame(resolvedContainer.element) else {
@@ -659,7 +659,7 @@ struct ScrollRouteService {
         mode: ScrollTransportModeDTO,
         candidate: ScrollCandidate,
         direction: ScrollDirectionDTO,
-        pages: Int,
+        pages: Double,
         resolvedContainer: AXActionResolvedLiveElement
     ) -> StrategyAttemptOutcome {
         let bars = findScrollBars(in: resolvedContainer.element)
@@ -738,14 +738,15 @@ struct ScrollRouteService {
         mode: ScrollTransportModeDTO,
         candidate: ScrollCandidate,
         direction: ScrollDirectionDTO,
-        pages: Int,
+        pages: Double,
         resolvedContainer: AXActionResolvedLiveElement
     ) -> StrategyAttemptOutcome {
         let actionName = rawPageAction(for: direction)
+        let attempts = pageDispatchCount(for: pages)
         var performedCount = 0
         var lastError: AXError = .success
 
-        for _ in 0..<max(pages, 1) {
+        for _ in 0..<attempts {
             let error = AXActionRuntimeSupport.performAction(actionName, on: resolvedContainer.element)
             lastError = error
             guard error == .success else {
@@ -767,7 +768,7 @@ struct ScrollRouteService {
                 transportSuccess: performedCount > 0,
                 didDispatch: performedCount > 0,
                 boundaryReason: nil,
-                notes: ["Attempted \(actionName) \(performedCount)x/\(max(pages, 1))x on the chosen live container."]
+                notes: ["Attempted \(actionName) \(performedCount)x/\(attempts)x on the chosen live container for requested pages \(format(pages))."]
             ),
             didDispatch: performedCount > 0
         )
@@ -777,7 +778,7 @@ struct ScrollRouteService {
         mode: ScrollTransportModeDTO,
         candidate: ScrollCandidate,
         direction: ScrollDirectionDTO,
-        pages: Int,
+        pages: Double,
         window: ResolvedWindowDTO,
         resolvedContainer: AXActionResolvedLiveElement
     ) -> StrategyAttemptOutcome {
@@ -807,7 +808,8 @@ struct ScrollRouteService {
 
         var postedCount = 0
         var lastStatus = "not_posted"
-        for _ in 0..<max(pages, 1) {
+        let attempts = pageDispatchCount(for: pages)
+        for _ in 0..<attempts {
             guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
                   let keyUp = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false) else {
                 lastStatus = "event_create_failed"
@@ -833,7 +835,7 @@ struct ScrollRouteService {
                 didDispatch: postedCount > 0,
                 boundaryReason: nil,
                 notes: [
-                    "Posted \(postedCount)x \(pagingKeyLabel(for: keyCode)) key events directly to pid \(window.pid).",
+                    "Posted \(postedCount)x/\(attempts)x \(pagingKeyLabel(for: keyCode)) key events directly to pid \(window.pid) for requested pages \(format(pages)).",
                     "post_to_pid_paging is process-scoped; verification must prove the captured window moved."
                 ]
             ),
@@ -845,7 +847,7 @@ struct ScrollRouteService {
         mode: ScrollTransportModeDTO,
         candidate: ScrollCandidate,
         direction: ScrollDirectionDTO,
-        pages: Int,
+        pages: Double,
         window: ResolvedWindowDTO,
         resolvedContainer: AXActionResolvedLiveElement
     ) -> StrategyAttemptOutcome {
@@ -874,11 +876,12 @@ struct ScrollRouteService {
         }
 
         let point = targetedScrollWheelPoint(for: candidate, window: window)
-        let deltaY = scrollWheelDeltaY(for: direction)
+        let attempts = scrollWheelDispatchCount(for: pages)
+        let deltaY = scrollWheelDeltaY(for: direction, pages: pages / Double(attempts))
         var postedCount = 0
         var lastStatus = "not_posted"
 
-        for _ in 0..<max(pages, 1) {
+        for _ in 0..<attempts {
             guard let event = CGEvent(
                 scrollWheelEvent2Source: source,
                 units: .pixel,
@@ -911,8 +914,8 @@ struct ScrollRouteService {
                 didDispatch: postedCount > 0,
                 boundaryReason: nil,
                 notes: [
-                    "Posted \(postedCount)x routed CGEvent scroll-wheel events directly to pid \(window.pid), windowNumber \(window.windowNumber).",
-                    "Scroll-wheel point source: \(point.source) at (\(format(point.point.x)), \(format(point.point.y))); deltaY=\(deltaY).",
+                    "Posted \(postedCount)x/\(attempts)x routed CGEvent scroll-wheel events directly to pid \(window.pid), windowNumber \(window.windowNumber) for requested pages \(format(pages)).",
+                    "Scroll-wheel point source: \(point.source) at (\(format(point.point.x)), \(format(point.point.y))); per-event deltaY=\(deltaY).",
                     "This fallback uses postToPid with routed window fields; it does not activate the target app, warp the cursor, or post to a global HID event tap.",
                     "Verification must prove the captured window moved."
                 ] + point.notes
@@ -929,7 +932,7 @@ struct ScrollRouteService {
         requestedNode: AXPipelineV2SurfaceNodeDTO,
         containerNode: AXPipelineV2SurfaceNodeDTO,
         direction: ScrollDirectionDTO,
-        pages _: Int
+        pages _: Double
     ) -> [ScrollVerificationReadDTO] {
         var reads: [ScrollVerificationReadDTO] = []
         let verificationViewport = verificationViewport(for: containerNode, in: beforeCapture)
@@ -1500,9 +1503,17 @@ struct ScrollRouteService {
             actionNames(for: strongest).contains("AXScrollDownByPage") == false &&
             actionNames(for: strongest).contains("AXScrollUpByPage") == false
 
-        return lacksStrongAXTraits &&
+        if lacksStrongAXTraits &&
             strongest.rawRole == kAXGroupRole as String &&
-            opaqueCandidateScore(for: strongest, window: window.frameAppKit) >= 40
+            opaqueCandidateScore(for: strongest, window: window.frameAppKit) >= 40 {
+            return true
+        }
+        if lacksStrongAXTraits &&
+            strongest.rawRole == kAXWindowRole as String &&
+            isLargeVisibleContentSurface(strongest, window: window) {
+            return true
+        }
+        return false
     }
 
     private func preferredOpaqueFallbackCandidate(
@@ -1755,7 +1766,7 @@ struct ScrollRouteService {
         container: AXUIElement,
         containerFrame: CGRect,
         direction: ScrollDirectionDTO,
-        pages: Int
+        pages: Double
     ) -> OffscreenDescendantPick? {
         let desired = desiredOverflowDistance(direction: direction, containerFrame: containerFrame, pages: pages)
 
@@ -1874,7 +1885,7 @@ struct ScrollRouteService {
         requestedTarget: AXActionTargetSnapshot?,
         chosenContainer: AXActionTargetSnapshot?,
         direction: ScrollDirectionDTO,
-        pages: Int,
+        pages: Double,
         planCandidates: [ScrollCandidateDTO],
         transports: [ScrollTransportAttemptDTO],
         preStateToken: String?,
@@ -1945,11 +1956,11 @@ struct ScrollRouteService {
         }
     }
 
-    private func normalizedPages(_ requested: Int?, warnings: inout [String]) -> Int {
+    private func normalizedPages(_ requested: Double?, warnings: inout [String]) -> Double {
         let raw = requested ?? 1
-        if raw < 1 {
-            warnings.append("Requested pages was below 1 and was clamped to 1.")
-            return 1
+        if raw <= 0 {
+            warnings.append("Requested pages was at or below 0 and was clamped to 0.05.")
+            return 0.05
         }
         if raw > 10 {
             warnings.append("Requested pages was above 10 and was clamped to 10 for safety.")
@@ -2061,7 +2072,7 @@ struct ScrollRouteService {
         return "no_change"
     }
 
-    private func desiredOverflowDistance(direction: ScrollDirectionDTO, containerFrame: CGRect, pages: Int) -> Double {
+    private func desiredOverflowDistance(direction: ScrollDirectionDTO, containerFrame: CGRect, pages: Double) -> Double {
         let distance: Double
         switch direction {
         case .up, .down:
@@ -2069,7 +2080,7 @@ struct ScrollRouteService {
         case .left, .right:
             distance = max(80, containerFrame.width * 0.85)
         }
-        return distance * Double(max(pages, 1))
+        return distance * max(pages, 0.05)
     }
 
     private func offscreenDistance(direction: ScrollDirectionDTO, container: CGRect, frame: CGRect) -> Double {
@@ -2128,15 +2139,25 @@ struct ScrollRouteService {
         }
     }
 
-    private func scrollWheelDeltaY(for direction: ScrollDirectionDTO) -> Int32 {
+    private func pageDispatchCount(for pages: Double) -> Int {
+        max(Int(ceil(max(pages, 1))), 1)
+    }
+
+    private func scrollWheelDispatchCount(for pages: Double) -> Int {
+        max(Int(ceil(max(pages, 1))), 1)
+    }
+
+    private func scrollWheelDeltaY(for direction: ScrollDirectionDTO, pages: Double) -> Int32 {
+        let base: Double
         switch direction {
         case .up:
-            return 650
+            base = 650
         case .down:
-            return -650
+            base = -650
         case .left, .right:
             return 0
         }
+        return Int32((base * max(pages, 0.05)).rounded())
     }
 
     private func applyScrollEventRoutingFields(_ event: CGEvent, pid: pid_t, windowNumber: Int) {

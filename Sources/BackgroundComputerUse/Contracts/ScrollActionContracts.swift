@@ -89,7 +89,7 @@ public struct ScrollResponse: Encodable, Sendable {
     public let requestedTarget: AXActionTargetSnapshotDTO?
     public let chosenContainer: AXActionTargetSnapshotDTO?
     public let direction: ScrollDirectionDTO
-    public let pages: Int
+    public let pages: Double
     public let winningMode: ScrollTransportModeDTO?
     public let winningStrategy: ScrollStrategyDTO?
     public let planCandidates: [ScrollCandidateDTO]

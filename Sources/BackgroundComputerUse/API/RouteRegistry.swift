@@ -332,7 +332,7 @@ enum RouteRegistry {
                     "Semantic target from get_window_state. Prefer node_id or refetch_fingerprint when available; display_index uses the rendered tree line number."
                 ),
                 field("direction", "up | down | left | right", required: true),
-                field("pages", "integer"),
+                field("pages", "number"),
                 field("verificationMode", "strict | fast"),
                 field("cursor", "CursorRequest"),
                 field("includeMenuBar", "boolean"),
@@ -642,7 +642,7 @@ enum RouteRegistry {
             field("requestedTarget", "AXActionTarget | null"),
             field("chosenContainer", "AXActionTarget | null"),
             field("direction", "up | down | left | right", required: true),
-            field("pages", "integer", required: true),
+            field("pages", "number", required: true),
             field("winningMode", "background_safe_ax_ladder | post_to_pid_paging | targeted_scroll_wheel_post_to_pid | null"),
             field("winningStrategy", "ax_scroll_to_show_descendant | scrollbar_value | ax_page_action | post_to_pid_paging | targeted_scroll_wheel_post_to_pid | null"),
             field("planCandidates", "ScrollCandidate[]", required: true),

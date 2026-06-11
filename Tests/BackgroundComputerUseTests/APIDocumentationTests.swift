@@ -72,6 +72,36 @@ struct APIDocumentationTests {
     }
 
     @Test
+    func scrollRouteAcceptsFractionalPages() throws {
+        let body = """
+        {
+          "window": "window-id",
+          "target": {"kind": "display_index", "value": 1},
+          "direction": "down",
+          "pages": 0.25
+        }
+        """
+        let request = try JSONDecoder().decode(ScrollRequest.self, from: Data(body.utf8))
+
+        #expect(request.pages == 0.25)
+
+        let response = RouteListResponse(
+            contractVersion: ContractVersion.current,
+            guide: APIDocumentation.guide,
+            routes: RouteRegistry.publicRoutes()
+        )
+        let data = try JSONSupport.encoder.encode(response)
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let routes = try #require(json["routes"] as? [[String: Any]])
+        let scroll = try #require(routes.first { $0["id"] as? String == RouteID.scroll.rawValue })
+        let requestDoc = try #require(scroll["request"] as? [String: Any])
+        let fields = try #require(requestDoc["fields"] as? [[String: Any]])
+        let pages = try #require(fields.first { $0["name"] as? String == "pages" })
+
+        #expect(pages["type"] as? String == "number")
+    }
+
+    @Test
     func invalidRequestErrorIsVersionedAndActionable() throws {
         let request = try makeRequest(
             method: "POST",
