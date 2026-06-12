@@ -73,7 +73,12 @@ openssl x509 -req \
   -extfile "$TMP_DIR/leaf-ext.cnf" \
   >/dev/null 2>&1
 
-openssl pkcs12 -export -legacy \
+LEGACY_FLAG=""
+if openssl pkcs12 -export -legacy -help >/dev/null 2>&1; then
+  LEGACY_FLAG="-legacy"
+fi
+
+openssl pkcs12 -export $LEGACY_FLAG \
   -inkey "$TMP_DIR/leaf.key" \
   -in "$TMP_DIR/leaf.crt" \
   -certfile "$TMP_DIR/root.crt" \
