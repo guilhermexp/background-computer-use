@@ -119,14 +119,10 @@ final class CursorCoordinator {
     }
 
     func resolveSession(requested: CursorRequestDTO?) -> CursorResponseDTO {
-        guard let requested else {
-            return AXCursorTargeting.disabledSession(requested: nil)
-        }
-
         startIfNeeded()
 
         let now = CACurrentMediaTime()
-        let sessionID = normalizedCursorID(requested.id) ?? generatedCursorID()
+        let sessionID = normalizedCursorID(requested?.id) ?? defaultAppearance.id
 
         if let existing = sessionsByID[sessionID] {
             applyMetadataUpdate(to: existing, requested: requested)
@@ -136,8 +132,8 @@ final class CursorCoordinator {
 
         let descriptor = CursorSessionDescriptor(
             id: sessionID,
-            name: normalizedCursorName(requested.name) ?? defaultAppearance.name,
-            colorHex: normalizedCursorHex(requested.color) ?? defaultAppearance.colorHex,
+            name: normalizedCursorName(requested?.name) ?? defaultAppearance.name,
+            colorHex: normalizedCursorHex(requested?.color) ?? defaultAppearance.colorHex,
             reused: false
         )
         let session = CursorSessionState(descriptor: descriptor, now: now)

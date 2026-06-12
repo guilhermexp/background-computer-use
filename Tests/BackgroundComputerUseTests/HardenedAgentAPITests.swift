@@ -183,14 +183,14 @@ struct PressKeyVerificationTests {
     }
 }
 
-// MARK: - Task 3.4 — cursor overlay opt-in
+// MARK: - Task 3.4 — default visible cursor reuse
 
 @Suite
-struct CursorOptInTests {
+struct CursorDefaultVisibilityTests {
     @Test
-    func actionWithoutCursorRequestRendersNoOverlayEvenWhenGloballyEnabled() {
+    func actionWithoutCursorRequestKeepsDefaultVisibleCursorWhenGloballyEnabled() {
         #expect(
-            AXCursorTargeting.effectiveOptions(requested: nil, options: .visualCursorEnabled).visualCursorEnabled == false
+            AXCursorTargeting.effectiveOptions(requested: nil, options: .visualCursorEnabled).visualCursorEnabled == true
         )
     }
 
@@ -206,7 +206,7 @@ struct CursorOptInTests {
     }
 
     @Test
-    func prepareClickWithoutCursorSkipsSessionAndAnimation() {
+    func prepareClickWithoutCursorUsesStableDefaultSession() {
         let target = AXActionTargetSnapshot(
             displayIndex: 1,
             projectedIndex: 1,
@@ -255,16 +255,16 @@ struct CursorOptInTests {
             options: .visualCursorEnabled
         )
 
-        #expect(!cursor.moved)
-        #expect(cursor.moveDurationMs == nil)
-        #expect(cursor.movement == "disabled")
-        #expect(cursor.session.id == "visual-cursor-disabled")
+        #expect(cursor.moved)
+        #expect(cursor.moveDurationMs != nil)
+        #expect(cursor.movement == "approach_click_choreography")
+        #expect(cursor.session.id == CursorProfile.defaultAppearance.id)
     }
 
     @Test
-    func cursorProfileHasNoImplicitCodexDefault() {
-        #expect(CursorProfile.defaultAppearance.id != "codex")
-        #expect(CursorProfile.defaultAppearance.name != "Codex")
+    func cursorProfileUsesStableBCUDefault() {
+        #expect(CursorProfile.defaultAppearance.id == "bcu")
+        #expect(CursorProfile.defaultAppearance.name == "BCU")
     }
 }
 

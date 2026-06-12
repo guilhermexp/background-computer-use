@@ -12,7 +12,7 @@ struct SetWindowFrameRouteService {
     }
 
     func setWindowFrame(request: SetWindowFrameRequest) throws -> SetWindowFrameResponse {
-        let cursorAnimationEnabled = executionOptions.visualCursorEnabled && request.cursor != nil
+        let cursorAnimationEnabled = executionOptions.visualCursorEnabled
         let cursor = cursorSession(request.cursor)
         let totalStarted = DispatchTime.now().uptimeNanoseconds
         let resolveStarted = DispatchTime.now().uptimeNanoseconds
@@ -220,7 +220,7 @@ struct SetWindowFrameRouteService {
     }
 
     private func cursorSession(_ request: CursorRequestDTO?) -> CursorResponseDTO {
-        (executionOptions.visualCursorEnabled && request != nil)
+        executionOptions.visualCursorEnabled
             ? CursorRuntime.resolve(requested: request)
             : AXCursorTargeting.disabledSession(requested: request)
     }

@@ -2,13 +2,14 @@ import AppKit
 import Foundation
 
 enum AXCursorTargeting {
-    /// Visual cursor overlays are opt-in per request: a request without an explicit `cursor`
-    /// object renders no cursor session, matching the `visualCursor: .disabled` package path.
+    /// HTTP actions keep one visible default cursor when the runtime has visual cursors enabled.
+    /// Explicit cursor requests can still override id/name/color, while package-level disabled
+    /// execution remains honored.
     static func effectiveOptions(
         requested: CursorRequestDTO?,
         options: ActionExecutionOptions
     ) -> ActionExecutionOptions {
-        requested == nil ? .visualCursorDisabled : options
+        options
     }
 
     static func notAttempted(

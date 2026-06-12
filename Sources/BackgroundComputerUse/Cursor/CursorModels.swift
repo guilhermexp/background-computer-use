@@ -6,11 +6,11 @@ struct CursorProfile {
     let name: String
     let colorHex: String
 
-    /// Appearance applied to an explicitly requested cursor that omits a name or color.
-    /// This is NOT an implicit default: actions without a `cursor` object render no cursor at all.
+    /// Stable default cursor used when an action omits a cursor object. Keeping one id prevents
+    /// duplicate overlay sessions while still making BCU activity visible on screen.
     static let defaultAppearance = CursorProfile(
-        id: "cursor",
-        name: "Cursor",
+        id: "bcu",
+        name: "BCU",
         colorHex: "#0095A1"
     )
 }

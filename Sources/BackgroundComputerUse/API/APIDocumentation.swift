@@ -9,7 +9,7 @@ enum APIDocumentation {
             "Call GET /v1/routes for the complete route catalog, request fields, response fields, execution policy, examples, and error codes.",
             "Call POST /v1/list_apps to find a target app, then POST /v1/list_windows with an app name or bundle ID.",
             "Call POST /v1/get_window_state with a window ID and imageMode path or base64. Use the screenshot as visual ground truth and the projected tree for semantic targets.",
-            "Call one action route. Reuse stateToken when available, pass a cursor object if you want a visible agent cursor, then read state again before planning the next meaningful action."
+            "Call one action route. Reuse stateToken when available; actions without cursor reuse the visible bcu cursor, and cursor.id creates a separate lane. Read state again before planning the next meaningful action."
         ],
         concepts: [
             APIConceptDTO(
@@ -41,11 +41,11 @@ enum APIDocumentation {
             ),
             APIConceptDTO(
                 name: "CursorRequest",
-                description: "Optional visible cursor session for action routes. Reuse id across related calls to move the same cursor.",
+                description: "Optional override for the visible cursor session on action routes. When omitted, the HTTP runtime reuses the default bcu cursor session.",
                 fields: [
-                    RouteFieldDTO(name: "id", type: "string", required: false, description: "Stable cursor session ID, for example agent-1.", defaultValue: nil),
-                    RouteFieldDTO(name: "name", type: "string", required: false, description: "Short label displayed with the cursor.", defaultValue: nil),
-                    RouteFieldDTO(name: "color", type: "string", required: false, description: "CSS-style hex color, for example #20C46B.", defaultValue: nil),
+                    RouteFieldDTO(name: "id", type: "string", required: false, description: "Stable cursor session ID, for example agent-1.", defaultValue: "bcu"),
+                    RouteFieldDTO(name: "name", type: "string", required: false, description: "Short label displayed with the cursor.", defaultValue: "BCU"),
+                    RouteFieldDTO(name: "color", type: "string", required: false, description: "CSS-style hex color, for example #20C46B.", defaultValue: "#0095A1"),
                 ]
             ),
         ],

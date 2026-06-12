@@ -898,7 +898,7 @@ enum RouteRegistry {
             notes: [
                 "Mutating action routes should coordinate through a per-window write lane.",
                 "If a future implementation cannot satisfy background safety, it must report that explicitly instead of silently stealing focus.",
-                "Visual cursor overlay is opt-in per request: omit cursor to dispatch without creating or animating an on-screen cursor session."
+                "Visual cursor overlay is visible by default in the HTTP runtime: omit cursor to reuse the stable bcu cursor session, or pass cursor.id for a separate lane."
             ]
         )
     }
