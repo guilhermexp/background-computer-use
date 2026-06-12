@@ -440,19 +440,19 @@ struct PressKeyRouteService {
         sleepRunLoop(settleDelay)
         let afterFrontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
 
-        let postCapture = try? targetResolver.reread(after: capture, imageMode: request.imageMode ?? .omit)
-        let renderedChanged = postCapture.map { renderedTextChanged(before: capture, after: $0) }
-        let focusChanged = postCapture.map { focusedElementChanged(before: capture, after: $0) }
+        var postCapture = try? targetResolver.reread(after: capture, imageMode: request.imageMode ?? .omit)
+        var renderedChanged = postCapture.map { renderedTextChanged(before: capture, after: $0) }
+        var focusChanged = postCapture.map { focusedElementChanged(before: capture, after: $0) }
         let nativeTextStateChanged = beforeTextState.flatMap { before in
             liveTextElement.map { element in
                 textStateChanged(before: before, after: AXActionRuntimeSupport.readTextState(element.element))
             }
         }
-        let selectionChanged = postCapture.map { selectionSummaryChanged(before: capture, after: $0) }
-        let afterWindowImage = beforeWindowImage == nil ? nil : CGWindowCaptureService.captureImage(window: postCapture?.envelope.response.window ?? capture.envelope.response.window)
-        let visualChangeRatio = sampledDifferenceRatio(lhs: beforeWindowImage, rhs: afterWindowImage)
-        let visualChanged = visualChangeRatio.map { $0 >= 0.018 }
-        let searchEvidence = parsed.intent == .openFindOrSearch
+        var selectionChanged = postCapture.map { selectionSummaryChanged(before: capture, after: $0) }
+        var afterWindowImage = beforeWindowImage == nil ? nil : CGWindowCaptureService.captureImage(window: postCapture?.envelope.response.window ?? capture.envelope.response.window)
+        var visualChangeRatio = sampledDifferenceRatio(lhs: beforeWindowImage, rhs: afterWindowImage)
+        var visualChanged = visualChangeRatio.map { $0 >= 0.018 }
+        var searchEvidence = parsed.intent == .openFindOrSearch
             ? searchVerification(
                 before: capture,
                 after: postCapture,
@@ -463,7 +463,7 @@ struct PressKeyRouteService {
                 notes: []
             ).search
             : nil
-        let verifiedEffect = nativeEffectVerified(
+        var verifiedEffect = nativeEffectVerified(
             dispatchSucceeded: dispatchSucceeded,
             parsed: parsed,
             renderedChanged: renderedChanged,
@@ -473,6 +473,40 @@ struct PressKeyRouteService {
             visualChanged: visualChanged,
             search: searchEvidence
         )
+        if verifiedEffect == false, parsed.key == "escape" {
+            sleepRunLoop(0.25)
+            postCapture = try? targetResolver.reread(after: capture, imageMode: request.imageMode ?? .omit)
+            renderedChanged = postCapture.map { renderedTextChanged(before: capture, after: $0) }
+            focusChanged = postCapture.map { focusedElementChanged(before: capture, after: $0) }
+            selectionChanged = postCapture.map { selectionSummaryChanged(before: capture, after: $0) }
+            afterWindowImage = beforeWindowImage == nil ? nil : CGWindowCaptureService.captureImage(window: postCapture?.envelope.response.window ?? capture.envelope.response.window)
+            visualChangeRatio = sampledDifferenceRatio(lhs: beforeWindowImage, rhs: afterWindowImage)
+            visualChanged = visualChangeRatio.map { $0 >= 0.018 }
+            searchEvidence = parsed.intent == .openFindOrSearch
+                ? searchVerification(
+                    before: capture,
+                    after: postCapture,
+                    beforeSearchCount: searchFieldSnapshots(in: capture).count,
+                    beforeFrontmost: nil,
+                    afterFrontmost: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+                    liveFocusedSearchFieldVerified: false,
+                    notes: []
+                ).search
+                : nil
+            verifiedEffect = nativeEffectVerified(
+                dispatchSucceeded: dispatchSucceeded,
+                parsed: parsed,
+                renderedChanged: renderedChanged,
+                focusedChanged: focusChanged,
+                textStateChanged: nativeTextStateChanged,
+                selectionChanged: selectionChanged,
+                visualChanged: visualChanged,
+                search: searchEvidence
+            )
+            if verifiedEffect {
+                notes.append("Escape verification succeeded after a delayed reread for menu/popover dismissal.")
+            }
+        }
         if verifiedEffect == false {
             let prepareSurfaceNote = "The key was delivered to the target app/window, but no visible effect was verified. Some custom, browser, or Electron surfaces require a prior safe click/focus inside the content area before shortcuts are accepted; try a safe click in the target content surface, then retry press_key."
             warnings.append(prepareSurfaceNote)
@@ -619,7 +653,7 @@ struct PressKeyRouteService {
         notes: inout [String]
     ) -> ActionCursorTargetResponseDTO {
         let keyLabel = cursorKeycapDisplayLabel(normalized: parsed.dto.normalized)
-        notes.append("Press-key cursor choreography uses a stable titlebar keyboard anchor because press_key targets the resolved window, not a specific AX element.")
+        notes.append("Press-key cursor choreography stays at the current cursor position, falling back to a stable titlebar anchor only when the cursor has no visible position yet.")
         return AXCursorTargeting.preparePressKey(
             requested: requested,
             window: window,

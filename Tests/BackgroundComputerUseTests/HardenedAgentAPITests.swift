@@ -266,6 +266,51 @@ struct CursorDefaultVisibilityTests {
         #expect(CursorProfile.defaultAppearance.id == "agent")
         #expect(CursorProfile.defaultAppearance.name == "Agent")
     }
+
+    @Test
+    func pressKeyCursorChoreographyStaysInPlace() {
+        let window = ResolvedWindowDTO(
+            windowID: "window-id",
+            title: "Window",
+            bundleID: "com.example.Test",
+            pid: 123,
+            launchDate: nil,
+            windowNumber: 456,
+            frameAppKit: RectDTO(x: 80, y: 80, width: 400, height: 300),
+            resolutionStrategy: "test"
+        )
+        let cursorRequest = CursorRequestDTO(
+            id: "press-key-in-place-test",
+            name: "Agent",
+            color: "#0095A1"
+        )
+
+        let first = AXCursorTargeting.preparePressKey(
+            requested: cursorRequest,
+            window: window,
+            keyLabel: "Esc",
+            options: .visualCursorEnabled
+        )
+        AXCursorTargeting.finishPressKey(cursor: first)
+
+        #expect(!first.moved)
+        #expect(first.moveDurationMs == 0)
+        #expect(first.movement == "key_choreography_in_place")
+        #expect(first.targetPointSource == "window_titlebar_keyboard_anchor")
+
+        let second = AXCursorTargeting.preparePressKey(
+            requested: cursorRequest,
+            window: window,
+            keyLabel: "Esc",
+            options: .visualCursorEnabled
+        )
+        AXCursorTargeting.finishPressKey(cursor: second)
+
+        #expect(!second.moved)
+        #expect(second.moveDurationMs == 0)
+        #expect(second.movement == "key_choreography_in_place")
+        #expect(second.targetPointSource == "current_cursor_keyboard_anchor")
+    }
 }
 
 // MARK: - Task 4.3 — list_windows dedup

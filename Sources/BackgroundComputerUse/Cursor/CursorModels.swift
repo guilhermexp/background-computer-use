@@ -35,7 +35,7 @@ struct CursorMotionTuning: Equatable, Hashable {
         endHandle: 0.38,
         arcSize: 0.42,
         arcFlow: 0.72,
-        baseDurationMilliseconds: 1280,
+        baseDurationMilliseconds: 650,
         name: "Swoopy"
     )
 }
@@ -73,20 +73,20 @@ struct CursorActionTimings: Equatable {
     let morphDurationMilliseconds: Double
 
     static let defaults = CursorActionTimings(
-        clickPressHoldMilliseconds: 120,
-        secondaryPreRippleMilliseconds: 120,
-        secondaryDwellMilliseconds: 550,
-        scrollStreakMilliseconds: 750,
-        scrollDwellMilliseconds: 850,
-        pressKeyPreBounceMilliseconds: 180,
-        pressKeyHoldMilliseconds: 180,
-        pressKeyReleaseMilliseconds: 500,
-        setValuePreRippleMilliseconds: 180,
-        setValueDwellMilliseconds: 550,
-        typeArrowToIBeamMilliseconds: 220,
-        typeIBeamToCaretMilliseconds: 220,
-        typeCharacterIntervalMilliseconds: 90,
-        typeTailDwellMilliseconds: 500,
+        clickPressHoldMilliseconds: 80,
+        secondaryPreRippleMilliseconds: 80,
+        secondaryDwellMilliseconds: 320,
+        scrollStreakMilliseconds: 420,
+        scrollDwellMilliseconds: 420,
+        pressKeyPreBounceMilliseconds: 60,
+        pressKeyHoldMilliseconds: 90,
+        pressKeyReleaseMilliseconds: 240,
+        setValuePreRippleMilliseconds: 80,
+        setValueDwellMilliseconds: 320,
+        typeArrowToIBeamMilliseconds: 100,
+        typeIBeamToCaretMilliseconds: 100,
+        typeCharacterIntervalMilliseconds: 45,
+        typeTailDwellMilliseconds: 260,
         morphDurationMilliseconds: 220
     )
 }
@@ -257,7 +257,7 @@ enum MotionPacing {
         let base = (tuning.baseDurationMilliseconds / 1000) / max(0.1, speedMultiplier)
         let factor = max(0.55, min(1.80, Double(distance) / 520))
         if entrance {
-            return max(base, 1.1) * 1.05
+            return max(base, 0.55) * 1.05
         }
         return max(0.42, base * factor)
     }

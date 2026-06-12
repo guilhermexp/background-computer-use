@@ -316,6 +316,45 @@ final class CursorCoordinator {
         return duration
     }
 
+    @discardableResult
+    func preparePressKeyInPlace(
+        at point: CGPoint,
+        label: String,
+        attachedWindowNumber: Int,
+        cursorID: String
+    ) -> TimeInterval {
+        startIfNeeded()
+        let session = session(for: cursorID)
+        updateAttachment(for: session, windowNumber: attachedWindowNumber)
+        if session.hasPosition == false || session.visible == false || session.visibilityAlpha <= 0.01 {
+            snapState(session, to: point)
+        }
+        session.actionGeneration &+= 1
+        session.actionInProgress = true
+        session.releaseUntil = nil
+        session.isPressed = false
+        session.isTyping = false
+        session.scrollStreakEnabledUntil = 0
+        session.currentMotion = nil
+        setGlyph(.keycap(label), for: session)
+        touchVisibility(session, now: CACurrentMediaTime())
+        sleepFor(timings.pressKeyPreBounceMilliseconds / 1000)
+        session.isPressed = true
+        emit(
+            .ripple(
+                origin: session.position,
+                color: session.accent.trail,
+                maxRadius: 20,
+                thickness: 1.2,
+                lifetime: 0.4,
+                age: 0
+            ),
+            in: session
+        )
+        refreshPresentation()
+        return 0
+    }
+
     func finishPressKey(cursorID: String) {
         let session = session(for: cursorID)
         let generation = session.actionGeneration
@@ -1323,6 +1362,22 @@ enum CursorRuntime {
         runOnMain {
             CursorCoordinator.shared.preparePressKey(
                 to: point,
+                label: label,
+                attachedWindowNumber: attachedWindowNumber,
+                cursorID: cursorID
+            )
+        }
+    }
+
+    static func preparePressKeyInPlace(
+        at point: CGPoint,
+        label: String,
+        attachedWindowNumber: Int,
+        cursorID: String
+    ) -> TimeInterval {
+        runOnMain {
+            CursorCoordinator.shared.preparePressKeyInPlace(
+                at: point,
                 label: label,
                 attachedWindowNumber: attachedWindowNumber,
                 cursorID: cursorID

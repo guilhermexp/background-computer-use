@@ -13,37 +13,38 @@ struct CursorEmbellishmentPortTests {
         #expect(abs(tuning.endHandle - 0.38) <= 0.0001)
         #expect(abs(tuning.arcSize - 0.42) <= 0.0001)
         #expect(abs(tuning.arcFlow - 0.72) <= 0.0001)
-        #expect(abs(tuning.baseDurationMilliseconds - 1280) <= 0.0001)
+        #expect(abs(tuning.baseDurationMilliseconds - 650) <= 0.0001)
         #expect(abs(CursorMotionConstants.speedMultiplier - 1.45) <= 0.0001)
         #expect(abs(CursorMotionConstants.rotationStiffness - 60) <= 0.0001)
         #expect(abs(CursorMotionConstants.rotationDamping - 10) <= 0.0001)
         #expect(abs(CursorMotionConstants.rotationLookAhead - 0) <= 0.0001)
         #expect(CursorPivotKind.tip.pathPoint == .zero)
 
-        let base = 1.280 / 1.45
+        let base = 0.650 / 1.45
         #expect(abs(MotionPacing.transitDuration(for: 520) - base) <= 0.0001)
         #expect(abs(MotionPacing.transitDuration(for: 1) - max(0.42, base * 0.55)) <= 0.0001)
         #expect(abs(MotionPacing.transitDuration(for: 2_000) - base * 1.80) <= 0.0001)
+        #expect(abs(MotionPacing.transitDuration(for: 2_000, entrance: true) - 0.55 * 1.05) <= 0.0001)
     }
 
     @Test
     func testLockedActionTimingDefaults() {
         let timings = CursorActionTimings.defaults
 
-        #expect(timings.clickPressHoldMilliseconds == 120)
-        #expect(timings.secondaryPreRippleMilliseconds == 120)
-        #expect(timings.secondaryDwellMilliseconds == 550)
-        #expect(timings.scrollStreakMilliseconds == 750)
-        #expect(timings.scrollDwellMilliseconds == 850)
-        #expect(timings.pressKeyPreBounceMilliseconds == 180)
-        #expect(timings.pressKeyHoldMilliseconds == 180)
-        #expect(timings.pressKeyReleaseMilliseconds == 500)
-        #expect(timings.setValuePreRippleMilliseconds == 180)
-        #expect(timings.setValueDwellMilliseconds == 550)
-        #expect(timings.typeArrowToIBeamMilliseconds == 220)
-        #expect(timings.typeIBeamToCaretMilliseconds == 220)
-        #expect(timings.typeCharacterIntervalMilliseconds == 90)
-        #expect(timings.typeTailDwellMilliseconds == 500)
+        #expect(timings.clickPressHoldMilliseconds == 80)
+        #expect(timings.secondaryPreRippleMilliseconds == 80)
+        #expect(timings.secondaryDwellMilliseconds == 320)
+        #expect(timings.scrollStreakMilliseconds == 420)
+        #expect(timings.scrollDwellMilliseconds == 420)
+        #expect(timings.pressKeyPreBounceMilliseconds == 60)
+        #expect(timings.pressKeyHoldMilliseconds == 90)
+        #expect(timings.pressKeyReleaseMilliseconds == 240)
+        #expect(timings.setValuePreRippleMilliseconds == 80)
+        #expect(timings.setValueDwellMilliseconds == 320)
+        #expect(timings.typeArrowToIBeamMilliseconds == 100)
+        #expect(timings.typeIBeamToCaretMilliseconds == 100)
+        #expect(timings.typeCharacterIntervalMilliseconds == 45)
+        #expect(timings.typeTailDwellMilliseconds == 260)
         #expect(timings.morphDurationMilliseconds == 220)
     }
 

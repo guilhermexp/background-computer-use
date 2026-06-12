@@ -245,8 +245,11 @@ enum AXCursorTargeting {
         }
 
         let session = CursorRuntime.resolve(requested: requested)
-        let duration = CursorRuntime.preparePressKey(
-            to: point,
+        let currentPoint = CursorRuntime.currentPosition(cursorID: session.id)
+        let visualPoint = currentPoint ?? point
+        let pointSource = currentPoint == nil ? "window_titlebar_keyboard_anchor" : "current_cursor_keyboard_anchor"
+        let duration = CursorRuntime.preparePressKeyInPlace(
+            at: visualPoint,
             label: keyLabel,
             attachedWindowNumber: window.windowNumber,
             cursorID: session.id
@@ -254,11 +257,11 @@ enum AXCursorTargeting {
 
         return ActionCursorTargetResponseDTO(
             session: session,
-            targetPointAppKit: PointDTO(x: point.x, y: point.y),
-            targetPointSource: "window_titlebar_keyboard_anchor",
-            moved: true,
+            targetPointAppKit: PointDTO(x: visualPoint.x, y: visualPoint.y),
+            targetPointSource: pointSource,
+            moved: false,
             moveDurationMs: sanitizedJSONDouble(duration * 1_000),
-            movement: "approach_press_key_choreography",
+            movement: "key_choreography_in_place",
             warnings: []
         )
     }
