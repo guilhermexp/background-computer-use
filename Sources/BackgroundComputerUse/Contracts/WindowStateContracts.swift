@@ -118,5 +118,6 @@ public struct GetWindowStateResponse: Codable, Sendable {
     public let backgroundSafety: BackgroundSafetyDTO
     public let performance: ReadPerformanceDTO
     public let debug: GetWindowStateDebugDTO?
+    public let ocr: OCRAnchorSummaryDTO?
     public let notes: [String]
 }

@@ -59,13 +59,28 @@ struct WindowStateService {
         if let captureError = screenshot.captureError {
             notes.append(captureError)
         }
+        var tree = capture.envelope.response.tree
+        if let scopeTarget = request.scopeTarget {
+            if let scoped = AXTreeScopeFilter.filter(tree, target: scopeTarget) {
+                tree = scoped.tree
+                notes.append(scoped.note)
+            } else {
+                notes.append("scopeTarget \(scopeTarget.summary) was not found; returning the full tree.")
+            }
+        }
+        let ocr = request.includeOCR == true
+            ? screenshot.image?.imagePath.flatMap(OCRRecognitionService.recognize(imagePath:))
+            : nil
+        if request.includeOCR == true, ocr == nil {
+            notes.append("OCR was requested but no text anchors were detected or the screenshot image was unavailable.")
+        }
 
         return GetWindowStateResponse(
             contractVersion: capture.envelope.response.contractVersion,
             stateToken: capture.envelope.response.stateToken,
             window: capture.envelope.response.window,
             screenshot: screenshot,
-            tree: capture.envelope.response.tree,
+            tree: tree,
             menuPresentation: capture.envelope.menuPresentation,
             focusedElement: capture.envelope.response.focusedElement,
             selectionSummary: capture.envelope.response.selectionSummary,
@@ -83,6 +98,7 @@ struct WindowStateService {
                 totalMs: elapsedMilliseconds(since: totalStarted)
             ),
             debug: debugInclusion.makeDebugDTO(from: capture.envelope),
+            ocr: ocr,
             notes: notes
         )
     }

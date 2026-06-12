@@ -166,6 +166,8 @@ public struct GetWindowStateRequest: Decodable, Sendable {
     public let includeProjectedTree: Bool?
     public let includePlatformProfile: Bool?
     public let includeDiagnostics: Bool?
+    public let includeOCR: Bool?
+    public let scopeTarget: ActionTargetRequestDTO?
 
     public init(
         window: String,
@@ -181,7 +183,9 @@ public struct GetWindowStateRequest: Decodable, Sendable {
         includeSemanticTree: Bool? = nil,
         includeProjectedTree: Bool? = nil,
         includePlatformProfile: Bool? = nil,
-        includeDiagnostics: Bool? = nil
+        includeDiagnostics: Bool? = nil,
+        includeOCR: Bool? = nil,
+        scopeTarget: ActionTargetRequestDTO? = nil
     ) {
         self.window = window
         self.includeMenuBar = includeMenuBar
@@ -197,6 +201,8 @@ public struct GetWindowStateRequest: Decodable, Sendable {
         self.includeProjectedTree = includeProjectedTree
         self.includePlatformProfile = includePlatformProfile
         self.includeDiagnostics = includeDiagnostics
+        self.includeOCR = includeOCR
+        self.scopeTarget = scopeTarget
     }
 }
 
@@ -214,6 +220,7 @@ public struct ClickRequest: Decodable, Sendable {
     public let maxNodes: Int?
     public let imageMode: ImageMode?
     public let debug: Bool?
+    public let confirm: Bool?
 
     public init(
         window: String,
@@ -226,7 +233,8 @@ public struct ClickRequest: Decodable, Sendable {
         includeMenuBar: Bool? = nil,
         maxNodes: Int? = nil,
         imageMode: ImageMode? = nil,
-        debug: Bool? = nil
+        debug: Bool? = nil,
+        confirm: Bool? = nil
     ) {
         self.window = window
         self.stateToken = stateToken
@@ -241,6 +249,7 @@ public struct ClickRequest: Decodable, Sendable {
         self.maxNodes = maxNodes
         self.imageMode = imageMode
         self.debug = debug
+        self.confirm = confirm
     }
 
     public init(
@@ -255,7 +264,8 @@ public struct ClickRequest: Decodable, Sendable {
         includeMenuBar: Bool? = nil,
         maxNodes: Int? = nil,
         imageMode: ImageMode? = nil,
-        debug: Bool? = nil
+        debug: Bool? = nil,
+        confirm: Bool? = nil
     ) {
         self.window = window
         self.stateToken = stateToken
@@ -270,6 +280,7 @@ public struct ClickRequest: Decodable, Sendable {
         self.maxNodes = maxNodes
         self.imageMode = imageMode
         self.debug = debug
+        self.confirm = confirm
     }
 
     enum CodingKeys: String, CodingKey {
@@ -286,6 +297,7 @@ public struct ClickRequest: Decodable, Sendable {
         case maxNodes
         case imageMode
         case debug
+        case confirm
     }
 
     public init(from decoder: Decoder) throws {
@@ -303,6 +315,7 @@ public struct ClickRequest: Decodable, Sendable {
         maxNodes = try container.decodeIfPresent(Int.self, forKey: .maxNodes)
         imageMode = try container.decodeIfPresent(ImageMode.self, forKey: .imageMode)
         debug = try container.decodeIfPresent(Bool.self, forKey: .debug)
+        confirm = try container.decodeIfPresent(Bool.self, forKey: .confirm)
 
         let hasTarget = target != nil
         let hasCompleteCoordinate = x != nil && y != nil
@@ -406,6 +419,7 @@ public struct PerformSecondaryActionRequest: Decodable, Sendable {
     public let maxNodes: Int?
     public let imageMode: ImageMode?
     public let debug: Bool?
+    public let confirm: Bool?
 
     public init(
         window: String,
@@ -419,7 +433,8 @@ public struct PerformSecondaryActionRequest: Decodable, Sendable {
         includeMenuBar: Bool? = nil,
         maxNodes: Int? = nil,
         imageMode: ImageMode? = nil,
-        debug: Bool? = nil
+        debug: Bool? = nil,
+        confirm: Bool? = nil
     ) {
         self.window = window
         self.stateToken = stateToken
@@ -433,6 +448,7 @@ public struct PerformSecondaryActionRequest: Decodable, Sendable {
         self.maxNodes = maxNodes
         self.imageMode = imageMode
         self.debug = debug
+        self.confirm = confirm
     }
 
     enum CodingKeys: String, CodingKey {
@@ -448,6 +464,7 @@ public struct PerformSecondaryActionRequest: Decodable, Sendable {
         case maxNodes
         case imageMode
         case debug
+        case confirm
     }
 
     public init(from decoder: Decoder) throws {
@@ -464,6 +481,7 @@ public struct PerformSecondaryActionRequest: Decodable, Sendable {
         maxNodes = try container.decodeIfPresent(Int.self, forKey: .maxNodes)
         imageMode = try container.decodeIfPresent(ImageMode.self, forKey: .imageMode)
         debug = try container.decodeIfPresent(Bool.self, forKey: .debug)
+        confirm = try container.decodeIfPresent(Bool.self, forKey: .confirm)
     }
 }
 
@@ -542,6 +560,7 @@ public struct TypeTextRequest: Decodable, Sendable {
     public let maxNodes: Int?
     public let imageMode: ImageMode?
     public let debug: Bool?
+    public let confirm: Bool?
 
     public init(
         window: String,
@@ -553,7 +572,8 @@ public struct TypeTextRequest: Decodable, Sendable {
         includeMenuBar: Bool? = nil,
         maxNodes: Int? = nil,
         imageMode: ImageMode? = nil,
-        debug: Bool? = nil
+        debug: Bool? = nil,
+        confirm: Bool? = nil
     ) {
         self.window = window
         self.stateToken = stateToken
@@ -565,6 +585,7 @@ public struct TypeTextRequest: Decodable, Sendable {
         self.maxNodes = maxNodes
         self.imageMode = imageMode
         self.debug = debug
+        self.confirm = confirm
     }
 
     enum CodingKeys: String, CodingKey {
@@ -578,6 +599,7 @@ public struct TypeTextRequest: Decodable, Sendable {
         case maxNodes
         case imageMode
         case debug
+        case confirm
     }
 
     public init(from decoder: Decoder) throws {
@@ -592,6 +614,7 @@ public struct TypeTextRequest: Decodable, Sendable {
         maxNodes = try container.decodeIfPresent(Int.self, forKey: .maxNodes)
         imageMode = try container.decodeIfPresent(ImageMode.self, forKey: .imageMode)
         debug = try container.decodeIfPresent(Bool.self, forKey: .debug)
+        confirm = try container.decodeIfPresent(Bool.self, forKey: .confirm)
     }
 }
 
@@ -604,6 +627,7 @@ public struct PressKeyRequest: Decodable, Sendable {
     public let maxNodes: Int?
     public let imageMode: ImageMode?
     public let debug: Bool?
+    public let confirm: Bool?
 
     public init(
         window: String,
@@ -613,7 +637,8 @@ public struct PressKeyRequest: Decodable, Sendable {
         includeMenuBar: Bool? = nil,
         maxNodes: Int? = nil,
         imageMode: ImageMode? = nil,
-        debug: Bool? = nil
+        debug: Bool? = nil,
+        confirm: Bool? = nil
     ) {
         self.window = window
         self.stateToken = stateToken
@@ -623,6 +648,7 @@ public struct PressKeyRequest: Decodable, Sendable {
         self.maxNodes = maxNodes
         self.imageMode = imageMode
         self.debug = debug
+        self.confirm = confirm
     }
 }
 
@@ -636,6 +662,7 @@ public struct SetValueRequest: Decodable, Sendable {
     public let maxNodes: Int?
     public let imageMode: ImageMode?
     public let debug: Bool?
+    public let confirm: Bool?
 
     public init(
         window: String,
@@ -646,7 +673,8 @@ public struct SetValueRequest: Decodable, Sendable {
         includeMenuBar: Bool? = nil,
         maxNodes: Int? = nil,
         imageMode: ImageMode? = nil,
-        debug: Bool? = nil
+        debug: Bool? = nil,
+        confirm: Bool? = nil
     ) {
         self.window = window
         self.stateToken = stateToken
@@ -657,6 +685,7 @@ public struct SetValueRequest: Decodable, Sendable {
         self.maxNodes = maxNodes
         self.imageMode = imageMode
         self.debug = debug
+        self.confirm = confirm
     }
 
     enum CodingKeys: String, CodingKey {
@@ -669,6 +698,7 @@ public struct SetValueRequest: Decodable, Sendable {
         case maxNodes
         case imageMode
         case debug
+        case confirm
     }
 
     public init(from decoder: Decoder) throws {
@@ -682,6 +712,109 @@ public struct SetValueRequest: Decodable, Sendable {
         maxNodes = try container.decodeIfPresent(Int.self, forKey: .maxNodes)
         imageMode = try container.decodeIfPresent(ImageMode.self, forKey: .imageMode)
         debug = try container.decodeIfPresent(Bool.self, forKey: .debug)
+        confirm = try container.decodeIfPresent(Bool.self, forKey: .confirm)
+    }
+}
+
+public struct WaitForRequest: Decodable, Sendable {
+    public let window: String
+    public let role: String?
+    public let label: String?
+    public let valueContains: String?
+    public let gone: Bool?
+    public let timeoutSeconds: Double?
+    public let pollIntervalMs: Int?
+    public let includeMenuBar: Bool?
+    public let maxNodes: Int?
+    public let imageMode: ImageMode?
+
+    public init(
+        window: String,
+        role: String? = nil,
+        label: String? = nil,
+        valueContains: String? = nil,
+        gone: Bool? = nil,
+        timeoutSeconds: Double? = nil,
+        pollIntervalMs: Int? = nil,
+        includeMenuBar: Bool? = nil,
+        maxNodes: Int? = nil,
+        imageMode: ImageMode? = nil
+    ) {
+        self.window = window
+        self.role = role
+        self.label = label
+        self.valueContains = valueContains
+        self.gone = gone
+        self.timeoutSeconds = timeoutSeconds
+        self.pollIntervalMs = pollIntervalMs
+        self.includeMenuBar = includeMenuBar
+        self.maxNodes = maxNodes
+        self.imageMode = imageMode
+    }
+}
+
+public struct ReadTextRequest: Decodable, Sendable {
+    public let window: String
+    public let target: ActionTargetRequestDTO
+    public let offset: Int?
+    public let length: Int?
+    public let includeMenuBar: Bool?
+    public let maxNodes: Int?
+
+    public init(
+        window: String,
+        target: ActionTargetRequestDTO,
+        offset: Int? = nil,
+        length: Int? = nil,
+        includeMenuBar: Bool? = nil,
+        maxNodes: Int? = nil
+    ) {
+        self.window = window
+        self.target = target
+        self.offset = offset
+        self.length = length
+        self.includeMenuBar = includeMenuBar
+        self.maxNodes = maxNodes
+    }
+}
+
+public struct SelectTextRequest: Decodable, Sendable {
+    public let window: String
+    public let stateToken: String?
+    public let target: ActionTargetRequestDTO
+    public let text: String
+    public let occurrence: Int?
+    public let position: TextSelectionPositionDTO?
+    public let includeMenuBar: Bool?
+    public let maxNodes: Int?
+    public let imageMode: ImageMode?
+    public let debug: Bool?
+    public let confirm: Bool?
+
+    public init(
+        window: String,
+        stateToken: String? = nil,
+        target: ActionTargetRequestDTO,
+        text: String,
+        occurrence: Int? = nil,
+        position: TextSelectionPositionDTO? = nil,
+        includeMenuBar: Bool? = nil,
+        maxNodes: Int? = nil,
+        imageMode: ImageMode? = nil,
+        debug: Bool? = nil,
+        confirm: Bool? = nil
+    ) {
+        self.window = window
+        self.stateToken = stateToken
+        self.target = target
+        self.text = text
+        self.occurrence = occurrence
+        self.position = position
+        self.includeMenuBar = includeMenuBar
+        self.maxNodes = maxNodes
+        self.imageMode = imageMode
+        self.debug = debug
+        self.confirm = confirm
     }
 }
 
@@ -691,3 +824,4 @@ extension PerformSecondaryActionRequest: DebugNotesRequest {}
 extension TypeTextRequest: DebugNotesRequest {}
 extension PressKeyRequest: DebugNotesRequest {}
 extension SetValueRequest: DebugNotesRequest {}
+extension SelectTextRequest: DebugNotesRequest {}

@@ -74,4 +74,16 @@ public final class BackgroundComputerUseRuntime {
     public func setValue(_ request: SetValueRequest) throws -> SetValueResponse {
         try services.setValue(request)
     }
+
+    public func waitFor(_ request: WaitForRequest) throws -> WaitForResponse {
+        try services.waitFor(request)
+    }
+
+    public func readText(_ request: ReadTextRequest) throws -> ReadTextResponse {
+        try services.readText(request)
+    }
+
+    public func selectText(_ request: SelectTextRequest) throws -> SelectTextResponse {
+        try services.selectText(request)
+    }
 }

@@ -63,6 +63,41 @@ struct SetValueRouteService {
         }
 
         let target = candidate.target
+        let secureDecision = RuntimeSafetyPolicy.evaluateSecureTextEntry(
+            rawRole: target.rawRole,
+            rawSubrole: target.rawSubrole,
+            displayRole: target.displayRole,
+            confirmed: request.confirm == true
+        )
+        if secureDecision.blocked {
+            return response(
+                classification: .unsupported,
+                failureDomain: .unsupported,
+                summary: secureDecision.reason ?? "Writing to secure text fields requires explicit confirmation.",
+                window: capture.envelope.response.window,
+                target: target,
+                requestedValue: SetValueRequestedValueDTO(
+                    original: request.value,
+                    coercedKind: nil,
+                    coercedPreview: nil
+                ),
+                rawAXStatus: nil,
+                writePrimitive: nil,
+                semanticAppropriate: nil,
+                semanticReasons: [],
+                liveElementResolution: nil,
+                preStateToken: capture.envelope.response.stateToken,
+                postStateToken: nil,
+                cursor: AXCursorTargeting.notAttempted(
+                    requested: request.cursor,
+                    reason: "Cursor movement was not attempted because runtime safety policy blocked set_value.",
+                    options: executionOptions
+                ),
+                warnings: warnings,
+                notes: notes,
+                verification: nil
+            )
+        }
         let semantic = targetResolver.semanticSuitability(for: target, kind: .setValue)
 
         guard target.isValueSettable == true || target.supportsValueSet == true else {
@@ -158,6 +193,40 @@ struct SetValueRouteService {
             )
         }
         let beforeLiveValue = AXActionRuntimeSupport.readValueEvidence(liveElement.element)
+        let clearDecision = RuntimeSafetyPolicy.evaluateValueChange(
+            currentValue: beforeLiveValue?.stringValue ?? target.projectedValuePreview,
+            newValue: request.value,
+            confirmed: request.confirm == true
+        )
+        if clearDecision.blocked {
+            return response(
+                classification: .unsupported,
+                failureDomain: .unsupported,
+                summary: clearDecision.reason ?? "Clearing an existing value requires explicit confirmation.",
+                window: capture.envelope.response.window,
+                target: target,
+                requestedValue: SetValueRequestedValueDTO(
+                    original: request.value,
+                    coercedKind: nil,
+                    coercedPreview: nil
+                ),
+                rawAXStatus: nil,
+                writePrimitive: nil,
+                semanticAppropriate: semantic.appropriate,
+                semanticReasons: semantic.reasons,
+                liveElementResolution: liveElement.resolution,
+                preStateToken: capture.envelope.response.stateToken,
+                postStateToken: nil,
+                cursor: AXCursorTargeting.notAttempted(
+                    requested: request.cursor,
+                    reason: "Cursor movement was not attempted because runtime safety policy blocked set_value.",
+                    options: executionOptions
+                ),
+                warnings: warnings,
+                notes: notes,
+                verification: nil
+            )
+        }
 
         guard AXActionRuntimeSupport.isAttributeSettable(liveElement.element, attribute: kAXValueAttribute as CFString) else {
             warnings.append("The projected node was settable, but the live AX element rejected a direct settable check.")

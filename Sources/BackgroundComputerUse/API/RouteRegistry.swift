@@ -16,6 +16,9 @@ enum RouteID: String, CaseIterable {
     case typeText = "type_text"
     case pressKey = "press_key"
     case setValue = "set_value"
+    case waitFor = "wait_for"
+    case readText = "read_text"
+    case selectText = "select_text"
 }
 
 enum RouteRegistry {
@@ -143,6 +146,24 @@ enum RouteRegistry {
             ]
         ),
         RouteDescriptorDTO(
+            id: RouteID.waitFor.rawValue,
+            method: "POST",
+            path: "/v1/wait_for",
+            category: "state",
+            summary: "Wait for a matching element to appear or disappear, then return fresh state.",
+            execution: RouteExecutionPolicyDTO(
+                lane: .windowRead,
+                backgroundBehavior: .backgroundRequired,
+                focusStealPolicy: .forbidden,
+                mainThreadBehavior: .avoid,
+                readActRead: true,
+                allowsConcurrentClients: true,
+                notes: ["Polls the target window state instead of forcing clients to hand-roll get_window_state loops."]
+            ),
+            implementationStatus: .implemented,
+            notes: ["Match by role, label text, value text, or any combination. Use gone=true for disappearance waits."]
+        ),
+        RouteDescriptorDTO(
             id: RouteID.click.rawValue,
             method: "POST",
             path: "/v1/click",
@@ -254,6 +275,34 @@ enum RouteRegistry {
                 "Outcome classification is verifier-first. rawAXStatus is diagnostic AX telemetry and does not by itself decide success or failure."
             ]
         ),
+        RouteDescriptorDTO(
+            id: RouteID.readText.rawValue,
+            method: "POST",
+            path: "/v1/read_text",
+            category: "state",
+            summary: "Read a full text value from a semantic target, with offset/length chunking.",
+            execution: RouteExecutionPolicyDTO(
+                lane: .windowRead,
+                backgroundBehavior: .backgroundRequired,
+                focusStealPolicy: .forbidden,
+                mainThreadBehavior: .avoid,
+                readActRead: false,
+                allowsConcurrentClients: true,
+                notes: ["Use this when projected value previews are truncated or logs/documents are too long for the model-facing tree."]
+            ),
+            implementationStatus: .implemented,
+            notes: ["Reads kAXValueAttribute from the resolved live element and returns a bounded text slice."]
+        ),
+        RouteDescriptorDTO(
+            id: RouteID.selectText.rawValue,
+            method: "POST",
+            path: "/v1/select_text",
+            category: "action",
+            summary: "Select text inside a semantic text target by exact substring and occurrence.",
+            execution: actionPolicy(lane: .windowWrite, mainThreadBehavior: .avoid),
+            implementationStatus: .implemented,
+            notes: ["Sets kAXSelectedTextRangeAttribute directly. Use position before/after to place the caret around a text landmark."]
+        ),
     ]
 
     static func descriptor(for routeID: RouteID) -> RouteDescriptorDTO {
@@ -319,7 +368,22 @@ enum RouteRegistry {
                 field("includePlatformProfile", "boolean"),
                 field("includeRawCapture", "boolean"),
                 field("includeSemanticTree", "boolean"),
-                field("includeProjectedTree", "boolean")
+                field("includeProjectedTree", "boolean"),
+                field("includeOCR", "boolean", "When true, run local Apple Vision OCR on the returned screenshot and include text anchors.", defaultValue: "false"),
+                field("scopeTarget", #"{"kind":"display_index"|"node_id"|"refetch_fingerprint","value":integer|string}"#, "Optional target used to return only that node and its descendants in tree while keeping stable target indices.")
+            ])
+        case RouteID.waitFor.rawValue:
+            return json([
+                field("window", "string", required: true),
+                field("role", "string", "Optional display role to match."),
+                field("label", "string", "Match title or description text, case-insensitive substring."),
+                field("valueContains", "string", "Match the target value preview, case-insensitive substring."),
+                field("gone", "boolean", "Wait for the match to disappear instead of appear.", defaultValue: "false"),
+                field("timeoutSeconds", "number", defaultValue: "10"),
+                field("pollIntervalMs", "integer", defaultValue: "400"),
+                field("includeMenuBar", "boolean"),
+                field("maxNodes", "integer"),
+                field("imageMode", "path | base64 | omit")
             ])
         case RouteID.click.rawValue:
             return clickRequestSchema()
@@ -356,6 +420,7 @@ enum RouteRegistry {
                 field("includeMenuBar", "boolean"),
                 field("maxNodes", "integer"),
                 field("imageMode", "path | base64 | omit"),
+                confirmField(),
                 debugField()
             ])
         case RouteID.drag.rawValue:
@@ -397,6 +462,7 @@ enum RouteRegistry {
                 field("includeMenuBar", "boolean"),
                 field("maxNodes", "integer"),
                 field("imageMode", "path | base64 | omit"),
+                confirmField("Required to type into secure/password-like text entries."),
                 debugField()
             ])
         case RouteID.pressKey.rawValue:
@@ -408,6 +474,7 @@ enum RouteRegistry {
                 field("includeMenuBar", "boolean"),
                 field("maxNodes", "integer"),
                 field("imageMode", "path | base64 | omit"),
+                confirmField("Required for destructive shortcuts such as Command-Backspace or Command-Delete."),
                 debugField()
             ])
         case RouteID.setValue.rawValue:
@@ -423,6 +490,30 @@ enum RouteRegistry {
                 field("includeMenuBar", "boolean"),
                 field("maxNodes", "integer"),
                 field("imageMode", "path | base64 | omit"),
+                confirmField("Required to write secure/password-like fields or clear an existing value."),
+                debugField()
+            ])
+        case RouteID.readText.rawValue:
+            return json([
+                field("window", "string", required: true),
+                actionTargetField(required: true, "Semantic text target whose full AX value should be read."),
+                field("offset", "integer", defaultValue: "0"),
+                field("length", "integer", defaultValue: "20000"),
+                field("includeMenuBar", "boolean"),
+                field("maxNodes", "integer")
+            ])
+        case RouteID.selectText.rawValue:
+            return json([
+                field("window", "string", required: true),
+                field("stateToken", "string"),
+                actionTargetField(required: true, "Semantic text target where the substring should be selected."),
+                field("text", "string", required: true),
+                field("occurrence", "integer", defaultValue: "1"),
+                field("position", "select | before | after", defaultValue: "select"),
+                field("includeMenuBar", "boolean"),
+                field("maxNodes", "integer"),
+                field("imageMode", "path | base64 | omit"),
+                confirmField("Required to select text inside secure/password-like fields."),
                 debugField()
             ])
         default:
@@ -481,6 +572,17 @@ enum RouteRegistry {
                 field("backgroundSafety", "BackgroundSafety", required: true),
                 field("performance", "ReadPerformance", required: true),
                 field("debug", "GetWindowStateDebug | null"),
+                field("ocr", "OCRAnchorSummary | null"),
+                field("notes", "string[]", required: true)
+            ])
+        case RouteID.waitFor.rawValue:
+            return json([
+                field("contractVersion", "string", required: true),
+                field("ok", "boolean", required: true),
+                field("conditionMet", "boolean", required: true),
+                field("elapsedMs", "number", required: true),
+                field("summary", "string", required: true),
+                field("state", "AXPipelineV2Response", required: true),
                 field("notes", "string[]", required: true)
             ])
         case RouteID.click.rawValue:
@@ -501,6 +603,31 @@ enum RouteRegistry {
             return pressKeyActionResponse()
         case RouteID.setValue.rawValue:
             return textActionResponse("SetValueResponse")
+        case RouteID.readText.rawValue:
+            return json([
+                field("contractVersion", "string", required: true),
+                field("ok", "boolean", required: true),
+                field("summary", "string", required: true),
+                field("window", "ResolvedWindow", required: true),
+                field("target", "AXActionTarget", required: true),
+                field("chunk", "TextChunk", required: true),
+                field("warnings", "string[]", required: true)
+            ])
+        case RouteID.selectText.rawValue:
+            return json([
+                field("contractVersion", "string", required: true),
+                field("ok", "boolean", required: true),
+                field("classification", "success | unsupported | effect_not_verified | verifier_ambiguous", required: true),
+                field("failureDomain", "targeting | unsupported | coercion | transport | verification | app_specific_semantics | null"),
+                field("summary", "string", required: true),
+                field("window", "ResolvedWindow | null"),
+                field("target", "AXActionTarget | null"),
+                field("selectedRange", "TextSelectionRange | null"),
+                field("preStateToken", "string | null"),
+                field("postStateToken", "string | null"),
+                field("warnings", "string[]", required: true),
+                debugNotesField()
+            ])
         default:
             return json([
                 field("contractVersion", "string", required: true),
@@ -543,6 +670,7 @@ enum RouteRegistry {
             field("includeMenuBar", "boolean"),
             field("maxNodes", "integer"),
             field("imageMode", "path | base64 | omit"),
+            confirmField(),
             debugField()
         ])
     }
@@ -723,6 +851,16 @@ enum RouteRegistry {
             "boolean",
             required: false,
             "When true, include verbose implementation notes in action responses.",
+            defaultValue: "false"
+        )
+    }
+
+    private static func confirmField(_ description: String? = nil) -> RouteFieldDTO {
+        field(
+            "confirm",
+            "boolean",
+            required: false,
+            description ?? "Required to proceed when runtime safety policy detects destructive or irreversible wording.",
             defaultValue: "false"
         )
     }

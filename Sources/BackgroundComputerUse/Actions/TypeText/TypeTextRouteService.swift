@@ -69,6 +69,38 @@ struct TypeTextRouteService {
         }
 
         let target = candidate.target
+        let secureDecision = RuntimeSafetyPolicy.evaluateSecureTextEntry(
+            rawRole: target.rawRole,
+            rawSubrole: target.rawSubrole,
+            displayRole: target.displayRole,
+            confirmed: request.confirm == true
+        )
+        if secureDecision.blocked {
+            return response(
+                classification: .unsupported,
+                failureDomain: .unsupported,
+                summary: secureDecision.reason ?? "Typing into secure text fields requires explicit confirmation.",
+                window: capture.envelope.response.window,
+                target: target,
+                text: request.text,
+                focusAssistMode: focusAssistMode,
+                dispatchPrimitive: nil,
+                dispatchSucceeded: nil,
+                semanticAppropriate: nil,
+                semanticReasons: [],
+                liveElementResolution: nil,
+                preStateToken: capture.envelope.response.stateToken,
+                postStateToken: nil,
+                cursor: AXCursorTargeting.notAttempted(
+                    requested: request.cursor,
+                    reason: "Cursor movement was not attempted because runtime safety policy blocked typing.",
+                    options: executionOptions
+                ),
+                warnings: warnings,
+                notes: notes,
+                verification: nil
+            )
+        }
         let semantic = targetResolver.semanticSuitability(for: target, kind: .typeText)
 
         guard semantic.appropriate else {

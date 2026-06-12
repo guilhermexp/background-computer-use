@@ -120,6 +120,14 @@ enum APIDocumentation {
                 nextSteps: ["Pick a semantic target or screenshot coordinate, then call an action route."],
                 exampleRequest: #"{"window":"WINDOW_ID","imageMode":"path","maxNodes":6500}"#
             )
+        case .waitFor:
+            return usage(
+                whenToUse: "Wait for a role, label, or value substring to appear or disappear in a window.",
+                useAfter: ["Call an action that may trigger loading, modal display, or DOM/UI changes."],
+                successSignals: ["conditionMet=true, or summary clearly reports a timeout with current state."],
+                nextSteps: ["Use the returned fresh state for the next target instead of polling manually."],
+                exampleRequest: #"{"window":"WINDOW_ID","label":"Deployment","timeoutSeconds":10,"imageMode":"path"}"#
+            )
         case .click:
             return usage(
                 whenToUse: "Activate a UI target by semantic target, or click a point in model-facing screenshot coordinates.",
@@ -191,6 +199,22 @@ enum APIDocumentation {
                 successSignals: ["ok=true and verification exactValueMatch is true."],
                 nextSteps: ["Use type_text instead when you need keystroke semantics, focus movement, autocomplete, or submission behavior."],
                 exampleRequest: #"{"window":"WINDOW_ID","stateToken":"STATE_TOKEN","target":{"kind":"display_index","value":4},"value":"hello","imageMode":"path"}"#
+            )
+        case .readText:
+            return usage(
+                whenToUse: "Read long text/log/document values when the projected tree only includes a preview.",
+                useAfter: ["Call get_window_state and choose a text/value target."],
+                successSignals: ["ok=true and chunk.text contains the requested bounded slice."],
+                nextSteps: ["Increase offset to read the next chunk when chunk.truncated=true."],
+                exampleRequest: #"{"window":"WINDOW_ID","target":{"kind":"display_index","value":4},"offset":0,"length":20000}"#
+            )
+        case .selectText:
+            return usage(
+                whenToUse: "Select a substring inside a text element, or place the caret before/after a text landmark.",
+                useAfter: ["Call get_window_state and choose a text target with a readable AX value."],
+                successSignals: ["ok=true and selectedRange reports the applied range."],
+                nextSteps: ["Use type_text, press_key, or read_text depending on the next edit operation."],
+                exampleRequest: #"{"window":"WINDOW_ID","stateToken":"STATE_TOKEN","target":{"kind":"display_index","value":4},"text":"needle","occurrence":1,"position":"select","imageMode":"path"}"#
             )
         }
     }
@@ -292,7 +316,7 @@ enum APIDocumentation {
 
     private static func routeNeedsWindow(_ id: RouteID) -> Bool {
         switch id {
-        case .getWindowState, .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .pressKey, .setValue:
+        case .getWindowState, .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .pressKey, .setValue, .waitFor, .readText, .selectText:
             return true
         case .health, .bootstrap, .routes, .listApps, .listWindows:
             return false

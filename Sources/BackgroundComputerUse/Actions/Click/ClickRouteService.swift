@@ -321,6 +321,47 @@ struct ClickRouteService {
         }
 
         let target = candidate.target
+        let safetyDecision = RuntimeSafetyPolicy.evaluateLabel(
+            [target.title, target.description, target.displayRole].compactMap { $0 }.joined(separator: " "),
+            confirmed: request.confirm == true
+        )
+        if safetyDecision.blocked {
+            return response(
+                classification: .unsupported,
+                failureDomain: .unsupported,
+                summary: safetyDecision.reason ?? "Click target requires explicit confirmation.",
+                window: capture.envelope.response.window,
+                requestedTarget: ClickRequestedTargetDTO(
+                    kind: .semanticTarget,
+                    target: requestedActionTarget,
+                    x: nil,
+                    y: nil,
+                    coordinateSpace: nil
+                ),
+                target: target,
+                clickCount: clickCount,
+                mouseButton: mouseButton,
+                finalRoute: .rejected,
+                fallbackReason: .invalidTarget,
+                axAttempt: nil,
+                coordinate: nil,
+                transports: [],
+                routeSteps: [rejectedStep(safetyDecision.reason ?? "Runtime safety policy blocked the click target.")],
+                preStateToken: capture.envelope.response.stateToken,
+                postStateToken: nil,
+                cursor: AXCursorTargeting.notAttempted(
+                    requested: request.cursor,
+                    reason: "Cursor movement was not attempted because runtime safety policy blocked the click.",
+                    options: executionOptions
+                ),
+                frontmostBundleBefore: frontmostBefore,
+                frontmostBundleBeforeDispatch: nil,
+                frontmostBundleAfter: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+                warnings: warnings,
+                notes: notes,
+                verification: nil
+            )
+        }
         if clickCount > 1 {
             let outcome = executeExplicitElementPointerClick(
                 request: request,

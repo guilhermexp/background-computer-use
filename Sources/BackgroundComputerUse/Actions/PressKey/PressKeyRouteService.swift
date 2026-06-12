@@ -26,6 +26,27 @@ struct PressKeyRouteService {
             liveStateToken: capture.envelope.response.stateToken
         )
         var notes: [String] = []
+        let safetyDecision = RuntimeSafetyPolicy.evaluateKey(request.key, confirmed: request.confirm == true)
+        if safetyDecision.blocked {
+            return response(
+                classification: .unsupported,
+                failureDomain: .unsupported,
+                summary: safetyDecision.reason ?? "Keyboard shortcut requires explicit confirmation.",
+                window: capture.envelope.response.window,
+                parsedKey: nil,
+                action: nil,
+                preStateToken: capture.envelope.response.stateToken,
+                postStateToken: nil,
+                cursor: AXCursorTargeting.notAttempted(
+                    requested: request.cursor,
+                    reason: "Cursor movement was not attempted because runtime safety policy blocked press_key.",
+                    options: executionOptions
+                ),
+                warnings: warnings,
+                notes: notes,
+                verification: nil
+            )
+        }
 
         let parsed: ParsedPressKeyChord
         do {

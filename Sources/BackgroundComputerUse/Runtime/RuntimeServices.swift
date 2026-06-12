@@ -14,6 +14,8 @@ struct RuntimeServices {
     private let scrollRouteService: ScrollRouteService
     private let secondaryActionRouteService: SecondaryActionRouteService
     private let clickRouteService: ClickRouteService
+    private let waitForRouteService: WaitForRouteService
+    private let textRouteService: TextRouteService
 
     init(executionOptions: ActionExecutionOptions = .visualCursorEnabled) {
         windowStateService = WindowStateService(executionOptions: executionOptions)
@@ -26,6 +28,8 @@ struct RuntimeServices {
         scrollRouteService = ScrollRouteService(executionOptions: executionOptions)
         secondaryActionRouteService = SecondaryActionRouteService(executionOptions: executionOptions)
         clickRouteService = ClickRouteService(executionOptions: executionOptions)
+        waitForRouteService = WaitForRouteService(executionOptions: executionOptions)
+        textRouteService = TextRouteService(executionOptions: executionOptions)
     }
 
     func permissions() -> RuntimePermissionsDTO {
@@ -104,6 +108,24 @@ struct RuntimeServices {
     func setValue(_ request: SetValueRequest) throws -> SetValueResponse {
         try execute(routeID: .setValue, target: windowTarget(request.window)) {
             try setValueRouteService.setValue(request: request)
+        }
+    }
+
+    func waitFor(_ request: WaitForRequest) throws -> WaitForResponse {
+        try execute(routeID: .waitFor, target: windowTarget(request.window)) {
+            try waitForRouteService.waitFor(request: request)
+        }
+    }
+
+    func readText(_ request: ReadTextRequest) throws -> ReadTextResponse {
+        try execute(routeID: .readText, target: windowTarget(request.window)) {
+            try textRouteService.readText(request: request)
+        }
+    }
+
+    func selectText(_ request: SelectTextRequest) throws -> SelectTextResponse {
+        try execute(routeID: .selectText, target: windowTarget(request.window)) {
+            try textRouteService.selectText(request: request)
         }
     }
 

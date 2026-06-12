@@ -8,9 +8,21 @@ struct RouterContext {
 struct Router {
     private let auth: RuntimeAuth
     private let services = RuntimeServices()
+    private let debugArtifactRecorder: DebugArtifactRecorder
+    private let sessionLimiter: RuntimeSessionLimiter
 
-    init(auth: RuntimeAuth = .disabled) {
+    init(
+        auth: RuntimeAuth = .disabled,
+        debugArtifactRecorder: DebugArtifactRecorder = DebugArtifactRecorder(),
+        sessionLimiter: RuntimeSessionLimiter = RuntimeSessionLimiter()
+    ) {
         self.auth = auth
+        self.debugArtifactRecorder = debugArtifactRecorder
+        self.sessionLimiter = sessionLimiter
+        self.sessionLimiter.configure(
+            maxActionsPerSecond: ProcessInfo.processInfo.environment["BACKGROUND_COMPUTER_USE_MAX_ACTIONS_PER_SECOND"]
+                .flatMap(Double.init)
+        )
     }
 
     func response(for request: HTTPRequest, context: RouterContext) -> HTTPResponse {
@@ -172,6 +184,36 @@ struct Router {
                 }
             )
 
+        case (.post, "/v1/wait_for"):
+            return decodeAndExecute(
+                WaitForRequest.self,
+                routeID: .waitFor,
+                from: request,
+                work: { payload in
+                    try services.waitFor(payload)
+                }
+            )
+
+        case (.post, "/v1/read_text"):
+            return decodeAndExecute(
+                ReadTextRequest.self,
+                routeID: .readText,
+                from: request,
+                work: { payload in
+                    try services.readText(payload)
+                }
+            )
+
+        case (.post, "/v1/select_text"):
+            return decodeAndExecute(
+                SelectTextRequest.self,
+                routeID: .selectText,
+                from: request,
+                work: { payload in
+                    try services.selectText(payload)
+                }
+            )
+
         default:
             return .json(
                 ErrorResponse(
@@ -195,19 +237,99 @@ struct Router {
         from request: HTTPRequest,
         work: (Request) throws -> Response
     ) -> HTTPResponse {
+        let requestID = UUID().uuidString
+        if isActionRoute(routeID) {
+            let throttleDecision = sessionLimiter.beforeAction()
+            guard throttleDecision.allowed else {
+                let response = runtimeBusyResponse(
+                    error: "rate_limited",
+                    message: throttleDecision.reason ?? "Action rate limit exceeded.",
+                    statusCode: 429,
+                    reasonPhrase: "Too Many Requests"
+                )
+                recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
+                return response
+            }
+        }
+
+        let sessionID = isActionRoute(routeID)
+            ? request.headerValue(named: "X-Background-Computer-Use-Session")
+            : nil
+        var acquiredSessionID: String?
+        if let sessionID, sessionID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            let sessionDecision = sessionLimiter.acquire(sessionID: sessionID)
+            guard sessionDecision.allowed else {
+                let response = runtimeBusyResponse(
+                    error: "session_busy",
+                    message: sessionDecision.reason ?? "Runtime is already in use by another session.",
+                    statusCode: 409,
+                    reasonPhrase: "Conflict"
+                )
+                recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
+                return response
+            }
+            acquiredSessionID = sessionID
+        }
+        defer {
+            if let acquiredSessionID {
+                sessionLimiter.release(sessionID: acquiredSessionID)
+            }
+        }
+
         do {
             let payload = try JSONSupport.decoder.decode(Request.self, from: request.body)
-            return .json(
+            let response = HTTPResponse.json(
                 try work(payload),
                 includeDebugNotes: includeDebugNotes(for: routeID, payload: payload)
             )
+            recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
+            return response
         } catch {
             if error is DecodingError {
-                return invalidRequestResponse(for: error, routeID: routeID)
+                let response = invalidRequestResponse(for: error, routeID: routeID)
+                recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
+                return response
             }
 
-            return errorResponse(for: error, routeID: routeID)
+            let response = errorResponse(for: error, routeID: routeID)
+            recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
+            return response
         }
+    }
+
+    private func runtimeBusyResponse(
+        error: String,
+        message: String,
+        statusCode: Int,
+        reasonPhrase: String
+    ) -> HTTPResponse {
+        .json(
+            ErrorResponse(
+                error: error,
+                message: message,
+                requestID: UUID().uuidString,
+                recovery: [
+                    "Retry after the current action completes.",
+                    "Use X-Background-Computer-Use-Session to coordinate exclusive action batches."
+                ]
+            ),
+            statusCode: statusCode,
+            reasonPhrase: reasonPhrase
+        )
+    }
+
+    private func recordArtifact(
+        requestID: String,
+        routeID: RouteID,
+        request: HTTPRequest,
+        response: HTTPResponse
+    ) {
+        _ = try? debugArtifactRecorder.record(
+            requestID: requestID,
+            routeID: routeID.rawValue,
+            requestBody: request.body,
+            responseBody: response.body
+        )
     }
 
     private func unauthorizedResponse() -> HTTPResponse {
@@ -236,7 +358,7 @@ struct Router {
 
     private func isActionRoute(_ routeID: RouteID) -> Bool {
         switch routeID {
-        case .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .pressKey, .setValue:
+        case .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .pressKey, .setValue, .selectText:
             return true
         default:
             return false

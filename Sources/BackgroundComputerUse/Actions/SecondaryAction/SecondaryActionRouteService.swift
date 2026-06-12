@@ -105,6 +105,40 @@ struct SecondaryActionRouteService {
             for: surfaceNode,
             in: capture
         )
+        let safetyDecision = RuntimeSafetyPolicy.evaluateLabel(
+            [request.action, target.title, target.description, target.displayRole].compactMap { $0 }.joined(separator: " "),
+            confirmed: request.confirm == true
+        )
+        if safetyDecision.blocked {
+            return response(
+                classification: .unsupported,
+                failureDomain: .unsupported,
+                summary: safetyDecision.reason ?? "Secondary action requires explicit confirmation.",
+                window: capture.envelope.response.window,
+                requestedAction: requested,
+                action: nil,
+                outcome: outcome(
+                    status: .labelNotExposed,
+                    reason: .labelNotExposed,
+                    detail: safetyDecision.reason ?? "Runtime safety policy blocked the secondary action."
+                ),
+                target: target,
+                dispatchTarget: nil,
+                binding: nil,
+                transports: [],
+                preStateToken: capture.envelope.response.stateToken,
+                postStateToken: nil,
+                postState: nil,
+                cursor: AXCursorTargeting.notAttempted(
+                    requested: request.cursor,
+                    reason: "Cursor movement was not attempted because runtime safety policy blocked the secondary action.",
+                    options: executionOptions
+                ),
+                warnings: warnings,
+                notes: notes,
+                verification: nil
+            )
+        }
 
         let actionExposed =
             surfaceNode.secondaryActions.contains(request.action) ||
