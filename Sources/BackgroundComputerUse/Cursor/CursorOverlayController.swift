@@ -1,7 +1,7 @@
 import AppKit
 
 struct CursorOverlayPresentation {
-    let attachedWindowNumber: Int
+    let attachedWindowNumber: Int?
     let attachedWindowLevelRawValue: Int
     let snapshot: CursorSnapshot
 }
@@ -28,7 +28,7 @@ final class CursorOverlayController {
         window.hasShadow = false
         window.ignoresMouseEvents = true
         window.level = .normal
-        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .transient]
+        window.collectionBehavior = [.stationary, .ignoresCycle, .transient]
 
         overlayView.autoresizingMask = [.width, .height]
         window.contentView = overlayView
@@ -47,8 +47,13 @@ final class CursorOverlayController {
             return
         }
 
+        guard let attachedWindowNumber = presentation.attachedWindowNumber else {
+            window.orderOut(nil)
+            return
+        }
+
         window.level = NSWindow.Level(rawValue: presentation.attachedWindowLevelRawValue)
-        window.order(.above, relativeTo: presentation.attachedWindowNumber)
+        window.order(.above, relativeTo: attachedWindowNumber)
     }
 
     func teardown() {

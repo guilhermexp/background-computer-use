@@ -21,11 +21,15 @@ struct PressKeyRouteService {
             maxNodes: request.maxNodes ?? 6500,
             imageMode: request.imageMode ?? .omit
         )
-        var warnings = targetResolver.stateTokenWarnings(
+        let tokenWarnings = targetResolver.stateTokenWarnings(
             suppliedStateToken: request.stateToken,
             liveStateToken: capture.envelope.response.stateToken
         )
+        var warnings: [String] = []
         var notes: [String] = []
+        if tokenWarnings.isEmpty == false {
+            notes.append("Supplied stateToken differed from the live press_key recapture; press_key uses the current target-window focus instead of a stale semantic target.")
+        }
         let safetyDecision = RuntimeSafetyPolicy.evaluateKey(request.key, confirmed: request.confirm == true)
         if safetyDecision.blocked {
             return response(
@@ -312,14 +316,19 @@ struct PressKeyRouteService {
         sleepRunLoop(0.10)
         let afterState = AXActionRuntimeSupport.readTextState(liveElement.element)
         let exact = afterState.selectedTextRange == expected
+        guard exact else {
+            notes.append(
+                "Focused text select-all AX route did not verify selection " +
+                "(status: \(AXActionRuntimeSupport.rawStatusString(for: status))); falling back to native Command-A delivery."
+            )
+            return nil
+        }
         let postCapture = try? targetResolver.reread(after: capture, imageMode: request.imageMode ?? .omit)
 
         return response(
-            classification: exact ? .success : .effectNotVerified,
-            failureDomain: exact ? nil : .verification,
-            summary: exact
-                ? "Selected all text in the focused text-entry element using AX selected-range semantics."
-                : "Attempted focused-text select-all semantics, but the selected range did not verify.",
+            classification: .success,
+            failureDomain: nil,
+            summary: "Selected all text in the focused text-entry element using AX selected-range semantics.",
             window: postCapture?.envelope.response.window ?? capture.envelope.response.window,
             parsedKey: parsed.dto,
             action: PressKeyActionDTO(
@@ -350,7 +359,7 @@ struct PressKeyRouteService {
                     beforeSelection: beforeState.selectedTextRange,
                     afterSelection: afterState.selectedTextRange,
                     expectedSelection: expected,
-                    exactSelectionMatch: exact
+                    exactSelectionMatch: true
                 ),
                 verificationNotes: [
                     "Focused text entry target resolved via \(liveElement.resolution).",
@@ -764,13 +773,14 @@ enum PressKeyParser {
 
     private static func normalizeKeyToken(_ raw: String) throws -> String {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed == "BackSpace" || trimmed.lowercased() == "back_space" {
+        let lowered = trimmed.lowercased()
+        if lowered == "backspace" || lowered == "back_space" {
             return "backspace"
         }
-        if trimmed.lowercased() == "backspace" || trimmed == "/" {
+        if trimmed == "/" {
             throw PressKeyParserError.unsupportedKey(raw)
         }
-        switch trimmed.lowercased() {
+        switch lowered {
         case "return", "kp_enter":
             return "return"
         case "tab", "kp_tab":

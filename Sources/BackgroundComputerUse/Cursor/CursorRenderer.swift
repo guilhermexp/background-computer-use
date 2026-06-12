@@ -94,6 +94,17 @@ enum CursorRenderer {
             in: context
         )
 
+        if let feedback = snapshot.feedback {
+            drawFeedbackBubble(
+                feedback,
+                anchor: tipScreen,
+                scale: snapshot.scale,
+                accent: snapshot.accent,
+                alpha: snapshot.alpha,
+                in: context
+            )
+        }
+
         for effect in snapshot.effects {
             draw(effect, in: context)
         }
@@ -227,6 +238,151 @@ enum CursorRenderer {
         }
         context.fillPath()
         context.restoreGState()
+    }
+
+    private static func drawFeedbackBubble(
+        _ feedback: CursorFeedbackSnapshot,
+        anchor: CGPoint,
+        scale: CGFloat,
+        accent: CursorAccentPalette,
+        alpha: CGFloat,
+        in context: CGContext
+    ) {
+        guard let message = CursorFeedbackLayout.boundedMessage(feedback.message),
+              message.isEmpty == false else {
+            return
+        }
+
+        let clampedScale = max(0.85, min(scale, 1.25))
+        let font = NSFont.systemFont(ofSize: 12 * clampedScale, weight: .medium)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byWordWrapping
+        paragraph.maximumLineHeight = 16 * clampedScale
+        paragraph.minimumLineHeight = 14 * clampedScale
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: NSColor.white.withAlphaComponent(alpha * feedback.opacity),
+            .paragraphStyle: paragraph,
+        ]
+        let text = NSAttributedString(string: message, attributes: attributes)
+        let maxTextWidth = CursorFeedbackLayout.maxBubbleWidth * clampedScale
+        let textBounds = text.boundingRect(
+            with: CGSize(width: maxTextWidth, height: CGFloat(CursorFeedbackLayout.maxBubbleLines) * 18 * clampedScale),
+            options: [.usesLineFragmentOrigin, .usesFontLeading]
+        )
+        let paddingX: CGFloat = 10 * clampedScale
+        let paddingY: CGFloat = 7 * clampedScale
+        let bubbleSize = CGSize(
+            width: min(maxTextWidth + paddingX * 2, ceil(textBounds.width) + paddingX * 2),
+            height: ceil(textBounds.height) + paddingY * 2
+        )
+        let origin = CGPoint(
+            x: anchor.x + 22 * clampedScale,
+            y: anchor.y - 8 * clampedScale
+        )
+        let bubbleRect = clampedBubbleRect(
+            CGRect(origin: origin, size: bubbleSize),
+            scale: clampedScale,
+            in: context
+        )
+        let opacity = max(0, min(alpha * feedback.opacity, 1))
+        guard opacity > 0.01 else { return }
+
+        context.saveGState()
+        let path = CGPath(
+            roundedRect: bubbleRect,
+            cornerWidth: 8 * clampedScale,
+            cornerHeight: 8 * clampedScale,
+            transform: nil
+        )
+        context.setShadow(
+            offset: CGSize(width: 0, height: -2),
+            blur: 12,
+            color: NSColor.black.withAlphaComponent(0.32 * opacity).cgColor
+        )
+        context.addPath(path)
+        context.setFillColor(accent.fill.withAlphaComponent(0.92 * opacity).cgColor)
+        context.fillPath()
+        context.restoreGState()
+
+        context.addPath(path)
+        context.setStrokeColor(NSColor.white.withAlphaComponent(0.82 * opacity).cgColor)
+        context.setLineWidth(1)
+        context.strokePath()
+
+        let dotColor: NSColor = {
+            switch feedback.state {
+            case .error:
+                return NSColor.systemRed
+            case .waiting, .streaming:
+                return NSColor.white
+            case .pointing:
+                return accent.trail
+            case .idle, .moving, .acting:
+                return accent.trail
+            }
+        }()
+        context.setFillColor(dotColor.withAlphaComponent(0.92 * opacity).cgColor)
+        context.addEllipse(in: CGRect(
+            x: bubbleRect.minX + 7 * clampedScale,
+            y: bubbleRect.midY - 2.2 * clampedScale,
+            width: 4.4 * clampedScale,
+            height: 4.4 * clampedScale
+        ))
+        context.fillPath()
+
+        let textRect = CGRect(
+            x: bubbleRect.minX + paddingX + 7 * clampedScale,
+            y: bubbleRect.minY + paddingY,
+            width: max(1, bubbleRect.width - paddingX * 2 - 7 * clampedScale),
+            height: max(1, bubbleRect.height - paddingY * 2)
+        )
+
+        let previous = NSGraphicsContext.current
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+        text.draw(with: textRect, options: [.usesLineFragmentOrigin, .usesFontLeading])
+        NSGraphicsContext.current = previous
+    }
+
+    private static func clampedBubbleRect(
+        _ rect: CGRect,
+        scale: CGFloat,
+        in context: CGContext
+    ) -> CGRect {
+        let clip = context.boundingBoxOfClipPath
+        guard clip.origin.x.isFinite,
+              clip.origin.y.isFinite,
+              clip.size.width.isFinite,
+              clip.size.height.isFinite,
+              clip.width > 1,
+              clip.height > 1 else {
+            return rect
+        }
+
+        let inset = 6 * scale
+        let bounds = clip.insetBy(dx: inset, dy: inset)
+        guard bounds.width > 1, bounds.height > 1 else { return rect }
+
+        let size = CGSize(
+            width: min(rect.width, bounds.width),
+            height: min(rect.height, bounds.height)
+        )
+        let rect = CGRect(origin: rect.origin, size: size)
+        var origin = rect.origin
+        if rect.maxX > bounds.maxX {
+            origin.x = bounds.maxX - rect.width
+        }
+        if origin.x < bounds.minX {
+            origin.x = bounds.minX
+        }
+        if rect.maxY > bounds.maxY {
+            origin.y = bounds.maxY - rect.height
+        }
+        if origin.y < bounds.minY {
+            origin.y = bounds.minY
+        }
+        return CGRect(origin: origin, size: rect.size)
     }
 
     private static func drawChevronPill(

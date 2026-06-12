@@ -41,7 +41,7 @@ struct CursorMotionTuning: Equatable, Hashable {
 }
 
 enum CursorMotionConstants {
-    static let speedMultiplier: Double = 1.45
+    static let speedMultiplier: Double = 2.20
     static let rotationStiffness: CGFloat = 60
     static let rotationDamping: CGFloat = 10
     static let rotationLookAhead: CGFloat = 0
@@ -73,21 +73,21 @@ struct CursorActionTimings: Equatable {
     let morphDurationMilliseconds: Double
 
     static let defaults = CursorActionTimings(
-        clickPressHoldMilliseconds: 80,
-        secondaryPreRippleMilliseconds: 80,
-        secondaryDwellMilliseconds: 320,
-        scrollStreakMilliseconds: 420,
-        scrollDwellMilliseconds: 420,
-        pressKeyPreBounceMilliseconds: 60,
-        pressKeyHoldMilliseconds: 90,
-        pressKeyReleaseMilliseconds: 240,
-        setValuePreRippleMilliseconds: 80,
-        setValueDwellMilliseconds: 320,
-        typeArrowToIBeamMilliseconds: 100,
-        typeIBeamToCaretMilliseconds: 100,
-        typeCharacterIntervalMilliseconds: 45,
-        typeTailDwellMilliseconds: 260,
-        morphDurationMilliseconds: 220
+        clickPressHoldMilliseconds: 45,
+        secondaryPreRippleMilliseconds: 50,
+        secondaryDwellMilliseconds: 220,
+        scrollStreakMilliseconds: 260,
+        scrollDwellMilliseconds: 260,
+        pressKeyPreBounceMilliseconds: 35,
+        pressKeyHoldMilliseconds: 55,
+        pressKeyReleaseMilliseconds: 150,
+        setValuePreRippleMilliseconds: 45,
+        setValueDwellMilliseconds: 200,
+        typeArrowToIBeamMilliseconds: 60,
+        typeIBeamToCaretMilliseconds: 60,
+        typeCharacterIntervalMilliseconds: 28,
+        typeTailDwellMilliseconds: 160,
+        morphDurationMilliseconds: 150
     )
 }
 
@@ -257,9 +257,9 @@ enum MotionPacing {
         let base = (tuning.baseDurationMilliseconds / 1000) / max(0.1, speedMultiplier)
         let factor = max(0.55, min(1.80, Double(distance) / 520))
         if entrance {
-            return max(base, 0.55) * 1.05
+            return max(base, 0.38) * 1.05
         }
-        return max(0.42, base * factor)
+        return max(0.28, base * factor)
     }
 
     static func approachDuration(for distance: CGFloat, tuning: CursorMotionTuning = .swoopy) -> TimeInterval {
@@ -271,6 +271,225 @@ enum CursorPresenceTiming {
     static let idleHideDelay: TimeInterval = 1.2
     static let fadeOutDuration: TimeInterval = 0.24
     static let idleExpireDelay: TimeInterval = 45
+}
+
+enum CursorFeedbackVisualState: String, Codable, Sendable {
+    case idle
+    case moving
+    case acting
+    case waiting
+    case streaming
+    case pointing
+    case error
+}
+
+enum CursorFeedbackOperation: String, Codable, Sendable {
+    case update
+    case append
+    case finish
+    case hide
+    case point
+}
+
+enum CursorFeedbackLayout {
+    static let maxMessageCharacters = 180
+    static let defaultFinishedDwell: TimeInterval = 1.8
+    static let pointingDwell: TimeInterval = 1.4
+    static let maxBubbleWidth: CGFloat = 340
+    static let maxBubbleLines = 5
+    private static let truncationMarker = "... "
+
+    static func boundedMessage(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let collapsed = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+        guard collapsed.isEmpty == false else { return nil }
+        guard collapsed.count > maxMessageCharacters else {
+            return collapsed
+        }
+
+        let suffixLength = maxMessageCharacters - truncationMarker.count
+        return truncationMarker + String(collapsed.suffix(suffixLength))
+    }
+}
+
+struct CursorFeedbackUpdate: Sendable {
+    let operation: CursorFeedbackOperation
+    let state: CursorFeedbackVisualState?
+    let message: String?
+    let append: Bool
+    let now: TimeInterval
+    let dwell: TimeInterval?
+    let target: CGPoint?
+    let renderInModelFacingScreenshots: Bool
+
+    init(
+        operation: CursorFeedbackOperation,
+        state: CursorFeedbackVisualState? = nil,
+        message: String? = nil,
+        append: Bool = false,
+        now: TimeInterval,
+        dwell: TimeInterval? = nil,
+        target: CGPoint? = nil,
+        renderInModelFacingScreenshots: Bool = false
+    ) {
+        self.operation = operation
+        self.state = state
+        self.message = message
+        self.append = append
+        self.now = now
+        self.dwell = dwell
+        self.target = target
+        self.renderInModelFacingScreenshots = renderInModelFacingScreenshots
+    }
+}
+
+struct CursorFeedbackState: Sendable {
+    private(set) var state: CursorFeedbackVisualState = .idle
+    private(set) var message: String?
+    private(set) var opacity: CGFloat = 0
+    private(set) var target: CGPoint?
+    private(set) var renderInModelFacingScreenshots = false
+    private var activeUntil: TimeInterval?
+
+    mutating func apply(_ update: CursorFeedbackUpdate) {
+        switch update.operation {
+        case .hide:
+            clear()
+
+        case .append:
+            let combined = (message ?? "") + (update.message ?? "")
+            message = CursorFeedbackLayout.boundedMessage(combined)
+            state = update.state ?? state
+            target = update.target ?? target
+            activeUntil = nil
+            opacity = message == nil ? 0 : 1
+            renderInModelFacingScreenshots = update.renderInModelFacingScreenshots
+
+        case .finish:
+            if let bounded = CursorFeedbackLayout.boundedMessage(update.message) {
+                message = bounded
+            }
+            state = update.state ?? .idle
+            target = update.target ?? target
+            activeUntil = update.now + (update.dwell ?? CursorFeedbackLayout.defaultFinishedDwell)
+            opacity = message == nil ? 0 : 1
+            renderInModelFacingScreenshots = update.renderInModelFacingScreenshots
+
+        case .update, .point:
+            message = CursorFeedbackLayout.boundedMessage(update.message)
+            state = update.state ?? (update.operation == .point ? .pointing : .waiting)
+            target = update.target
+            activeUntil = update.operation == .point
+                ? update.now + (update.dwell ?? CursorFeedbackLayout.pointingDwell)
+                : nil
+            opacity = message == nil && update.operation != .point ? 0 : 1
+            renderInModelFacingScreenshots = update.renderInModelFacingScreenshots
+        }
+    }
+
+    mutating func clear() {
+        state = .idle
+        message = nil
+        opacity = 0
+        target = nil
+        activeUntil = nil
+        renderInModelFacingScreenshots = false
+    }
+
+    mutating func expireIfNeeded(at now: TimeInterval) {
+        if isActive(at: now) == false {
+            clear()
+        }
+    }
+
+    func isActive(at now: TimeInterval) -> Bool {
+        if state == .streaming || state == .waiting || state == .acting || state == .moving || state == .error {
+            return message != nil || opacity > 0.01
+        }
+        if state == .pointing {
+            guard let activeUntil else { return true }
+            return now <= activeUntil
+        }
+        if let activeUntil {
+            return now <= activeUntil
+        }
+        return false
+    }
+
+    func snapshot(at now: TimeInterval) -> CursorFeedbackSnapshot? {
+        guard isActive(at: now), (message != nil || state == .pointing) else {
+            return nil
+        }
+        return CursorFeedbackSnapshot(
+            state: state,
+            message: message,
+            opacity: opacity,
+            target: target,
+            renderInModelFacingScreenshots: renderInModelFacingScreenshots
+        )
+    }
+}
+
+struct CursorFeedbackSnapshot {
+    let state: CursorFeedbackVisualState
+    let message: String?
+    let opacity: CGFloat
+    let target: CGPoint?
+    let renderInModelFacingScreenshots: Bool
+
+    func mapGeometry(_ transform: (CGPoint) -> CGPoint) -> CursorFeedbackSnapshot {
+        CursorFeedbackSnapshot(
+            state: state,
+            message: message,
+            opacity: opacity,
+            target: target.map(transform),
+            renderInModelFacingScreenshots: renderInModelFacingScreenshots
+        )
+    }
+
+    func excludingModelFacingFeedback() -> CursorFeedbackSnapshot? {
+        renderInModelFacingScreenshots ? self : nil
+    }
+}
+
+struct CursorSessionActivity {
+    let hasMotion: Bool
+    let hasAction: Bool
+    let isPressed: Bool
+    let hasPendingRelease: Bool
+    let hasEffects: Bool
+    let hasActiveFeedback: Bool
+
+    init(
+        hasMotion: Bool = false,
+        hasAction: Bool = false,
+        isPressed: Bool = false,
+        hasPendingRelease: Bool = false,
+        hasEffects: Bool = false,
+        hasActiveFeedback: Bool = false
+    ) {
+        self.hasMotion = hasMotion
+        self.hasAction = hasAction
+        self.isPressed = isPressed
+        self.hasPendingRelease = hasPendingRelease
+        self.hasEffects = hasEffects
+        self.hasActiveFeedback = hasActiveFeedback
+    }
+
+    var isActive: Bool {
+        hasMotion || hasAction || isPressed || hasPendingRelease || hasEffects || hasActiveFeedback
+    }
+}
+
+struct CursorFeedbackApplicationResult {
+    let session: CursorResponseDTO
+    let clamped: Bool
+    let target: CGPoint?
+    let plannedDuration: TimeInterval?
+    let attachment: String
 }
 
 struct CursorSnapshot {
@@ -296,6 +515,57 @@ struct CursorSnapshot {
     let caretPhase: CGFloat
     let anticipationTilt: CGFloat
     let effects: [CursorVisualEffect]
+    let feedback: CursorFeedbackSnapshot?
+
+    init(
+        cursorID: String,
+        attachedWindowNumber: Int,
+        attachedWindowLevelRawValue: Int,
+        position: CGPoint,
+        angle: CGFloat,
+        scale: CGFloat,
+        alpha: CGFloat,
+        glyph: CursorGlyph,
+        previousGlyph: CursorGlyph?,
+        morphProgress: CGFloat,
+        isPressed: Bool,
+        accent: CursorAccentPalette,
+        baseColor: NSColor,
+        pivotLocal: CGPoint,
+        labelText: String,
+        labelAlpha: CGFloat,
+        labelScale: CGFloat,
+        trailHistories: [[CGPoint]],
+        trailVisible: Bool,
+        caretPhase: CGFloat,
+        anticipationTilt: CGFloat,
+        effects: [CursorVisualEffect],
+        feedback: CursorFeedbackSnapshot? = nil
+    ) {
+        self.cursorID = cursorID
+        self.attachedWindowNumber = attachedWindowNumber
+        self.attachedWindowLevelRawValue = attachedWindowLevelRawValue
+        self.position = position
+        self.angle = angle
+        self.scale = scale
+        self.alpha = alpha
+        self.glyph = glyph
+        self.previousGlyph = previousGlyph
+        self.morphProgress = morphProgress
+        self.isPressed = isPressed
+        self.accent = accent
+        self.baseColor = baseColor
+        self.pivotLocal = pivotLocal
+        self.labelText = labelText
+        self.labelAlpha = labelAlpha
+        self.labelScale = labelScale
+        self.trailHistories = trailHistories
+        self.trailVisible = trailVisible
+        self.caretPhase = caretPhase
+        self.anticipationTilt = anticipationTilt
+        self.effects = effects
+        self.feedback = feedback
+    }
 
     func mapGeometry(_ transform: (CGPoint) -> CGPoint) -> CursorSnapshot {
         CursorSnapshot(
@@ -320,7 +590,8 @@ struct CursorSnapshot {
             trailVisible: trailVisible,
             caretPhase: caretPhase,
             anticipationTilt: anticipationTilt,
-            effects: effects.map { $0.mapGeometry(transform) }
+            effects: effects.map { $0.mapGeometry(transform) },
+            feedback: feedback?.mapGeometry(transform)
         )
     }
 }

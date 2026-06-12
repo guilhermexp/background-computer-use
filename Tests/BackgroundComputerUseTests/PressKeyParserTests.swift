@@ -4,16 +4,11 @@ import Testing
 @Suite
 struct PressKeyParserTests {
     @Test
-    func testParserMatchesDocumentedBackspaceParity() throws {
-        let accepted = try PressKeyParser.parse("BackSpace")
-        #expect(accepted.key == "backspace")
-        #expect(Int(accepted.keyCode) == 51)
-
-        #expect(throws: (any Error).self) {
-            try PressKeyParser.parse("Backspace")
-        }
-        #expect(throws: (any Error).self) {
-            try PressKeyParser.parse("backspace")
+    func testParserAcceptsBackspaceAliases() throws {
+        for alias in ["BackSpace", "Backspace", "backspace", "back_space"] {
+            let accepted = try PressKeyParser.parse(alias)
+            #expect(accepted.key == "backspace")
+            #expect(Int(accepted.keyCode) == 51)
         }
     }
 

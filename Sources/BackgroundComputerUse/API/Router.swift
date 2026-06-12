@@ -84,6 +84,16 @@ struct Router {
                 }
             )
 
+        case (.post, "/v1/cursor_feedback"):
+            return decodeAndExecute(
+                CursorFeedbackRequest.self,
+                routeID: .cursorFeedback,
+                from: request,
+                work: { payload in
+                    try services.cursorFeedback(payload)
+                }
+            )
+
         case (.post, "/v1/get_window_state"):
             return decodeAndExecute(
                 GetWindowStateRequest.self,

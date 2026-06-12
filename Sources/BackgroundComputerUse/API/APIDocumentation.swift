@@ -9,7 +9,8 @@ enum APIDocumentation {
             "Call GET /v1/routes for the complete route catalog, request fields, response fields, execution policy, examples, and error codes.",
             "Call POST /v1/list_apps to find a target app, then POST /v1/list_windows with an app name or bundle ID.",
             "Call POST /v1/get_window_state with a window ID and imageMode path or base64. Use the screenshot as visual ground truth and the projected tree for semantic targets.",
-            "Call one action route. Reuse stateToken when available; actions without cursor reuse the visible Agent cursor, and cursor.id creates a separate lane. Read state again before planning the next meaningful action."
+            "Call one action route. Reuse stateToken when available; actions without cursor reuse the visible Agent cursor, and cursor.id creates a separate lane. Read state again before planning the next meaningful action.",
+            "When showing cursor feedback, stream public agent-facing text or observations. Do not use hidden chain-of-thought, route labels, tool names, or product branding as bubble copy."
         ],
         concepts: [
             APIConceptDTO(
@@ -111,6 +112,14 @@ enum APIDocumentation {
                 successSignals: ["windows contains at least one on-screen window with a windowID."],
                 nextSteps: ["Call get_window_state with the selected windowID."],
                 exampleRequest: #"{"app":"Safari"}"#
+            )
+        case .cursorFeedback:
+            return usage(
+                whenToUse: "Stream the agent's public visible response or observation near the active cursor without dispatching input.",
+                useAfter: ["Use before, between, or after action routes when the user should see the agent's visible narration, conclusion, or pointing cue."],
+                successSignals: ["ok=true, cursor.id identifies the updated cursor lane, and attachment reports window, deferred, or disabled."],
+                nextSteps: ["Use append with accumulated public assistant text, finish for a short readable dwell, hide to clear immediately, or point to schedule an asynchronous target cue."],
+                exampleRequest: #"{"operation":"update","state":"streaming","message":"Vou comparar o que mudou na tela antes do proximo clique."}"#
             )
         case .getWindowState:
             return usage(
@@ -307,7 +316,7 @@ enum APIDocumentation {
 
     private static func routeNeedsAccessibility(_ id: RouteID) -> Bool {
         switch id {
-        case .health, .bootstrap, .routes:
+        case .health, .bootstrap, .routes, .cursorFeedback:
             return false
         default:
             return true
@@ -318,7 +327,7 @@ enum APIDocumentation {
         switch id {
         case .getWindowState, .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .pressKey, .setValue, .waitFor, .readText, .selectText:
             return true
-        case .health, .bootstrap, .routes, .listApps, .listWindows:
+        case .health, .bootstrap, .routes, .listApps, .listWindows, .cursorFeedback:
             return false
         }
     }

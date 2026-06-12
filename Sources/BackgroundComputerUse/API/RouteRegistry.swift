@@ -6,6 +6,7 @@ enum RouteID: String, CaseIterable {
     case routes
     case listApps = "list_apps"
     case listWindows = "list_windows"
+    case cursorFeedback = "cursor_feedback"
     case getWindowState = "get_window_state"
     case click
     case scroll
@@ -126,6 +127,31 @@ enum RouteRegistry {
             notes: [
                 "Stable derived window IDs use bundle ID, pid, launch date, and window number.",
                 "Only real AXWindow entries are returned; auxiliary AX containers and duplicate backing window IDs are excluded."
+            ]
+        ),
+        RouteDescriptorDTO(
+            id: RouteID.cursorFeedback.rawValue,
+            method: "POST",
+            path: "/v1/cursor_feedback",
+            category: "feedback",
+            summary: "Update the visible Agent cursor with public agent response text, observations, or a semantic pointing cue without dispatching input.",
+            execution: RouteExecutionPolicyDTO(
+                lane: .sharedRead,
+                backgroundBehavior: .backgroundRequired,
+                focusStealPolicy: .forbidden,
+                mainThreadBehavior: .allowed,
+                readActRead: false,
+                allowsConcurrentClients: true,
+                notes: [
+                    "This route only updates the visual cursor overlay. It does not dispatch mouse, keyboard, AX, or window-motion input.",
+                    "When window is omitted and the cursor session has no existing window attachment, feedback is accepted but visual presentation is deferred to prevent global overlays above unrelated apps."
+                ]
+            ),
+            implementationStatus: .implemented,
+            notes: [
+                "Use operation=update or append for public visible agent narration. Avoid route labels, tool names, product branding, and hidden chain-of-thought in feedback messages.",
+                "Use finish for a short final dwell, hide to clear immediately, and point to schedule an asynchronous pointing cue.",
+                "Feedback bubbles are excluded from model-facing screenshots and OCR by default."
             ]
         ),
         RouteDescriptorDTO(
@@ -363,6 +389,19 @@ enum RouteRegistry {
             return json([
                 field("app", "string", required: true, "App name, bundle ID, or target query.")
             ])
+        case RouteID.cursorFeedback.rawValue:
+            return json([
+                field("operation", "update | append | finish | hide | point", required: true),
+                field("state", "idle | moving | acting | waiting | streaming | pointing | error", "Visual feedback state. Defaults from operation when omitted."),
+                field("message", "string", "Public visible agent response or observation to show in the cursor-attached feedback bubble."),
+                field("append", "boolean", "When true, append message to existing feedback text.", defaultValue: "false"),
+                field("cursor", "CursorRequest"),
+                field("window", "string", "Optional stable window ID. Provide it for immediate visible feedback before the cursor has an existing window attachment."),
+                field("x", "number", "Optional AppKit-global x coordinate used as feedback anchor or pointing target."),
+                field("y", "number", "Optional AppKit-global y coordinate used as feedback anchor or pointing target."),
+                field("dwellMs", "number", "Optional finished/pointing dwell duration in milliseconds."),
+                debugField()
+            ])
         case RouteID.getWindowState.rawValue:
             return json([
                 field("window", "string", required: true, "Stable window ID from list_windows."),
@@ -568,6 +607,20 @@ enum RouteRegistry {
                 field("app", "AppReference", required: true),
                 field("windows", "WindowSummary[]", required: true),
                 field("notes", "string[]", required: true)
+            ])
+        case RouteID.cursorFeedback.rawValue:
+            return json([
+                field("contractVersion", "string", required: true),
+                field("ok", "boolean", required: true),
+                field("operation", "update | append | finish | hide | point", required: true),
+                field("state", "idle | moving | acting | waiting | streaming | pointing | error", required: true),
+                field("message", "string | null"),
+                field("cursor", "CursorResponse", required: true),
+                field("attachment", "window | deferred | disabled", required: true),
+                field("targetPointAppKit", "Point | null"),
+                field("clamped", "boolean", required: true),
+                field("plannedDurationMs", "number | null"),
+                field("warnings", "string[]", required: true)
             ])
         case RouteID.getWindowState.rawValue:
             return json([

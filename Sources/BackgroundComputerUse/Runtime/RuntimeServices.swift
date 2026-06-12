@@ -16,6 +16,7 @@ struct RuntimeServices {
     private let clickRouteService: ClickRouteService
     private let waitForRouteService: WaitForRouteService
     private let textRouteService: TextRouteService
+    private let cursorFeedbackRouteService: CursorFeedbackRouteService
 
     init(executionOptions: ActionExecutionOptions = .visualCursorEnabled) {
         windowStateService = WindowStateService(executionOptions: executionOptions)
@@ -30,6 +31,7 @@ struct RuntimeServices {
         clickRouteService = ClickRouteService(executionOptions: executionOptions)
         waitForRouteService = WaitForRouteService(executionOptions: executionOptions)
         textRouteService = TextRouteService(executionOptions: executionOptions)
+        cursorFeedbackRouteService = CursorFeedbackRouteService(executionOptions: executionOptions)
     }
 
     func permissions() -> RuntimePermissionsDTO {
@@ -48,6 +50,12 @@ struct RuntimeServices {
             target: RouteTargetSummaryDTO(kind: .appQuery, appQuery: request.app, windowID: nil)
         ) {
             try windowListService.listWindows(appQuery: request.app)
+        }
+    }
+
+    func cursorFeedback(_ request: CursorFeedbackRequest) throws -> CursorFeedbackResponse {
+        try execute(routeID: .cursorFeedback, target: .shared) {
+            try cursorFeedbackRouteService.update(request: request)
         }
     }
 

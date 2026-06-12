@@ -52,6 +52,7 @@ private final class CursorSessionState {
     var anticipationTilt: CGFloat = 0
     var nextMotionEntersFromEdge = false
     var actionGeneration: UInt64 = 0
+    var feedback = CursorFeedbackState()
 
     init(descriptor: CursorSessionDescriptor, now: TimeInterval) {
         id = descriptor.id
@@ -74,6 +75,17 @@ private final class CursorSessionState {
 
     var pivotLocal: CGPoint {
         CursorPivotKind.tip.pathPoint
+    }
+
+    func activity(at now: TimeInterval) -> CursorSessionActivity {
+        CursorSessionActivity(
+            hasMotion: currentMotion != nil,
+            hasAction: actionInProgress,
+            isPressed: isPressed,
+            hasPendingRelease: releaseUntil != nil,
+            hasEffects: effects.isEmpty == false,
+            hasActiveFeedback: feedback.isActive(at: now)
+        )
     }
 
     func responseDTO(reused: Bool) -> CursorResponseDTO {
@@ -336,6 +348,7 @@ final class CursorCoordinator {
         session.isTyping = false
         session.scrollStreakEnabledUntil = 0
         session.currentMotion = nil
+        clearFeedbackForActionStart(session)
         setGlyph(.keycap(label), for: session)
         touchVisibility(session, now: CACurrentMediaTime())
         sleepFor(timings.pressKeyPreBounceMilliseconds / 1000)
@@ -358,6 +371,8 @@ final class CursorCoordinator {
     func finishPressKey(cursorID: String) {
         let session = session(for: cursorID)
         let generation = session.actionGeneration
+        clearAutomaticActionFeedback(session)
+        touchVisibility(session, now: CACurrentMediaTime())
         schedulePressed(
             false,
             cursorID: cursorID,
@@ -442,6 +457,31 @@ final class CursorCoordinator {
         scheduleActionEnd(cursorID: cursorID, generation: generation, after: hold)
     }
 
+    func beginActionFeedback(cursorID: String, attachedWindowNumber: Int?) {
+        startIfNeeded()
+        let session = session(for: cursorID)
+        if let attachedWindowNumber {
+            updateAttachment(for: session, windowNumber: attachedWindowNumber)
+        }
+        session.actionGeneration &+= 1
+        session.actionInProgress = true
+        session.releaseUntil = nil
+        clearFeedbackForActionStart(session)
+        touchVisibility(session, now: CACurrentMediaTime())
+        refreshPresentation()
+    }
+
+    func finishActionFeedback(cursorID: String, after delay: TimeInterval = 0) {
+        startIfNeeded()
+        let session = session(for: cursorID)
+        let generation = session.actionGeneration
+        if delay <= 0 {
+            clearActionFeedback(session)
+            return
+        }
+        scheduleActionFeedbackEnd(cursorID: cursorID, generation: generation, after: delay)
+    }
+
     func setPressed(_ pressed: Bool, cursorID: String, attachedWindowNumber: Int? = nil) {
         startIfNeeded()
         let session = session(for: cursorID)
@@ -486,6 +526,76 @@ final class CursorCoordinator {
         refreshPresentation()
     }
 
+    func updateFeedback(
+        requested: CursorRequestDTO?,
+        update: CursorFeedbackUpdate,
+        attachedWindowNumber: Int?,
+        anchorPoint: CGPoint?
+    ) -> CursorFeedbackApplicationResult {
+        startIfNeeded()
+        let response = resolveSession(requested: requested)
+        let session = session(for: response.id)
+        let now = update.now
+
+        let attachment: String
+        let hasWindowAttachment: Bool
+        if let attachedWindowNumber {
+            self.updateAttachment(for: session, windowNumber: attachedWindowNumber)
+            attachment = "window"
+            hasWindowAttachment = true
+        } else if session.attachedWindowNumber != nil {
+            attachment = "window"
+            hasWindowAttachment = true
+        } else {
+            attachment = "deferred"
+            hasWindowAttachment = false
+        }
+
+        let resolvedAnchor = anchorPoint ?? update.target ?? sessionCurrentOrFallbackPoint(session)
+        let clamped = clampToVisibleScreen(resolvedAnchor)
+        if session.hasPosition == false || session.visible == false || session.visibilityAlpha <= 0.01 {
+            snapState(session, to: clamped.point)
+        }
+
+        var effectiveUpdate = update
+        if update.operation == .point {
+            let duration = hasWindowAttachment
+                ? schedulePointing(session: session, target: clamped.point)
+                : nil
+            effectiveUpdate = CursorFeedbackUpdate(
+                operation: .point,
+                state: update.state ?? .pointing,
+                message: update.message,
+                append: update.append,
+                now: now,
+                dwell: update.dwell,
+                target: clamped.point,
+                renderInModelFacingScreenshots: update.renderInModelFacingScreenshots
+            )
+            session.feedback.apply(effectiveUpdate)
+            touchVisibility(session, now: now)
+            refreshPresentation()
+            return CursorFeedbackApplicationResult(
+                session: response,
+                clamped: clamped.clamped,
+                target: clamped.point,
+                plannedDuration: duration,
+                attachment: attachment
+            )
+        }
+
+        session.feedback.apply(effectiveUpdate)
+        touchVisibility(session, now: now)
+        refreshPresentation()
+        return CursorFeedbackApplicationResult(
+            session: response,
+            clamped: clamped.clamped,
+            target: anchorPoint.map { _ in clamped.point },
+            plannedDuration: nil,
+            attachment: attachment
+        )
+    }
+
     func snapshots(forWindowNumber windowNumber: Int) -> [CursorSnapshot] {
         startIfNeeded()
 
@@ -511,6 +621,12 @@ final class CursorCoordinator {
             return nil
         }
         return session.position
+    }
+
+    func feedbackSnapshot(cursorID: String) -> CursorFeedbackSnapshot? {
+        startIfNeeded()
+        guard let session = sessionsByID[cursorID] else { return nil }
+        return session.feedback.snapshot(at: CACurrentMediaTime())
     }
 
     fileprivate func displayLinkTick(_ link: CADisplayLink) {
@@ -579,6 +695,7 @@ final class CursorCoordinator {
         session.isPressed = false
         session.isTyping = false
         session.scrollStreakEnabledUntil = 0
+        clearFeedbackForActionStart(session)
         setGlyph(.arrow, for: session)
         touchVisibility(session, now: CACurrentMediaTime())
         refreshPresentation()
@@ -593,8 +710,28 @@ final class CursorCoordinator {
         }
         setGlyph(.arrow, for: session)
         session.actionInProgress = false
+        clearAutomaticActionFeedback(session)
         touchVisibility(session, now: CACurrentMediaTime())
         refreshPresentation()
+    }
+
+    private func clearActionFeedback(_ session: CursorSessionState) {
+        session.actionInProgress = false
+        clearAutomaticActionFeedback(session)
+        touchVisibility(session, now: CACurrentMediaTime())
+        refreshPresentation()
+    }
+
+    private func clearFeedbackForActionStart(_ session: CursorSessionState) {
+        if session.feedback.state == .pointing {
+            session.feedback.clear()
+        }
+    }
+
+    private func clearAutomaticActionFeedback(_ session: CursorSessionState) {
+        if session.feedback.state == .acting {
+            session.feedback.clear()
+        }
     }
 
     private func schedulePressed(
@@ -610,6 +747,18 @@ final class CursorCoordinator {
                     cursorID: cursorID,
                     generation: generation
                 )
+            }
+        }
+    }
+
+    private func scheduleActionFeedbackEnd(
+        cursorID: String,
+        generation: UInt64,
+        after delay: TimeInterval
+    ) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.clearActionFeedbackIfCurrent(cursorID: cursorID, generation: generation)
             }
         }
     }
@@ -647,6 +796,14 @@ final class CursorCoordinator {
         session.releaseUntil = nil
         touchVisibility(session, now: CACurrentMediaTime())
         refreshPresentation()
+    }
+
+    private func clearActionFeedbackIfCurrent(cursorID: String, generation: UInt64) {
+        guard let session = sessionsByID[cursorID],
+              session.actionGeneration == generation else {
+            return
+        }
+        clearActionFeedback(session)
     }
 
     private func endActionIfCurrent(cursorID: String, generation: UInt64) {
@@ -768,6 +925,21 @@ final class CursorCoordinator {
         return entrance
     }
 
+    private func schedulePointing(session: CursorSessionState, target: CGPoint) -> TimeInterval {
+        ensurePosition(for: session, near: target)
+        session.actionGeneration &+= 1
+        session.actionInProgress = false
+        session.releaseUntil = nil
+        session.isPressed = false
+        session.isTyping = false
+        session.scrollStreakEnabledUntil = 0
+        setGlyph(.arrowWithBadge, for: session)
+        let entrance = consumeEdgeEntranceFlag(for: session)
+        let duration = moveDuration(from: session.position, toTip: target, entrance: entrance)
+        _ = startMotion(session, toTip: target, duration: duration, entrance: entrance)
+        return duration + (session.feedback.isActive(at: CACurrentMediaTime()) ? CursorFeedbackLayout.pointingDwell : 0)
+    }
+
     private func pivotTarget(forTip tipTarget: CGPoint, session: CursorSessionState) -> CGPoint {
         pivotTarget(forTip: tipTarget, pivotLocal: session.pivotLocal)
     }
@@ -786,6 +958,24 @@ final class CursorCoordinator {
         let screen = DesktopGeometry.screenContaining(point: targetPoint) ?? NSScreen.main ?? NSScreen.screens.first
         let frame = screen?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
         return CursorMotionPlanner.edgeEntrancePoint(for: frame)
+    }
+
+    private func sessionCurrentOrFallbackPoint(_ session: CursorSessionState) -> CGPoint {
+        if session.hasPosition {
+            return session.position
+        }
+        let frame = (NSScreen.main ?? NSScreen.screens.first)?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        return CGPoint(x: frame.midX, y: frame.midY)
+    }
+
+    private func clampToVisibleScreen(_ point: CGPoint) -> (point: CGPoint, clamped: Bool) {
+        let screen = DesktopGeometry.screenContaining(point: point) ?? NSScreen.main ?? NSScreen.screens.first
+        let frame = screen?.visibleFrame ?? screen?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let clampedPoint = CGPoint(
+            x: max(frame.minX + 12, min(point.x, frame.maxX - 12)),
+            y: max(frame.minY + 12, min(point.y, frame.maxY - 12))
+        )
+        return (clampedPoint, clampedPoint.distance(to: point) > 0.01)
     }
 
     private func sleepFor(_ seconds: TimeInterval) {
@@ -890,6 +1080,7 @@ final class CursorCoordinator {
         stepScrollStreak(session, now: now)
         stepEffects(session, dt: TimeInterval(dt))
         stepReleaseState(session, now: now)
+        session.feedback.expireIfNeeded(at: now)
         stepVisibility(session, now: now)
     }
 
@@ -972,12 +1163,7 @@ final class CursorCoordinator {
     }
 
     private func stepVisibility(_ session: CursorSessionState, now: TimeInterval) {
-        let isActive = session.currentMotion != nil ||
-            session.actionInProgress ||
-            session.isPressed ||
-            session.releaseUntil != nil ||
-            session.effects.isEmpty == false
-        if isActive {
+        if session.activity(at: now).isActive {
             touchVisibility(session, now: now)
             return
         }
@@ -1044,7 +1230,8 @@ final class CursorCoordinator {
             trailVisible: CursorMotionConstants.trailVisible,
             caretPhase: session.caretPhase,
             anticipationTilt: session.anticipationTilt,
-            effects: session.effects
+            effects: session.effects,
+            feedback: session.feedback.snapshot(at: now)
         )
     }
 
@@ -1056,8 +1243,10 @@ final class CursorCoordinator {
         var activeKeys = Set<CursorOverlayKey>()
 
         for session in sessionsByID.values.sorted(by: { $0.id < $1.id }) {
-            guard let attachedWindowNumber = session.attachedWindowNumber,
-                  session.visible else {
+            guard session.visible else {
+                continue
+            }
+            guard session.attachedWindowNumber != nil else {
                 continue
             }
 
@@ -1072,7 +1261,10 @@ final class CursorCoordinator {
                 let effectsVisible = snapshot.effects.contains { effect in
                     effectContainsVisiblePoint(effect, in: visibleRect)
                 }
-                guard pointVisible || trailVisible || effectsVisible else {
+                let feedbackVisible = snapshot.feedback.map { feedback in
+                    feedback.target.map { visibleRect.contains($0) } ?? pointVisible
+                } ?? false
+                guard pointVisible || trailVisible || effectsVisible || feedbackVisible else {
                     continue
                 }
 
@@ -1080,7 +1272,7 @@ final class CursorCoordinator {
                 activeKeys.insert(key)
                 overlayController(for: key, screen: screen).setPresentation(
                     CursorOverlayPresentation(
-                        attachedWindowNumber: attachedWindowNumber,
+                        attachedWindowNumber: session.attachedWindowNumber,
                         attachedWindowLevelRawValue: session.attachedWindowLevelRawValue,
                         snapshot: snapshot
                     )
@@ -1132,12 +1324,7 @@ final class CursorCoordinator {
 
     private func purgeExpiredSessions(now: TimeInterval) {
         let expiredSessionIDs = sessionsByID.values.compactMap { session -> String? in
-            let isActive = session.currentMotion != nil ||
-                session.actionInProgress ||
-                session.isPressed ||
-                session.releaseUntil != nil ||
-                session.effects.isEmpty == false
-            guard isActive == false,
+            guard session.activity(at: now).isActive == false,
                   now - session.lastActivityAt >= CursorPresenceTiming.idleExpireDelay else {
                 return nil
             }
@@ -1329,6 +1516,21 @@ enum CursorRuntime {
         }
     }
 
+    static func beginActionFeedback(cursorID: String, attachedWindowNumber: Int? = nil) {
+        runOnMain {
+            CursorCoordinator.shared.beginActionFeedback(
+                cursorID: cursorID,
+                attachedWindowNumber: attachedWindowNumber
+            )
+        }
+    }
+
+    static func finishActionFeedback(cursorID: String, after delay: TimeInterval = 0) {
+        runOnMain {
+            CursorCoordinator.shared.finishActionFeedback(cursorID: cursorID, after: delay)
+        }
+    }
+
     static func prepareScroll(
         to point: CGPoint,
         axis: CursorScrollAxis,
@@ -1509,6 +1711,43 @@ enum CursorRuntime {
         }
         return DispatchQueue.main.sync { @MainActor in
             CursorCoordinator.shared.currentPosition(cursorID: cursorID)
+        }
+    }
+
+    static func updateFeedback(
+        requested: CursorRequestDTO?,
+        update: CursorFeedbackUpdate,
+        attachedWindowNumber: Int? = nil,
+        anchorPoint: CGPoint? = nil
+    ) -> CursorFeedbackApplicationResult {
+        if Thread.isMainThread {
+            return MainActor.assumeIsolated {
+                CursorCoordinator.shared.updateFeedback(
+                    requested: requested,
+                    update: update,
+                    attachedWindowNumber: attachedWindowNumber,
+                    anchorPoint: anchorPoint
+                )
+            }
+        }
+        return DispatchQueue.main.sync { @MainActor in
+            CursorCoordinator.shared.updateFeedback(
+                requested: requested,
+                update: update,
+                attachedWindowNumber: attachedWindowNumber,
+                anchorPoint: anchorPoint
+            )
+        }
+    }
+
+    static func feedbackSnapshot(cursorID: String) -> CursorFeedbackSnapshot? {
+        if Thread.isMainThread {
+            return MainActor.assumeIsolated {
+                CursorCoordinator.shared.feedbackSnapshot(cursorID: cursorID)
+            }
+        }
+        return DispatchQueue.main.sync { @MainActor in
+            CursorCoordinator.shared.feedbackSnapshot(cursorID: cursorID)
         }
     }
 

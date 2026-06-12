@@ -83,7 +83,8 @@ enum CursorScreenshotCompositor {
                     trailVisible: modelSnapshot.trailVisible,
                     caretPhase: modelSnapshot.caretPhase,
                     anticipationTilt: modelSnapshot.anticipationTilt,
-                    effects: modelSnapshot.effects
+                    effects: modelSnapshot.effects,
+                    feedback: modelSnapshot.feedback?.excludingModelFacingFeedback()
                 )
                 CursorRenderer.draw(clippedSnapshot, in: context)
             }

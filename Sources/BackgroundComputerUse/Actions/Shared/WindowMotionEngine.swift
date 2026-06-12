@@ -50,8 +50,15 @@ struct WindowMotionEngine {
         var totalSettleMs = 0.0
         var collectedDiagnostics: [MotionProjectionDiagnosticsDTO] = []
 
+        let shouldAnimate = plan.animate && cursorAnimationEnabled
+        if shouldAnimate {
+            CursorRuntime.beginActionFeedback(
+                cursorID: cursorID,
+                attachedWindowNumber: windowNumber
+            )
+        }
+
         for (index, step) in plan.segments.enumerated() {
-            let shouldAnimate = plan.animate && cursorAnimationEnabled
             let projection = runtimeProjection(
                 step: step,
                 windowNumber: windowNumber,
@@ -90,7 +97,6 @@ struct WindowMotionEngine {
             totalSettleMs += settle.settleMs
         }
 
-        let shouldAnimate = plan.animate && cursorAnimationEnabled
         if shouldAnimate, WindowMotionMath.requestedFrameSatisfied(expected: plan.targetFrame, actual: currentFrame) == false {
             let correctionStep = WindowMotionSegmentPlan(
                 kind: .direct,
@@ -124,6 +130,7 @@ struct WindowMotionEngine {
 
         if shouldAnimate {
             CursorRuntime.release(cursorID: cursorID, afterHold: CursorRuntime.releaseHoldDuration())
+            CursorRuntime.finishActionFeedback(cursorID: cursorID)
         }
 
         let rawStatus: String

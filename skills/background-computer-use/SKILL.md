@@ -34,6 +34,8 @@ Use this skill to start or connect to the local macOS `BackgroundComputerUse` ru
 
 6. For action routes, reuse `stateToken` from the state you inspected. Reuse the same `cursor.id` when the user wants one continuous visible cursor.
 
+7. When the visible cursor should explain work in real time, call `POST /v1/cursor_feedback` with public agent-facing text. Stream useful observations or visible response text; do not show route labels like "reading screen", tool names, product branding, or hidden chain-of-thought.
+
 ## Helpers
 
 - `scripts/ensure-runtime.sh`: find, install, launch, and bootstrap the runtime.

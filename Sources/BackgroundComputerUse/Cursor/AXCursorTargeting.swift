@@ -267,7 +267,7 @@ enum AXCursorTargeting {
     }
 
     static func finishPressKey(cursor: ActionCursorTargetResponseDTO) {
-        guard cursor.moved else { return }
+        guard cursor.movement != "disabled" else { return }
         CursorRuntime.finishPressKey(cursorID: cursor.session.id)
     }
 

@@ -151,6 +151,87 @@ public struct ListWindowsRequest: Decodable, Sendable {
     }
 }
 
+struct CursorFeedbackRequest: Decodable, Sendable {
+    let operation: CursorFeedbackOperation
+    let state: CursorFeedbackVisualState?
+    let message: String?
+    let append: Bool?
+    let cursor: CursorRequestDTO?
+    let window: String?
+    let x: Double?
+    let y: Double?
+    let dwellMs: Double?
+    let debug: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case operation
+        case state
+        case message
+        case append
+        case cursor
+        case window
+        case x
+        case y
+        case dwellMs
+        case debug
+    }
+
+    init(
+        operation: CursorFeedbackOperation,
+        state: CursorFeedbackVisualState? = nil,
+        message: String? = nil,
+        append: Bool? = nil,
+        cursor: CursorRequestDTO? = nil,
+        window: String? = nil,
+        x: Double? = nil,
+        y: Double? = nil,
+        dwellMs: Double? = nil,
+        debug: Bool? = nil
+    ) {
+        self.operation = operation
+        self.state = state
+        self.message = message
+        self.append = append
+        self.cursor = cursor
+        self.window = window
+        self.x = x
+        self.y = y
+        self.dwellMs = dwellMs
+        self.debug = debug
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        operation = try container.decode(CursorFeedbackOperation.self, forKey: .operation)
+        state = try container.decodeIfPresent(CursorFeedbackVisualState.self, forKey: .state)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+        append = try container.decodeIfPresent(Bool.self, forKey: .append)
+        cursor = try container.decodeIfPresent(CursorRequestDTO.self, forKey: .cursor)
+        window = try container.decodeIfPresent(String.self, forKey: .window)
+        x = try container.decodeIfPresent(Double.self, forKey: .x)
+        y = try container.decodeIfPresent(Double.self, forKey: .y)
+        dwellMs = try container.decodeIfPresent(Double.self, forKey: .dwellMs)
+        debug = try container.decodeIfPresent(Bool.self, forKey: .debug)
+
+        if x != nil || y != nil {
+            guard let x, let y, x.isFinite, y.isFinite else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: x == nil ? .x : .y,
+                    in: container,
+                    debugDescription: "cursor_feedback coordinates must include finite x and y values together."
+                )
+            }
+        }
+        if let dwellMs, dwellMs.isFinite == false {
+            throw DecodingError.dataCorruptedError(
+                forKey: .dwellMs,
+                in: container,
+                debugDescription: "cursor_feedback dwellMs must be finite when provided."
+            )
+        }
+    }
+}
+
 public struct GetWindowStateRequest: Decodable, Sendable {
     public let window: String
     public let includeMenuBar: Bool?

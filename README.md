@@ -93,8 +93,9 @@ macOS permissions attach to the signed host application. The bundled HTTP runtim
 4. `POST /v1/list_apps`
 5. `POST /v1/list_windows`
 6. `POST /v1/get_window_state`
-7. Act with `/v1/click`, `/v1/scroll`, `/v1/type_text`, `/v1/press_key`, `/v1/set_value`, `/v1/perform_secondary_action`, `/v1/drag`, `/v1/resize`, or `/v1/set_window_frame`.
-8. Read state again.
+7. Optionally stream visible agent feedback with `/v1/cursor_feedback`.
+8. Act with `/v1/click`, `/v1/scroll`, `/v1/type_text`, `/v1/press_key`, `/v1/set_value`, `/v1/perform_secondary_action`, `/v1/drag`, `/v1/resize`, or `/v1/set_window_frame`.
+9. Read state again.
 
 For visual work, request screenshots with `imageMode: "path"` or `imageMode: "base64"` and inspect them whenever possible. The AX tree is useful for semantic targeting, but screenshots are the visual ground truth; AX state and verifier summaries can lag, omit visual-only state, or be incomplete in some apps.
 
@@ -113,6 +114,7 @@ Core routes:
 - `GET /v1/routes`
 - `POST /v1/list_apps`
 - `POST /v1/list_windows`
+- `POST /v1/cursor_feedback`
 - `POST /v1/get_window_state`
 - `POST /v1/click`
 - `POST /v1/scroll`
@@ -203,7 +205,20 @@ Use the optional `cursor` object when a client needs to customize or reuse a sep
 
 Cursors are session-based: the same `cursor.id` moves one continuous on-screen cursor, while different IDs create independent lanes. The default `agent` session prevents duplicate unnamed cursors while keeping activity visibly present during actions.
 
+Use `POST /v1/cursor_feedback` to update the visible cursor bubble without dispatching input. The message is public, user-visible narration: use observations or response text, not route labels, hidden chain-of-thought, tool names, or product branding.
+
+```bash
+curl -s -X POST "$BASE/v1/cursor_feedback" \
+  -H "X-Background-Computer-Use-Token: $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"operation":"update","state":"streaming","window":"WINDOW_ID","message":"Vou verificar o resultado antes do proximo clique."}' | python3 -m json.tool
+```
+
+When no target window is available, cursor feedback is accepted but deferred instead of showing a global overlay above unrelated apps. Use `operation:"hide"` to clear the bubble immediately after a task.
+
 `POST /v1/press_key` returns transport-level `ok` plus a `verification` block. Read `verification.classification` for the observed effect signal: `success`, `dispatched_no_observed_effect`, or `failed`. The block includes post-action state evidence such as focused element changes, text/value diffs, selection changes, visual changes, and the post `stateToken` when available.
+
+`press_key` accepts normal macOS chord names such as `command+a`, `escape`, and `backspace`. For select-all in Electron text fields, the runtime first tries verified AX selection semantics and falls back to native key delivery when AX selection cannot be verified.
 
 `POST /v1/list_windows` returns only real AX windows and keeps one entry per backing `windowID`; auxiliary AX containers such as Finder's desktop scroll area are excluded.
 
