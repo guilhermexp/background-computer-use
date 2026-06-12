@@ -16,4 +16,3 @@ All `/v1` POST routes SHALL reject requests containing top-level fields that are
 
 - **WHEN** a client sends a request using only fields documented by `GET /v1/routes` for that route, including all optional fields
 - **THEN** the request is decoded and executed normally
-

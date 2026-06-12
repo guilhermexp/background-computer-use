@@ -238,6 +238,12 @@ struct Router {
         work: (Request) throws -> Response
     ) -> HTTPResponse {
         let requestID = UUID().uuidString
+        if let unknownFields = unknownTopLevelFields(routeID: routeID, body: request.body) {
+            let response = unknownFieldResponse(unknownFields: unknownFields, routeID: routeID)
+            recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
+            return response
+        }
+
         if isActionRoute(routeID) {
             let throttleDecision = sessionLimiter.beforeAction()
             guard throttleDecision.allowed else {
@@ -274,12 +280,6 @@ struct Router {
             if let acquiredSessionID {
                 sessionLimiter.release(sessionID: acquiredSessionID)
             }
-        }
-
-        if let unknownFields = unknownTopLevelFields(routeID: routeID, body: request.body) {
-            let response = unknownFieldResponse(unknownFields: unknownFields, routeID: routeID)
-            recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
-            return response
         }
 
         do {

@@ -16,4 +16,3 @@ TBD - created by archiving change harden-agent-api-reliability. Update Purpose a
 
 - **WHEN** two AX elements resolve to the same backing window
 - **THEN** the response contains a single entry for that window, and no two entries in any response share a `windowID`
-

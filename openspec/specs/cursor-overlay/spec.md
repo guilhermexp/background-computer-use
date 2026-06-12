@@ -16,4 +16,3 @@ The HTTP runtime SHALL render a visual cursor overlay only when the action reque
 
 - **WHEN** a client sends an action with `"cursor":{"id":"agent-1","name":"Agent","color":"#20C46B"}`
 - **THEN** the named cursor is rendered, and reusing the same `cursor.id` in later actions moves the same on-screen cursor continuously
-

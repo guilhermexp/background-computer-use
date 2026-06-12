@@ -26,6 +26,27 @@ struct StrictRequestDecodingTests {
     }
 
     @Test
+    func invalidRequestsDoNotConsumeActionRateLimit() throws {
+        let limiter = RuntimeSessionLimiter()
+        let router = Router(sessionLimiter: limiter)
+        limiter.configure(maxActionsPerSecond: 1)
+        let request = try makeRequest(
+            method: "POST",
+            path: "/v1/press_key",
+            body: #"{"window":"w_X","key":"w","modifiers":["command"]}"#
+        )
+
+        let first = router.response(for: request, context: RouterContext(baseURL: nil, startedAt: nil))
+        let second = router.response(for: request, context: RouterContext(baseURL: nil, startedAt: nil))
+
+        #expect(first.statusCode == 400)
+        #expect(second.statusCode == 400)
+        let secondJSON = try decode(second)
+        #expect(secondJSON["error"] as? String == "invalid_request")
+        #expect((secondJSON["message"] as? String)?.contains("modifiers") == true)
+    }
+
+    @Test
     func clickRejectsUnknownField() throws {
         let response = try post(
             path: "/v1/click",

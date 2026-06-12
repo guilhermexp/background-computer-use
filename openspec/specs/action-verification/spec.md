@@ -16,4 +16,3 @@ TBD - created by archiving change harden-agent-api-reliability. Update Purpose a
 
 - **WHEN** a client sends a `press_key` whose dispatch succeeds but produces no detectable state change
 - **THEN** the response still has `ok:true` at the transport level and the `verification` block classifies the action as `dispatched_no_observed_effect`
-
