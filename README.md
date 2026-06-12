@@ -189,10 +189,10 @@ curl -s -X POST "$BASE/v1/type_text" \
   -d '{"window":"WINDOW_ID","target":{"kind":"display_index","value":4},"text":"hello","focusAssistMode":"focus_and_caret_end","imageMode":"path"}' | python3 -m json.tool
 ```
 
-Action routes show the on-screen BCU cursor by default when the HTTP runtime has visual cursors enabled. If the request omits `cursor`, the runtime reuses the stable default session:
+Action routes show the on-screen agent cursor by default when the HTTP runtime has visual cursors enabled. If the request omits `cursor`, the runtime reuses the stable default session:
 
 ```json
-{"id":"bcu","name":"BCU","color":"#0095A1"}
+{"id":"agent","name":"Agent","color":"#0095A1"}
 ```
 
 Use the optional `cursor` object when a client needs to customize or reuse a separate cursor lane:
@@ -201,7 +201,7 @@ Use the optional `cursor` object when a client needs to customize or reuse a sep
 {"id":"agent-1","name":"Agent","color":"#20C46B"}
 ```
 
-Cursors are session-based: the same `cursor.id` moves one continuous on-screen cursor, while different IDs create independent lanes. The default `bcu` session prevents duplicate unnamed cursors while keeping BCU visibly present during actions.
+Cursors are session-based: the same `cursor.id` moves one continuous on-screen cursor, while different IDs create independent lanes. The default `agent` session prevents duplicate unnamed cursors while keeping activity visibly present during actions.
 
 `POST /v1/press_key` returns transport-level `ok` plus a `verification` block. Read `verification.classification` for the observed effect signal: `success`, `dispatched_no_observed_effect`, or `failed`. The block includes post-action state evidence such as focused element changes, text/value diffs, selection changes, visual changes, and the post `stateToken` when available.
 

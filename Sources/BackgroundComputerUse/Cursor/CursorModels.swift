@@ -7,10 +7,10 @@ struct CursorProfile {
     let colorHex: String
 
     /// Stable default cursor used when an action omits a cursor object. Keeping one id prevents
-    /// duplicate overlay sessions while still making BCU activity visible on screen.
+    /// duplicate overlay sessions while still making agent activity visible on screen.
     static let defaultAppearance = CursorProfile(
-        id: "bcu",
-        name: "BCU",
+        id: "agent",
+        name: "Agent",
         colorHex: "#0095A1"
     )
 }

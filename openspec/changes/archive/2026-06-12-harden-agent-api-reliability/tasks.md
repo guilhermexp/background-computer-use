@@ -15,10 +15,10 @@
 
 ## 3. Default visible cursor reuse (cursor-overlay)
 
-- [x] 3.1 Replace the `defaultProfile = CursorProfile.codex` fallback path for HTTP actions with a stable BCU default cursor; when the request has no `cursor`, animate the reused `bcu` session.
+- [x] 3.1 Replace the `defaultProfile = CursorProfile.codex` fallback path for HTTP actions with a stable Agent default cursor; when the request has no `cursor`, animate the reused `agent` session.
 - [x] 3.2 Keep explicit `cursor` behavior unchanged (session reuse by `cursor.id`, color, label).
 - [x] 3.3 Delete or repurpose `CursorProfile.codex`; ensure no route or test references the old Codex identity as an implicit default.
-- [x] 3.4 Tests: action without `cursor` uses the default BCU session; action with `cursor` still renders/reuses.
+- [x] 3.4 Tests: action without `cursor` uses the default Agent session; action with `cursor` still renders/reuses.
 
 ## 4. Window listing dedup (window-discovery)
 
@@ -29,5 +29,5 @@
 ## 5. Validation gate
 
 - [x] 5.1 `swift build` and full `swift test` pass.
-- [x] 5.2 Update README/route docs where behavior changed (strict decoding note, default visible BCU cursor, press_key verification).
-- [x] 5.3 Run the repo smoke script (`Tests`/`script` smoke) against a relaunched runtime; manual API pass: unknown-field request → `invalid_request`; `press_key` `"command+w"` on a scratch TextEdit doc → verification block present; action without cursor → default `bcu` overlay on screen; Finder `list_windows` → single entry per real window.
+- [x] 5.2 Update README/route docs where behavior changed (strict decoding note, default visible Agent cursor, press_key verification).
+- [x] 5.3 Run the repo smoke script (`Tests`/`script` smoke) against a relaunched runtime; manual API pass: unknown-field request → `invalid_request`; `press_key` `"command+w"` on a scratch TextEdit doc → verification block present; action without cursor → default `agent` overlay on screen; Finder `list_windows` → single entry per real window.

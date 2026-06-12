@@ -5,12 +5,12 @@ TBD - created by archiving change harden-agent-api-reliability. Update Purpose a
 ## Requirements
 ### Requirement: Visual cursor uses a stable default session
 
-The HTTP runtime SHALL render a visual cursor overlay for action requests when visual cursors are enabled. When the action request omits `cursor`, the runtime SHALL reuse the stable default BCU cursor profile (`id: "bcu"`, `name: "BCU"`) instead of creating duplicate unnamed sessions.
+The HTTP runtime SHALL render a visual cursor overlay for action requests when visual cursors are enabled. When the action request omits `cursor`, the runtime SHALL reuse the stable default agent cursor profile (`id: "agent"`, `name: "Agent"`) instead of creating duplicate unnamed sessions.
 
-#### Scenario: Action without cursor reuses the BCU cursor
+#### Scenario: Action without cursor reuses the Agent cursor
 
 - **WHEN** a client sends any action request (`click`, `scroll`, `type_text`, `press_key`, etc.) without a `cursor` field
-- **THEN** the visual cursor session uses the default `bcu` id and action choreography is animated on screen
+- **THEN** the visual cursor session uses the default `agent` id and action choreography is animated on screen
 
 #### Scenario: Explicit cursor uses the requested lane
 

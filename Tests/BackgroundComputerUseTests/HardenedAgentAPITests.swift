@@ -262,9 +262,9 @@ struct CursorDefaultVisibilityTests {
     }
 
     @Test
-    func cursorProfileUsesStableBCUDefault() {
-        #expect(CursorProfile.defaultAppearance.id == "bcu")
-        #expect(CursorProfile.defaultAppearance.name == "BCU")
+    func cursorProfileUsesStableAgentDefault() {
+        #expect(CursorProfile.defaultAppearance.id == "agent")
+        #expect(CursorProfile.defaultAppearance.name == "Agent")
     }
 }
 
