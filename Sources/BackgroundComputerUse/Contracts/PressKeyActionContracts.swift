@@ -52,7 +52,14 @@ public struct PressKeySelectionVerificationDTO: Encodable, Sendable {
     public let exactSelectionMatch: Bool
 }
 
+public enum PressKeyEffectClassificationDTO: String, Encodable, Sendable {
+    case success
+    case dispatchedNoObservedEffect = "dispatched_no_observed_effect"
+    case failed
+}
+
 public struct PressKeyVerificationEvidenceDTO: Encodable, Sendable {
+    public let classification: PressKeyEffectClassificationDTO
     public let preStateToken: String?
     public let postStateToken: String?
     public let renderedTextChanged: Bool?
@@ -64,6 +71,51 @@ public struct PressKeyVerificationEvidenceDTO: Encodable, Sendable {
     public let search: PressKeySearchVerificationDTO?
     public let selection: PressKeySelectionVerificationDTO?
     public let verificationNotes: [String]
+
+    public init(
+        preStateToken: String?,
+        postStateToken: String?,
+        renderedTextChanged: Bool?,
+        focusedElementChanged: Bool?,
+        textStateChanged: Bool?,
+        selectionSummaryChanged: Bool?,
+        visualChangeRatio: Double?,
+        visualChanged: Bool?,
+        search: PressKeySearchVerificationDTO?,
+        selection: PressKeySelectionVerificationDTO?,
+        verificationNotes: [String],
+        classification: PressKeyEffectClassificationDTO = .dispatchedNoObservedEffect
+    ) {
+        self.classification = classification
+        self.preStateToken = preStateToken
+        self.postStateToken = postStateToken
+        self.renderedTextChanged = renderedTextChanged
+        self.focusedElementChanged = focusedElementChanged
+        self.textStateChanged = textStateChanged
+        self.selectionSummaryChanged = selectionSummaryChanged
+        self.visualChangeRatio = visualChangeRatio
+        self.visualChanged = visualChanged
+        self.search = search
+        self.selection = selection
+        self.verificationNotes = verificationNotes
+    }
+
+    func withClassification(_ classification: PressKeyEffectClassificationDTO) -> PressKeyVerificationEvidenceDTO {
+        PressKeyVerificationEvidenceDTO(
+            preStateToken: preStateToken,
+            postStateToken: postStateToken,
+            renderedTextChanged: renderedTextChanged,
+            focusedElementChanged: focusedElementChanged,
+            textStateChanged: textStateChanged,
+            selectionSummaryChanged: selectionSummaryChanged,
+            visualChangeRatio: visualChangeRatio,
+            visualChanged: visualChanged,
+            search: search,
+            selection: selection,
+            verificationNotes: verificationNotes,
+            classification: classification
+        )
+    }
 }
 
 public struct PressKeyResponse: Encodable, Sendable {

@@ -85,7 +85,19 @@ struct AXWindowDiscovery {
             return lhs.windowNumber < rhs.windowNumber
         }
 
-        return (records, notes)
+        let filtered = WindowListFilter.realUniqueWindows(
+            records,
+            role: { $0.role },
+            windowNumber: { $0.windowNumber }
+        )
+        if filtered.excludedNonWindow > 0 {
+            notes.append("Excluded \(filtered.excludedNonWindow) non-window AX container(s) (role other than AXWindow), such as the desktop scroll area.")
+        }
+        if filtered.excludedDuplicate > 0 {
+            notes.append("Collapsed \(filtered.excludedDuplicate) duplicate AX element(s) that resolved to an already-listed window.")
+        }
+
+        return (filtered.kept, notes)
     }
 
     private func candidateWindows(for application: AXUIElement) -> [AXUIElement] {

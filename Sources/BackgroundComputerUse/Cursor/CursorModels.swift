@@ -6,9 +6,11 @@ struct CursorProfile {
     let name: String
     let colorHex: String
 
-    static let codex = CursorProfile(
-        id: "codex",
-        name: "Codex",
+    /// Appearance applied to an explicitly requested cursor that omits a name or color.
+    /// This is NOT an implicit default: actions without a `cursor` object render no cursor at all.
+    static let defaultAppearance = CursorProfile(
+        id: "cursor",
+        name: "Cursor",
         colorHex: "#0095A1"
     )
 }

@@ -8,10 +8,11 @@ struct WindowResizeRouteService {
 
     init(executionOptions: ActionExecutionOptions = .visualCursorEnabled) {
         self.executionOptions = executionOptions
-        engine = WindowMotionEngine(executionOptions: executionOptions)
+        engine = WindowMotionEngine()
     }
 
     func resize(request: ResizeRequest) throws -> ResizeResponse {
+        let cursorAnimationEnabled = executionOptions.visualCursorEnabled && request.cursor != nil
         let cursor = cursorSession(request.cursor)
         let totalStarted = DispatchTime.now().uptimeNanoseconds
         let resolveStarted = DispatchTime.now().uptimeNanoseconds
@@ -156,7 +157,8 @@ struct WindowResizeRouteService {
             let execution = engine.execute(
                 plan: plan,
                 target: snapshot.target,
-                cursorID: cursor.id
+                cursorID: cursor.id,
+                cursorAnimationEnabled: cursorAnimationEnabled
             )
             return ResizeResponse(
                 contractVersion: ContractVersion.current,
@@ -200,7 +202,7 @@ struct WindowResizeRouteService {
     }
 
     private func cursorSession(_ request: CursorRequestDTO?) -> CursorResponseDTO {
-        executionOptions.visualCursorEnabled
+        (executionOptions.visualCursorEnabled && request != nil)
             ? CursorRuntime.resolve(requested: request)
             : AXCursorTargeting.disabledSession(requested: request)
     }

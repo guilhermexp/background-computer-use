@@ -8,17 +8,18 @@ struct SetWindowFrameRouteService {
 
     init(executionOptions: ActionExecutionOptions = .visualCursorEnabled) {
         self.executionOptions = executionOptions
-        engine = WindowMotionEngine(executionOptions: executionOptions)
+        engine = WindowMotionEngine()
     }
 
     func setWindowFrame(request: SetWindowFrameRequest) throws -> SetWindowFrameResponse {
+        let cursorAnimationEnabled = executionOptions.visualCursorEnabled && request.cursor != nil
         let cursor = cursorSession(request.cursor)
         let totalStarted = DispatchTime.now().uptimeNanoseconds
         let resolveStarted = DispatchTime.now().uptimeNanoseconds
         let snapshot = try snapshotService.snapshot(windowID: request.window)
         let resolveFinished = DispatchTime.now().uptimeNanoseconds
 
-        let animate = executionOptions.visualCursorEnabled ? (request.animate ?? true) : false
+        let animate = cursorAnimationEnabled ? (request.animate ?? true) : false
         let planningStarted = DispatchTime.now().uptimeNanoseconds
         let warnings = [
             "set_window_frame accepts one canonical AppKit-global frame and routes it through the shared motion planner.",
@@ -171,7 +172,8 @@ struct SetWindowFrameRouteService {
             let execution = engine.execute(
                 plan: plan,
                 target: snapshot.target,
-                cursorID: cursor.id
+                cursorID: cursor.id,
+                cursorAnimationEnabled: cursorAnimationEnabled
             )
             return SetWindowFrameResponse(
                 contractVersion: ContractVersion.current,
@@ -218,7 +220,7 @@ struct SetWindowFrameRouteService {
     }
 
     private func cursorSession(_ request: CursorRequestDTO?) -> CursorResponseDTO {
-        executionOptions.visualCursorEnabled
+        (executionOptions.visualCursorEnabled && request != nil)
             ? CursorRuntime.resolve(requested: request)
             : AXCursorTargeting.disabledSession(requested: request)
     }

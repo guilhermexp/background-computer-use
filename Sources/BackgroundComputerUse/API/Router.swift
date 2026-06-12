@@ -276,6 +276,12 @@ struct Router {
             }
         }
 
+        if let unknownFields = unknownTopLevelFields(routeID: routeID, body: request.body) {
+            let response = unknownFieldResponse(unknownFields: unknownFields, routeID: routeID)
+            recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
+            return response
+        }
+
         do {
             let payload = try JSONSupport.decoder.decode(Request.self, from: request.body)
             let response = HTTPResponse.json(
@@ -363,6 +369,36 @@ struct Router {
         default:
             return false
         }
+    }
+
+    private func unknownTopLevelFields(routeID: RouteID, body: Data) -> [String]? {
+        guard let object = try? JSONSerialization.jsonObject(with: body),
+              let dictionary = object as? [String: Any] else {
+            return nil
+        }
+        let allowed = Set(RouteRegistry.requestFieldNames(for: routeID))
+        let unknown = dictionary.keys.filter { allowed.contains($0) == false }.sorted()
+        return unknown.isEmpty ? nil : unknown
+    }
+
+    private func unknownFieldResponse(unknownFields: [String], routeID: RouteID) -> HTTPResponse {
+        let accepted = RouteRegistry.requestFieldNames(for: routeID)
+        let acceptedList = accepted.isEmpty ? "(none)" : accepted.joined(separator: ", ")
+        let unknownList = unknownFields.joined(separator: ", ")
+        return .json(
+            ErrorResponse(
+                error: "invalid_request",
+                message: "Request body for \(routeID.rawValue) included unknown field(s): \(unknownList). Accepted fields: \(acceptedList).",
+                requestID: UUID().uuidString,
+                recovery: [
+                    "Remove the unknown field(s) \(unknownList) or correct the spelling against the route schema.",
+                    "Call GET /v1/routes and inspect route '\(routeID.rawValue)' request.fields for the accepted fields.",
+                    "Send Content-Type: application/json with a JSON object body for POST routes."
+                ]
+            ),
+            statusCode: 400,
+            reasonPhrase: "Bad Request"
+        )
     }
 
     private func invalidRequestResponse(for error: Error, routeID: RouteID) -> HTTPResponse {

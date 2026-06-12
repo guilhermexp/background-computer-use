@@ -14,21 +14,19 @@ struct WindowMotionExecutionResult {
 
 struct WindowMotionEngine {
     private let backend: any WindowMotionExecutionBackend
-    private let executionOptions: ActionExecutionOptions
     private let verifier = WindowMotionVerifier()
 
     init(
-        backend: any WindowMotionExecutionBackend = AXFrameProjectionBackend(),
-        executionOptions: ActionExecutionOptions = .visualCursorEnabled
+        backend: any WindowMotionExecutionBackend = AXFrameProjectionBackend()
     ) {
         self.backend = backend
-        self.executionOptions = executionOptions
     }
 
     func execute(
         plan: WindowMotionPlan,
         target: ResolvedWindowTarget,
-        cursorID: String
+        cursorID: String,
+        cursorAnimationEnabled: Bool
     ) -> WindowMotionExecutionResult {
         let element = target.window.element
         let windowNumber = target.window.windowNumber
@@ -53,13 +51,14 @@ struct WindowMotionEngine {
         var collectedDiagnostics: [MotionProjectionDiagnosticsDTO] = []
 
         for (index, step) in plan.segments.enumerated() {
-            let shouldAnimate = plan.animate && executionOptions.visualCursorEnabled
+            let shouldAnimate = plan.animate && cursorAnimationEnabled
             let projection = runtimeProjection(
                 step: step,
                 windowNumber: windowNumber,
                 cursorID: cursorID,
                 currentFrame: currentFrame,
-                isFirstStep: index == 0
+                isFirstStep: index == 0,
+                cursorAnimationEnabled: cursorAnimationEnabled
             )
 
             let backendResult = backend.applyStep(
@@ -91,7 +90,7 @@ struct WindowMotionEngine {
             totalSettleMs += settle.settleMs
         }
 
-        let shouldAnimate = plan.animate && executionOptions.visualCursorEnabled
+        let shouldAnimate = plan.animate && cursorAnimationEnabled
         if shouldAnimate, WindowMotionMath.requestedFrameSatisfied(expected: plan.targetFrame, actual: currentFrame) == false {
             let correctionStep = WindowMotionSegmentPlan(
                 kind: .direct,
@@ -154,13 +153,14 @@ struct WindowMotionEngine {
         windowNumber: Int,
         cursorID: String,
         currentFrame: CGRect,
-        isFirstStep: Bool
+        isFirstStep: Bool,
+        cursorAnimationEnabled: Bool
     ) -> WindowMotionExecutionProjection {
         guard step.kind != .direct else {
             return .linear
         }
 
-        guard executionOptions.visualCursorEnabled else {
+        guard cursorAnimationEnabled else {
             return .linear
         }
 

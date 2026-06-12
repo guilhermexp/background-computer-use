@@ -102,6 +102,8 @@ For visual work, request screenshots with `imageMode: "path"` or `imageMode: "ba
 
 `GET /v1/routes` is the self-documenting API catalog. It returns each route's method, path, summary, request schema, and response schema.
 
+All `/v1` POST routes decode strictly against the documented top-level `request.fields` returned by `/v1/routes`. Unknown fields return HTTP 400 `invalid_request`; the error message names the unknown field(s), lists the accepted fields for that route, and includes `recovery` guidance.
+
 Action responses omit verbose implementation `notes` by default. Add `"debug": true` to action requests when you want transport/planner notes for debugging.
 
 Core routes:
@@ -193,7 +195,11 @@ Use the optional `cursor` object on action routes to show an on-screen agent cur
 {"id":"agent-1","name":"Agent","color":"#20C46B"}
 ```
 
-Cursors are session-based. Reuse the same `cursor.id` across related actions to move the same on-screen cursor continuously; use different IDs for independent agents or lanes.
+Cursors are opt-in per request. If an action omits `cursor`, the runtime dispatches without creating or animating a visual cursor session. Cursors are session-based when explicitly requested: reuse the same `cursor.id` across related actions to move the same on-screen cursor continuously; use different IDs for independent agents or lanes.
+
+`POST /v1/press_key` returns transport-level `ok` plus a `verification` block. Read `verification.classification` for the observed effect signal: `success`, `dispatched_no_observed_effect`, or `failed`. The block includes post-action state evidence such as focused element changes, text/value diffs, selection changes, visual changes, and the post `stateToken` when available.
+
+`POST /v1/list_windows` returns only real AX windows and keeps one entry per backing `windowID`; auxiliary AX containers such as Finder's desktop scroll area are excluded.
 
 ## License
 

@@ -2,12 +2,22 @@ import AppKit
 import Foundation
 
 enum AXCursorTargeting {
+    /// Visual cursor overlays are opt-in per request: a request without an explicit `cursor`
+    /// object renders no cursor session, matching the `visualCursor: .disabled` package path.
+    static func effectiveOptions(
+        requested: CursorRequestDTO?,
+        options: ActionExecutionOptions
+    ) -> ActionExecutionOptions {
+        requested == nil ? .visualCursorDisabled : options
+    }
+
     static func notAttempted(
         requested: CursorRequestDTO?,
         reason: String,
         options: ActionExecutionOptions = .visualCursorEnabled
     ) -> ActionCursorTargetResponseDTO {
-        cursorResponse(
+        let options = effectiveOptions(requested: requested, options: options)
+        return cursorResponse(
             requested: requested,
             options: options,
             targetPointAppKit: nil,
@@ -74,6 +84,7 @@ enum AXCursorTargeting {
         window: ResolvedWindowDTO,
         options: ActionExecutionOptions = .visualCursorEnabled
     ) -> ActionCursorTargetResponseDTO {
+        let options = effectiveOptions(requested: requested, options: options)
         var warnings: [String] = []
         let point = clampVisualPoint(pointAppKit, window: window, warnings: &warnings)
         guard options.visualCursorEnabled else {
@@ -217,6 +228,7 @@ enum AXCursorTargeting {
         keyLabel: String,
         options: ActionExecutionOptions = .visualCursorEnabled
     ) -> ActionCursorTargetResponseDTO {
+        let options = effectiveOptions(requested: requested, options: options)
         let point = pressKeyAnchor(in: window)
         guard options.visualCursorEnabled else {
             return cursorResponse(
@@ -263,6 +275,7 @@ enum AXCursorTargeting {
         options: ActionExecutionOptions,
         prepare: (CGPoint, Int, String) -> TimeInterval
     ) -> ActionCursorTargetResponseDTO {
+        let options = effectiveOptions(requested: requested, options: options)
         guard options.visualCursorEnabled else {
             let resolvedPoint = targetPoint(for: target, window: window)
             guard let point = resolvedPoint.point else {

@@ -96,7 +96,7 @@ final class CursorCoordinator {
     static let shared = CursorCoordinator()
     private static let maxTypeTextPuffs = 6
 
-    private let defaultProfile = CursorProfile.codex
+    private let defaultAppearance = CursorProfile.defaultAppearance
     private let tuning = CursorMotionTuning.swoopy
     private let timings = CursorActionTimings.defaults
 
@@ -119,12 +119,14 @@ final class CursorCoordinator {
     }
 
     func resolveSession(requested: CursorRequestDTO?) -> CursorResponseDTO {
+        guard let requested else {
+            return AXCursorTargeting.disabledSession(requested: nil)
+        }
+
         startIfNeeded()
 
         let now = CACurrentMediaTime()
-        let hasExplicitRequest = requested != nil
-        let requestedID = normalizedCursorID(requested?.id)
-        let sessionID = requestedID ?? (hasExplicitRequest ? generatedCursorID() : defaultProfile.id)
+        let sessionID = normalizedCursorID(requested.id) ?? generatedCursorID()
 
         if let existing = sessionsByID[sessionID] {
             applyMetadataUpdate(to: existing, requested: requested)
@@ -134,8 +136,8 @@ final class CursorCoordinator {
 
         let descriptor = CursorSessionDescriptor(
             id: sessionID,
-            name: normalizedCursorName(requested?.name) ?? defaultName(for: hasExplicitRequest, sessionID: sessionID),
-            colorHex: normalizedCursorHex(requested?.color) ?? defaultColorHex(for: hasExplicitRequest),
+            name: normalizedCursorName(requested.name) ?? defaultAppearance.name,
+            colorHex: normalizedCursorHex(requested.color) ?? defaultAppearance.colorHex,
             reused: false
         )
         let session = CursorSessionState(descriptor: descriptor, now: now)
@@ -496,9 +498,9 @@ final class CursorCoordinator {
         }
 
         let descriptor = CursorSessionDescriptor(
-            id: defaultProfile.id,
-            name: defaultProfile.name,
-            colorHex: defaultProfile.colorHex,
+            id: cursorID,
+            name: defaultAppearance.name,
+            colorHex: defaultAppearance.colorHex,
             reused: false
         )
         let session = CursorSessionState(descriptor: descriptor, now: CACurrentMediaTime())
@@ -513,20 +515,6 @@ final class CursorCoordinator {
         if let colorHex = normalizedCursorHex(requested?.color) {
             session.colorHex = colorHex
         }
-    }
-
-    private func defaultName(for hasExplicitRequest: Bool, sessionID: String) -> String {
-        if hasExplicitRequest == false || sessionID == defaultProfile.id {
-            return defaultProfile.name
-        }
-        return "Cursor"
-    }
-
-    private func defaultColorHex(for hasExplicitRequest: Bool) -> String {
-        if hasExplicitRequest == false {
-            return defaultProfile.colorHex
-        }
-        return defaultProfile.colorHex
     }
 
     private func generatedCursorID() -> String {

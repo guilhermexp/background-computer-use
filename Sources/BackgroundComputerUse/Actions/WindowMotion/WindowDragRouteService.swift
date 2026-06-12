@@ -8,10 +8,11 @@ struct WindowDragRouteService {
 
     init(executionOptions: ActionExecutionOptions = .visualCursorEnabled) {
         self.executionOptions = executionOptions
-        engine = WindowMotionEngine(executionOptions: executionOptions)
+        engine = WindowMotionEngine()
     }
 
     func drag(request: DragRequest) throws -> DragResponse {
+        let cursorAnimationEnabled = executionOptions.visualCursorEnabled && request.cursor != nil
         let cursor = cursorSession(request.cursor)
         let totalStarted = DispatchTime.now().uptimeNanoseconds
         let resolveStarted = DispatchTime.now().uptimeNanoseconds
@@ -150,7 +151,8 @@ struct WindowDragRouteService {
             let execution = engine.execute(
                 plan: plan,
                 target: snapshot.target,
-                cursorID: cursor.id
+                cursorID: cursor.id,
+                cursorAnimationEnabled: cursorAnimationEnabled
             )
             return DragResponse(
                 contractVersion: ContractVersion.current,
@@ -193,7 +195,7 @@ struct WindowDragRouteService {
     }
 
     private func cursorSession(_ request: CursorRequestDTO?) -> CursorResponseDTO {
-        executionOptions.visualCursorEnabled
+        (executionOptions.visualCursorEnabled && request != nil)
             ? CursorRuntime.resolve(requested: request)
             : AXCursorTargeting.disabledSession(requested: request)
     }

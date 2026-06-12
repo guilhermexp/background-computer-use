@@ -85,7 +85,8 @@ enum RouteRegistry {
             implementationStatus: .implemented,
             notes: RuntimeMetadata.systemRouteNotes + [
                 "For visual work, call get_window_state with imageMode path or base64 whenever possible and inspect screenshots before and after actions.",
-                "Use AX tree nodes for semantic targets, but treat screenshots as the visual ground truth because AX trees and verifier summaries can lag, be incomplete, or miss purely visual state."
+                "Use AX tree nodes for semantic targets, but treat screenshots as the visual ground truth because AX trees and verifier summaries can lag, be incomplete, or miss purely visual state.",
+                "All POST routes decode strictly: an unknown top-level request field returns invalid_request naming the offending field(s) and the route's accepted fields. Match request.fields exactly."
             ]
         ),
         RouteDescriptorDTO(
@@ -122,7 +123,10 @@ enum RouteRegistry {
                 notes: ["Window enumeration should stay outside per-window write lanes."]
             ),
             implementationStatus: .implemented,
-            notes: ["Stable derived window IDs use bundle ID, pid, launch date, and window number."]
+            notes: [
+                "Stable derived window IDs use bundle ID, pid, launch date, and window number.",
+                "Only real AXWindow entries are returned; auxiliary AX containers and duplicate backing window IDs are excluded."
+            ]
         ),
         RouteDescriptorDTO(
             id: RouteID.getWindowState.rawValue,
@@ -307,6 +311,12 @@ enum RouteRegistry {
 
     static func descriptor(for routeID: RouteID) -> RouteDescriptorDTO {
         descriptors.first(where: { $0.id == routeID.rawValue })!
+    }
+
+    /// Documented top-level request field names for a route, in declaration order.
+    /// Source of truth for strict request decoding (rejecting unknown top-level fields).
+    static func requestFieldNames(for routeID: RouteID) -> [String] {
+        (requestSchema(for: routeID.rawValue)?.fields ?? []).map(\.name)
     }
 
     static func bootstrapRouteDescriptors(baseURL: URL) -> [BootstrapRouteDTO] {
@@ -742,7 +752,7 @@ enum RouteRegistry {
     private static func pressKeyActionResponse() -> RouteBodySchemaDTO {
         json([
             field("contractVersion", "string", required: true),
-            field("ok", "boolean", required: true),
+            field("ok", "boolean", required: true, "Transport-level success: true when the key chord dispatched (including dispatched_no_observed_effect). Inspect verification.classification for the observed effect signal."),
             field("classification", "success | unsupported | effect_not_verified | verifier_ambiguous", required: true),
             field("failureDomain", "targeting | unsupported | coercion | transport | verification | app_specific_semantics | null"),
             field("summary", "string", required: true),
@@ -754,7 +764,7 @@ enum RouteRegistry {
             field("cursor", "ActionCursorTarget", required: true),
             field("warnings", "string[]", required: true),
             debugNotesField(),
-            field("verification", "PressKeyVerification | null", "Includes route-specific search, selection, text-state, selection-summary, and visual-diff evidence when available.")
+            field("verification", "PressKeyVerification | null", "Post-action verification block. verification.classification is success | dispatched_no_observed_effect | failed; also includes route-specific search, selection, text-state, selection-summary, focused-element, and visual-diff evidence plus the post stateToken when available.")
         ])
     }
 
@@ -887,7 +897,8 @@ enum RouteRegistry {
             allowsConcurrentClients: true,
             notes: [
                 "Mutating action routes should coordinate through a per-window write lane.",
-                "If a future implementation cannot satisfy background safety, it must report that explicitly instead of silently stealing focus."
+                "If a future implementation cannot satisfy background safety, it must report that explicitly instead of silently stealing focus.",
+                "Visual cursor overlay is opt-in per request: omit cursor to dispatch without creating or animating an on-screen cursor session."
             ]
         )
     }

@@ -576,9 +576,13 @@ struct PressKeyRouteService {
         notes: [String],
         verification: PressKeyVerificationEvidenceDTO?
     ) -> PressKeyResponse {
-        PressKeyResponse(
+        let effect = Self.effectClassification(
+            classification: classification,
+            dispatchSucceeded: action?.dispatchSucceeded
+        )
+        return PressKeyResponse(
             contractVersion: ContractVersion.current,
-            ok: classification == .success,
+            ok: effect != .failed,
             classification: classification,
             failureDomain: failureDomain,
             summary: summary,
@@ -590,8 +594,22 @@ struct PressKeyRouteService {
             cursor: cursor,
             warnings: warnings,
             notes: notes,
-            verification: verification
+            verification: verification?.withClassification(effect)
         )
+    }
+
+    static func effectClassification(
+        classification: ActionClassificationDTO,
+        dispatchSucceeded: Bool?
+    ) -> PressKeyEffectClassificationDTO {
+        switch classification {
+        case .success:
+            return .success
+        case .effectNotVerified, .verifierAmbiguous:
+            return dispatchSucceeded == true ? .dispatchedNoObservedEffect : .failed
+        case .unsupported:
+            return .failed
+        }
     }
 
     private func preparePressKeyCursor(
