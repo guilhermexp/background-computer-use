@@ -268,9 +268,9 @@ enum MotionPacing {
 }
 
 enum CursorPresenceTiming {
-    static let idleHideDelay: TimeInterval = 60
-    static let fadeOutDuration: TimeInterval = 0.42
-    static let idleExpireDelay: TimeInterval = 600
+    static let idleHideDelay: TimeInterval = 1.2
+    static let fadeOutDuration: TimeInterval = 0.24
+    static let idleExpireDelay: TimeInterval = 45
 }
 
 struct CursorSnapshot {

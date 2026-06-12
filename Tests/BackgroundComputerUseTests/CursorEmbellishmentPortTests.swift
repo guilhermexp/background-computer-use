@@ -49,6 +49,13 @@ struct CursorEmbellishmentPortTests {
     }
 
     @Test
+    func testCursorPresenceDoesNotStickAfterActions() {
+        #expect(CursorPresenceTiming.idleHideDelay == 1.2)
+        #expect(CursorPresenceTiming.fadeOutDuration == 0.24)
+        #expect(CursorPresenceTiming.idleExpireDelay == 45)
+    }
+
+    @Test
     func testEdgeEntrancePointStartsOutsideScreenNearAnEdge() {
         let screen = CGRect(x: 100, y: 200, width: 800, height: 600)
         let expanded = screen.insetBy(dx: -121, dy: -121)
