@@ -1,7 +1,7 @@
 # window-discovery Specification
 
 ## Purpose
-TBD - created by archiving change harden-agent-api-reliability. Update Purpose after archive.
+Descoberta de apps e janelas (`list_apps`, `list_windows`) com identificadores de janela estáveis e deduplicados, base para todas as ações direcionadas a janela.
 ## Requirements
 ### Requirement: list_windows returns unique real windows
 

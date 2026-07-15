@@ -1,7 +1,7 @@
 # request-validation Specification
 
 ## Purpose
-TBD - created by archiving change harden-agent-api-reliability. Update Purpose after archive.
+Decodificação estrita dos requests: campos desconhecidos são rejeitados com `invalid_request` nomeando o campo, e formas mutuamente exclusivas (ex.: target vs x/y) são validadas antes da execução.
 ## Requirements
 ### Requirement: Strict request field validation
 

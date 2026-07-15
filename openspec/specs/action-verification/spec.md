@@ -1,7 +1,7 @@
 # action-verification Specification
 
 ## Purpose
-TBD - created by archiving change harden-agent-api-reliability. Update Purpose after archive.
+Ações mutantes (click, scroll, press_key, set_value, type_text) retornam um bloco `verification` que classifica o efeito observado (success / effect_not_verified / verifier_ambiguous), permitindo ao agente distinguir sucesso de transporte de efeito real na UI.
 ## Requirements
 ### Requirement: press_key effect verification
 
