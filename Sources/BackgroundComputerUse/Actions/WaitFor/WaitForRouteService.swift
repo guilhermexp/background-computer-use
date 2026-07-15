@@ -1,5 +1,16 @@
 import Foundation
 
+enum WaitForRouteError: Error, CustomStringConvertible {
+    case invalidRequest(String)
+
+    var description: String {
+        switch self {
+        case let .invalidRequest(message):
+            return message
+        }
+    }
+}
+
 struct WaitForRouteService {
     private let targetResolver: AXActionTargetResolver
 
@@ -8,18 +19,33 @@ struct WaitForRouteService {
     }
 
     func waitFor(request: WaitForRequest) throws -> WaitForResponse {
-        guard request.role != nil || request.label != nil || request.valueContains != nil else {
-            throw AXActionTargetResolverError.unresolvedTarget(
-                "wait_for requires at least one of role, label, or valueContains."
+        guard request.role != nil
+            || request.label != nil
+            || request.valueContains != nil
+            || request.windowTitleContains != nil
+            || request.windowTitleChanged == true
+            || request.urlContains != nil
+            || request.textContains != nil else {
+            throw WaitForRouteError.invalidRequest(
+                "wait_for requires at least one of role, label, valueContains, windowTitleContains, windowTitleChanged, urlContains, or textContains."
             )
         }
 
         let waitForGone = request.gone ?? false
+        if waitForGone, request.windowTitleChanged == true {
+            throw WaitForRouteError.invalidRequest(
+                "wait_for does not support gone=true with windowTitleChanged=true; wait for a title substring to disappear instead."
+            )
+        }
+
         let timeout = min(60.0, max(0.1, request.timeoutSeconds ?? 10.0))
         let pollInterval = min(2.0, max(0.05, Double(request.pollIntervalMs ?? 400) / 1000.0))
+        let finalImageMode = request.imageMode ?? .path
+        let pollImageMode: ImageMode = .omit
         let start = Date()
         let deadline = start.addingTimeInterval(timeout)
         var lastCapture: AXActionStateCapture?
+        var baselineWindowTitle: String?
         var conditionMet = false
 
         repeat {
@@ -27,17 +53,21 @@ struct WaitForRouteService {
                 windowID: request.window,
                 includeMenuBar: request.includeMenuBar ?? true,
                 maxNodes: request.maxNodes ?? 6500,
-                imageMode: request.imageMode ?? .path
+                imageMode: pollImageMode
             )
             lastCapture = capture
-            let found = capture.envelope.response.tree.nodes.contains { node in
-                WaitForMatcher.matches(
-                    WaitForMatcherNode(surfaceNode: node),
-                    role: request.role,
-                    label: request.label,
-                    valueContains: request.valueContains
-                )
-            }
+            baselineWindowTitle = baselineWindowTitle ?? capture.envelope.response.window.title
+            let found = WaitForMatcher.conditionMatches(
+                state: capture.envelope.response,
+                role: request.role,
+                label: request.label,
+                valueContains: request.valueContains,
+                windowTitleContains: request.windowTitleContains,
+                windowTitleChanged: request.windowTitleChanged ?? false,
+                baselineWindowTitle: baselineWindowTitle,
+                urlContains: request.urlContains,
+                textContains: request.textContains
+            )
             if found != waitForGone {
                 conditionMet = true
                 break
@@ -47,24 +77,28 @@ struct WaitForRouteService {
             }
         } while Date() < deadline
 
-        let capture = try lastCapture ?? targetResolver.capture(
+        let capture = try targetResolver.capture(
             windowID: request.window,
             includeMenuBar: request.includeMenuBar ?? true,
             maxNodes: request.maxNodes ?? 6500,
-            imageMode: request.imageMode ?? .path
+            imageMode: finalImageMode
         )
         let elapsedMs = Date().timeIntervalSince(start) * 1000
         let targetDescription = [
             request.role.map { "role '\($0)'" },
             request.label.map { "label '\($0)'" },
             request.valueContains.map { "value containing '\($0)'" },
+            request.windowTitleContains.map { "window title containing '\($0)'" },
+            request.windowTitleChanged == true ? "window title changed from '\(baselineWindowTitle ?? lastCapture?.envelope.response.window.title ?? "")'" : nil,
+            request.urlContains.map { "URL containing '\($0)'" },
+            request.textContains.map { "rendered text containing '\($0)'" },
         ]
         .compactMap { $0 }
         .joined(separator: ", ")
 
         let summary = conditionMet
-            ? "Condition met for \(targetDescription)\(waitForGone ? " disappearing" : " appearing")."
-            : "Timed out waiting for \(targetDescription)\(waitForGone ? " to disappear" : " to appear")."
+            ? "Condition met for \(targetDescription)\(waitForGone ? " to stop matching" : " to match")."
+            : "Timed out waiting for \(targetDescription)\(waitForGone ? " to stop matching" : " to match")."
 
         return WaitForResponse(
             contractVersion: ContractVersion.current,
@@ -74,7 +108,8 @@ struct WaitForRouteService {
             summary: summary,
             state: capture.envelope.response,
             notes: [
-                "wait_for polled every \(Int(pollInterval * 1000))ms for up to \(String(format: "%.1f", timeout))s."
+                "wait_for polled every \(Int(pollInterval * 1000))ms for up to \(String(format: "%.1f", timeout))s.",
+                "Intermediate polls used imageMode=omit; the returned state was captured with imageMode=\(finalImageMode.rawValue)."
             ]
         )
     }

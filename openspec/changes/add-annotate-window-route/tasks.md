@@ -1,0 +1,6 @@
+- [x] 1.1 Add request/response DTOs for `POST /v1/annotate_window`.
+- [x] 1.2 Implement mark selection and coordinate mapping from projected AX nodes to model-facing screenshot coordinates.
+- [x] 1.3 Render a numbered annotated PNG artifact and return image metadata plus marks.
+- [x] 1.4 Wire route registry, router, runtime facade, README, and API documentation.
+- [x] 1.5 Add tests for route documentation, mark mapping, and invalid/edge behavior.
+- [x] 1.6 Run `swift test`, `openspec validate add-annotate-window-route --strict`, and a live runtime smoke test.

@@ -8,6 +8,7 @@ enum RouteID: String, CaseIterable {
     case listWindows = "list_windows"
     case cursorFeedback = "cursor_feedback"
     case getWindowState = "get_window_state"
+    case annotateWindow = "annotate_window"
     case click
     case scroll
     case performSecondaryAction = "perform_secondary_action"
@@ -180,7 +181,7 @@ enum RouteRegistry {
             method: "POST",
             path: "/v1/wait_for",
             category: "state",
-            summary: "Wait for a matching element to appear or disappear, then return fresh state.",
+            summary: "Wait for a matching UI condition to appear, disappear, or change, then return fresh state.",
             execution: RouteExecutionPolicyDTO(
                 lane: .windowRead,
                 backgroundBehavior: .backgroundRequired,
@@ -191,7 +192,34 @@ enum RouteRegistry {
                 notes: ["Polls the target window state instead of forcing clients to hand-roll get_window_state loops."]
             ),
             implementationStatus: .implemented,
-            notes: ["Match by role, label text, value text, or any combination. Use gone=true for disappearance waits."]
+            notes: [
+                "Match by role, label text, value text, window title, URL-bearing nodes, rendered text, or any combination.",
+                "Use gone=true for supported disappearance waits. Intermediate polls omit screenshots and the response returns one fresh final state."
+            ]
+        ),
+        RouteDescriptorDTO(
+            id: RouteID.annotateWindow.rawValue,
+            method: "POST",
+            path: "/v1/annotate_window",
+            category: "state",
+            summary: "Return a model-facing screenshot with numbered visual marks and matching semantic targets.",
+            execution: RouteExecutionPolicyDTO(
+                lane: .windowRead,
+                backgroundBehavior: .backgroundRequired,
+                focusStealPolicy: .forbidden,
+                mainThreadBehavior: .allowed,
+                readActRead: false,
+                allowsConcurrentClients: true,
+                notes: [
+                    "Uses normal background-safe state capture, then draws an opt-in annotated screenshot artifact.",
+                    "Annotations are for visual grounding only; action routes still require semantic targets or explicit coordinates."
+                ]
+            ),
+            implementationStatus: .implemented,
+            notes: [
+                "Use this when a raw screenshot and AX tree are hard to align visually.",
+                "Marks are bounded and include reusable display_index/node_id/refetch targets when available."
+            ]
         ),
         RouteDescriptorDTO(
             id: RouteID.click.rawValue,
@@ -405,7 +433,7 @@ enum RouteRegistry {
         case RouteID.getWindowState.rawValue:
             return json([
                 field("window", "string", required: true, "Stable window ID from list_windows."),
-                field("includeMenuBar", "boolean", defaultValue: "true"),
+                field("includeMenuBar", "boolean", "Include macOS menu bar nodes in the annotation candidate set.", defaultValue: "false"),
                 field("menuPath", "string[]", "Optional menu path to open before reading transient menu state, e.g. [\"File\"]."),
                 field("webTraversal", "visible | full", "Use full only for deep WebKit/Electron parity/debug traversal; visible keeps the fast AXVisibleChildren default for web areas.", defaultValue: "visible"),
                 field("maxNodes", "integer", defaultValue: "6500"),
@@ -421,18 +449,32 @@ enum RouteRegistry {
                 field("includeOCR", "boolean", "When true, run local Apple Vision OCR on the returned screenshot and include text anchors.", defaultValue: "false"),
                 field("scopeTarget", #"{"kind":"display_index"|"node_id"|"refetch_fingerprint","value":integer|string}"#, "Optional target used to return only that node and its descendants in tree while keeping stable target indices.")
             ])
+        case RouteID.annotateWindow.rawValue:
+            return json([
+                field("window", "string", required: true, "Stable window ID from list_windows."),
+                field("includeMenuBar", "boolean", defaultValue: "true"),
+                field("webTraversal", "visible | full", "Use full only for deep WebKit/Electron parity/debug traversal; visible keeps the fast AXVisibleChildren default for web areas.", defaultValue: "visible"),
+                field("maxNodes", "integer", defaultValue: "6500"),
+                field("maxMarks", "integer", "Maximum numbered marks to draw and return.", defaultValue: "80"),
+                field("includeStaticText", "boolean", "When true, include static text nodes with frames in addition to actionable controls.", defaultValue: "false"),
+                field("imageMode", "path | base64", "Return annotated image as a file path, or also inline PNG bytes as base64.", defaultValue: "path")
+            ])
         case RouteID.waitFor.rawValue:
             return json([
                 field("window", "string", required: true),
                 field("role", "string", "Optional display role to match."),
                 field("label", "string", "Match title or description text, case-insensitive substring."),
                 field("valueContains", "string", "Match the target value preview, case-insensitive substring."),
+                field("windowTitleContains", "string", "Match the resolved window title, case-insensitive substring."),
+                field("windowTitleChanged", "boolean", "Wait until the resolved window title differs from the first polled title.", defaultValue: "false"),
+                field("urlContains", "string", "Match URL strings exposed by projected AX nodes, case-insensitive substring."),
+                field("textContains", "string", "Match the projected rendered text, case-insensitive substring."),
                 field("gone", "boolean", "Wait for the match to disappear instead of appear.", defaultValue: "false"),
                 field("timeoutSeconds", "number", defaultValue: "10"),
                 field("pollIntervalMs", "integer", defaultValue: "400"),
                 field("includeMenuBar", "boolean"),
                 field("maxNodes", "integer"),
-                field("imageMode", "path | base64 | omit")
+                field("imageMode", "path | base64 | omit", "Controls only the returned final state; intermediate polls omit screenshots.", defaultValue: "path")
             ])
         case RouteID.click.rawValue:
             return clickRequestSchema()
@@ -636,6 +678,20 @@ enum RouteRegistry {
                 field("performance", "ReadPerformance", required: true),
                 field("debug", "GetWindowStateDebug | null"),
                 field("ocr", "OCRAnchorSummary | null"),
+                field("notes", "string[]", required: true)
+            ])
+        case RouteID.annotateWindow.rawValue:
+            return json([
+                field("contractVersion", "string", required: true),
+                field("stateToken", "string", required: true),
+                field("window", "ResolvedWindow", required: true),
+                field("screenshot", "Screenshot", required: true),
+                field("annotatedImage", "ScreenshotImage | null"),
+                field("marks", "WindowAnnotationMark[]", required: true),
+                field("truncated", "boolean", required: true),
+                field("maxMarks", "integer", required: true),
+                field("backgroundSafety", "BackgroundSafety", required: true),
+                field("performance", "ReadPerformance", required: true),
                 field("notes", "string[]", required: true)
             ])
         case RouteID.waitFor.rawValue:

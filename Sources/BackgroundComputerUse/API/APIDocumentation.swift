@@ -129,13 +129,21 @@ enum APIDocumentation {
                 nextSteps: ["Pick a semantic target or screenshot coordinate, then call an action route."],
                 exampleRequest: #"{"window":"WINDOW_ID","imageMode":"path","maxNodes":6500}"#
             )
+        case .annotateWindow:
+            return usage(
+                whenToUse: "Visually ground a window with numbered screenshot marks before choosing a target.",
+                useAfter: ["Call list_windows and choose a live windowID, or call get_window_state when you need the full tree first."],
+                successSignals: ["annotatedImage is present when screenshot capture succeeds, and marks contains numbered targets with model-facing points."],
+                nextSteps: ["Use marks[].target with click/type/scroll routes, or inspect annotatedImage.imagePath to align controls visually."],
+                exampleRequest: #"{"window":"WINDOW_ID","maxMarks":80,"imageMode":"path"}"#
+            )
         case .waitFor:
             return usage(
-                whenToUse: "Wait for a role, label, or value substring to appear or disappear in a window.",
-                useAfter: ["Call an action that may trigger loading, modal display, or DOM/UI changes."],
+                whenToUse: "Wait for role/label/value, window title, URL-bearing nodes, or rendered text to match before continuing.",
+                useAfter: ["Call an action that may trigger loading, navigation, modal display, or DOM/UI changes."],
                 successSignals: ["conditionMet=true, or summary clearly reports a timeout with current state."],
                 nextSteps: ["Use the returned fresh state for the next target instead of polling manually."],
-                exampleRequest: #"{"window":"WINDOW_ID","label":"Deployment","timeoutSeconds":10,"imageMode":"path"}"#
+                exampleRequest: #"{"window":"WINDOW_ID","textContains":"Deployment","timeoutSeconds":10,"imageMode":"path"}"#
             )
         case .click:
             return usage(
@@ -325,7 +333,7 @@ enum APIDocumentation {
 
     private static func routeNeedsWindow(_ id: RouteID) -> Bool {
         switch id {
-        case .getWindowState, .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .pressKey, .setValue, .waitFor, .readText, .selectText:
+        case .getWindowState, .annotateWindow, .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .pressKey, .setValue, .waitFor, .readText, .selectText:
             return true
         case .health, .bootstrap, .routes, .listApps, .listWindows, .cursorFeedback:
             return false

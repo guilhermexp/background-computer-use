@@ -42,7 +42,57 @@ enum WaitForMatcher {
         return true
     }
 
-    private static func normalized(_ value: String?) -> String {
+    static func contains(_ haystack: String?, needle: String?) -> Bool {
+        guard let needle else {
+            return true
+        }
+
+        return normalized(haystack).contains(normalized(needle))
+    }
+
+    static func anyNodeURLContains(_ nodes: [AXPipelineV2SurfaceNodeDTO], needle: String?) -> Bool {
+        guard let needle else {
+            return true
+        }
+
+        let normalizedNeedle = normalized(needle)
+        return nodes.contains { normalized($0.url).contains(normalizedNeedle) }
+    }
+
+    static func conditionMatches(
+        state: AXPipelineV2Response,
+        role: String?,
+        label: String?,
+        valueContains: String?,
+        windowTitleContains: String?,
+        windowTitleChanged: Bool,
+        baselineWindowTitle: String?,
+        urlContains: String?,
+        textContains: String?
+    ) -> Bool {
+        let needsElementMatch = role != nil || label != nil || valueContains != nil
+        let elementMatches = needsElementMatch
+            ? state.tree.nodes.contains {
+                matches(
+                    WaitForMatcherNode(surfaceNode: $0),
+                    role: role,
+                    label: label,
+                    valueContains: valueContains
+                )
+            }
+            : true
+
+        let titleContains = contains(state.window.title, needle: windowTitleContains)
+        let titleChanged = windowTitleChanged
+            ? normalized(state.window.title) != normalized(baselineWindowTitle)
+            : true
+        let urlMatches = anyNodeURLContains(state.tree.nodes, needle: urlContains)
+        let textMatches = contains(state.tree.renderedText, needle: textContains)
+
+        return elementMatches && titleContains && titleChanged && urlMatches && textMatches
+    }
+
+    static func normalized(_ value: String?) -> String {
         (value ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()

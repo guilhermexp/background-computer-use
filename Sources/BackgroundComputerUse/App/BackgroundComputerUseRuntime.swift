@@ -79,6 +79,10 @@ public final class BackgroundComputerUseRuntime {
         try services.waitFor(request)
     }
 
+    public func annotateWindow(_ request: AnnotateWindowRequest) throws -> AnnotateWindowResponse {
+        try services.annotateWindow(request)
+    }
+
     public func readText(_ request: ReadTextRequest) throws -> ReadTextResponse {
         try services.readText(request)
     }

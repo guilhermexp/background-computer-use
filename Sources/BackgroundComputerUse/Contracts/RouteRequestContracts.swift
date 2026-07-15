@@ -802,6 +802,10 @@ public struct WaitForRequest: Decodable, Sendable {
     public let role: String?
     public let label: String?
     public let valueContains: String?
+    public let windowTitleContains: String?
+    public let windowTitleChanged: Bool?
+    public let urlContains: String?
+    public let textContains: String?
     public let gone: Bool?
     public let timeoutSeconds: Double?
     public let pollIntervalMs: Int?
@@ -814,6 +818,10 @@ public struct WaitForRequest: Decodable, Sendable {
         role: String? = nil,
         label: String? = nil,
         valueContains: String? = nil,
+        windowTitleContains: String? = nil,
+        windowTitleChanged: Bool? = nil,
+        urlContains: String? = nil,
+        textContains: String? = nil,
         gone: Bool? = nil,
         timeoutSeconds: Double? = nil,
         pollIntervalMs: Int? = nil,
@@ -825,11 +833,43 @@ public struct WaitForRequest: Decodable, Sendable {
         self.role = role
         self.label = label
         self.valueContains = valueContains
+        self.windowTitleContains = windowTitleContains
+        self.windowTitleChanged = windowTitleChanged
+        self.urlContains = urlContains
+        self.textContains = textContains
         self.gone = gone
         self.timeoutSeconds = timeoutSeconds
         self.pollIntervalMs = pollIntervalMs
         self.includeMenuBar = includeMenuBar
         self.maxNodes = maxNodes
+        self.imageMode = imageMode
+    }
+}
+
+public struct AnnotateWindowRequest: Decodable, Sendable {
+    public let window: String
+    public let includeMenuBar: Bool?
+    public let webTraversal: AXWebTraversalMode?
+    public let maxNodes: Int?
+    public let maxMarks: Int?
+    public let includeStaticText: Bool?
+    public let imageMode: ImageMode?
+
+    public init(
+        window: String,
+        includeMenuBar: Bool? = nil,
+        webTraversal: AXWebTraversalMode? = nil,
+        maxNodes: Int? = nil,
+        maxMarks: Int? = nil,
+        includeStaticText: Bool? = nil,
+        imageMode: ImageMode? = nil
+    ) {
+        self.window = window
+        self.includeMenuBar = includeMenuBar
+        self.webTraversal = webTraversal
+        self.maxNodes = maxNodes
+        self.maxMarks = maxMarks
+        self.includeStaticText = includeStaticText
         self.imageMode = imageMode
     }
 }

@@ -73,6 +73,20 @@ struct StrictRequestDecodingTests {
     }
 
     @Test
+    func waitForRejectsInvalidTitleChangeGoneCombination() throws {
+        let response = try post(
+            path: "/v1/wait_for",
+            body: #"{"window":"w_X","windowTitleChanged":true,"gone":true}"#
+        )
+
+        #expect(response.statusCode == 400)
+        let json = try decode(response)
+        #expect(json["error"] as? String == "invalid_request")
+        #expect((json["message"] as? String)?.contains("windowTitleChanged") == true)
+        #expect((json["message"] as? String)?.contains("gone=true") == true)
+    }
+
+    @Test
     func fullyDocumentedPressKeyRequestHasNoUnknownFields() {
         // Scenario: a request using only documented fields (including optionals) is not rejected
         // for unknown fields. Validated at the schema layer to avoid live AX dispatch.

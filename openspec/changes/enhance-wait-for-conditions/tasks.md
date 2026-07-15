@@ -1,0 +1,5 @@
+- [x] 1.1 Add additive `wait_for` request fields for `windowTitleContains`, `windowTitleChanged`, `urlContains`, and `textContains`.
+- [x] 1.2 Extend condition matching so supplied predicates are combined consistently and `gone=true` inverts supported appearance predicates.
+- [x] 1.3 Make wait polling omit screenshots and capture the final returned state using the requested `imageMode`.
+- [x] 1.4 Update route docs/README and add targeted unit coverage.
+- [x] 1.5 Run `swift test` and `openspec validate enhance-wait-for-conditions --strict`.

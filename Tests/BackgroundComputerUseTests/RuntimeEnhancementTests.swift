@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import BackgroundComputerUse
@@ -56,6 +57,256 @@ struct RuntimeEnhancementTests {
             label: "dep",
             valueContains: nil
         ))
+    }
+
+    @Test
+    func waitConditionMatchesWindowTitleURLAndRenderedText() {
+        let state = AXPipelineV2Response(
+            contractVersion: ContractVersion.current,
+            stateToken: "token",
+            window: ResolvedWindowDTO(
+                windowID: "window",
+                title: "Studio - Deployments",
+                bundleID: "com.example.app",
+                pid: 123,
+                launchDate: nil,
+                windowNumber: 42,
+                frameAppKit: RectDTO(x: 0, y: 0, width: 800, height: 600),
+                resolutionStrategy: "test"
+            ),
+            screenshot: ScreenshotDTO(
+                status: "omitted",
+                image: nil,
+                rawRetinaCapture: nil,
+                coordinateContract: nil,
+                captureError: nil
+            ),
+            tree: AXPipelineV2TreeDTO(
+                nodeCount: 1,
+                truncated: false,
+                renderedText: "Deploy completed successfully",
+                nodes: [
+                    AXPipelineV2SurfaceNodeDTO(
+                        index: 0,
+                        displayIndex: 1,
+                        projectedIndex: 0,
+                        parentIndex: nil,
+                        depth: 0,
+                        primaryCanonicalIndex: 0,
+                        canonicalIndices: [0],
+                        childIndices: [],
+                        displayRole: "link",
+                        rawRole: "AXLink",
+                        rawSubrole: nil,
+                        title: "Production",
+                        description: nil,
+                        help: nil,
+                        identifier: nil,
+                        url: "https://xperience-studio.com/dashboard/home",
+                        nodeID: nil,
+                        identity: nil,
+                        refetch: nil,
+                        refetchFingerprint: nil,
+                        value: nil,
+                        valueKind: nil,
+                        isValueSettable: nil,
+                        flags: [],
+                        secondaryActions: [],
+                        secondaryActionBindings: nil,
+                        affordances: nil,
+                        availableActions: nil,
+                        curatedSecondaryActions: nil,
+                        curatedAvailableActions: nil,
+                        parameterizedAttributes: nil,
+                        frameAppKit: nil,
+                        activationPointAppKit: nil,
+                        suggestedInteractionPointAppKit: nil,
+                        childCount: 0,
+                        collectionInfo: nil,
+                        interactionTraits: nil,
+                        profileHint: nil,
+                        transformNotes: []
+                    ),
+                ],
+                lineMappings: [],
+                profile: nil
+            ),
+            menuPresentation: nil,
+            focusedElement: FocusedElementDTO(
+                index: nil,
+                displayRole: nil,
+                title: nil,
+                description: nil,
+                secondaryActions: []
+            ),
+            selectionSummary: nil,
+            backgroundSafety: BackgroundSafetyDTO(
+                frontmostBefore: nil,
+                frontmostAfter: nil,
+                backgroundSafeReadObserved: nil,
+                backgroundSafeObserved: nil
+            ),
+            notes: []
+        )
+
+        #expect(WaitForMatcher.conditionMatches(
+            state: state,
+            role: nil,
+            label: nil,
+            valueContains: nil,
+            windowTitleContains: "deploy",
+            windowTitleChanged: false,
+            baselineWindowTitle: nil,
+            urlContains: "dashboard",
+            textContains: "completed"
+        ))
+        #expect(WaitForMatcher.conditionMatches(
+            state: state,
+            role: nil,
+            label: nil,
+            valueContains: nil,
+            windowTitleContains: nil,
+            windowTitleChanged: true,
+            baselineWindowTitle: "Studio - Builds",
+            urlContains: nil,
+            textContains: nil
+        ))
+        #expect(!WaitForMatcher.conditionMatches(
+            state: state,
+            role: nil,
+            label: nil,
+            valueContains: nil,
+            windowTitleContains: nil,
+            windowTitleChanged: true,
+            baselineWindowTitle: "Studio - Deployments",
+            urlContains: nil,
+            textContains: nil
+        ))
+    }
+
+    @Test
+    func annotationBuilderMapsInteractiveNodesIntoModelFacingScreenshot() {
+        let state = makeAnnotationState(nodes: [
+            annotationNode(
+                displayIndex: 8,
+                displayRole: "button",
+                title: "Deploy",
+                frame: RectDTO(x: 100, y: 400, width: 200, height: 80),
+                point: PointDTO(x: 200, y: 440)
+            ),
+            annotationNode(
+                displayIndex: 9,
+                displayRole: "text",
+                title: "Static label",
+                frame: RectDTO(x: 100, y: 300, width: 200, height: 40),
+                point: PointDTO(x: 200, y: 320)
+            ),
+            annotationNode(
+                displayIndex: 10,
+                displayRole: "standard window",
+                title: "Window root",
+                frame: RectDTO(x: 0, y: 0, width: 800, height: 600),
+                point: PointDTO(x: 400, y: 300)
+            ),
+        ])
+
+        let result = WindowAnnotationBuilder.marks(
+            from: state,
+            maxMarks: 10,
+            includeStaticText: false
+        )
+
+        #expect(!result.truncated)
+        #expect(result.marks.count == 1)
+        let mark = result.marks[0]
+        #expect(mark.markID == 1)
+        #expect(mark.displayIndex == 8)
+        #expect(mark.target?.displayIndex == 8)
+        #expect(abs(mark.point.x - 100) < 0.01)
+        #expect(abs(mark.point.y - 80) < 0.01)
+        #expect(abs((mark.rect?.x ?? -1) - 50) < 0.01)
+        #expect(abs((mark.rect?.y ?? -1) - 60) < 0.01)
+        #expect(abs((mark.rect?.width ?? -1) - 100) < 0.01)
+        #expect(abs((mark.rect?.height ?? -1) - 40) < 0.01)
+    }
+
+    @Test
+    func annotationBuilderCanIncludeStaticTextAndTruncateMarks() {
+        let state = makeAnnotationState(nodes: [
+            annotationNode(
+                displayIndex: 1,
+                displayRole: "button",
+                title: "Deploy",
+                frame: RectDTO(x: 20, y: 450, width: 100, height: 40),
+                point: PointDTO(x: 70, y: 470)
+            ),
+            annotationNode(
+                displayIndex: 2,
+                displayRole: "text",
+                title: "Ready",
+                frame: RectDTO(x: 20, y: 400, width: 100, height: 30),
+                point: PointDTO(x: 70, y: 415)
+            ),
+        ])
+
+        let result = WindowAnnotationBuilder.marks(
+            from: state,
+            maxMarks: 1,
+            includeStaticText: true
+        )
+
+        #expect(result.truncated)
+        #expect(result.marks.count == 1)
+    }
+
+    @Test
+    func annotationRendererWritesAnnotatedPNG() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bcu-annotation-renderer-test-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let source = directory.appendingPathComponent("source.png")
+        try makePNG(width: 120, height: 80).write(to: source)
+
+        let baseImage = ScreenshotImageDTO(
+            imagePath: source.path,
+            imageBase64: nil,
+            mimeType: "image/png",
+            pixelWidth: 120,
+            pixelHeight: 80,
+            coordinateOrigin: .topLeft,
+            coordinateSpace: .modelFacingScreenshot,
+            captureKind: "test"
+        )
+        let mark = WindowAnnotationMarkDTO(
+            markID: 1,
+            displayIndex: 4,
+            nodeID: nil,
+            refetchFingerprint: nil,
+            target: try .displayIndex(4),
+            role: "button",
+            title: "Deploy",
+            description: nil,
+            valuePreview: nil,
+            point: PointDTO(x: 50, y: 30),
+            rect: RectDTO(x: 20, y: 20, width: 60, height: 30),
+            source: "test"
+        )
+
+        let rendered = try #require(WindowAnnotationRenderer.render(
+            baseImagePath: source.path,
+            baseImage: baseImage,
+            marks: [mark],
+            windowID: "window",
+            stateToken: "state",
+            imageMode: .path
+        ))
+
+        let path = try #require(rendered.imagePath)
+        #expect(FileManager.default.fileExists(atPath: path))
+        #expect(rendered.pixelWidth == 120)
+        #expect(rendered.pixelHeight == 80)
+        #expect(rendered.captureKind == "model-facing-window-annotation")
     }
 
     @Test
@@ -138,7 +389,147 @@ struct RuntimeEnhancementTests {
         let ids = Set(RouteRegistry.publicRoutes().map(\.id))
 
         #expect(ids.contains(RouteID.waitFor.rawValue))
+        #expect(ids.contains(RouteID.annotateWindow.rawValue))
         #expect(ids.contains(RouteID.readText.rawValue))
         #expect(ids.contains(RouteID.selectText.rawValue))
+    }
+
+    private func makeAnnotationState(nodes: [AXPipelineV2SurfaceNodeDTO]) -> GetWindowStateResponse {
+        GetWindowStateResponse(
+            contractVersion: ContractVersion.current,
+            stateToken: "state",
+            window: ResolvedWindowDTO(
+                windowID: "window",
+                title: "Test",
+                bundleID: "com.example.app",
+                pid: 123,
+                launchDate: nil,
+                windowNumber: 42,
+                frameAppKit: RectDTO(x: 0, y: 0, width: 800, height: 600),
+                resolutionStrategy: "test"
+            ),
+            screenshot: ScreenshotDTO(
+                status: "captured",
+                image: ScreenshotImageDTO(
+                    imagePath: "/tmp/test.png",
+                    imageBase64: nil,
+                    mimeType: "image/png",
+                    pixelWidth: 400,
+                    pixelHeight: 300,
+                    coordinateOrigin: .topLeft,
+                    coordinateSpace: .modelFacingScreenshot,
+                    captureKind: "test"
+                ),
+                rawRetinaCapture: nil,
+                coordinateContract: nil,
+                captureError: nil
+            ),
+            tree: AXPipelineV2TreeDTO(
+                nodeCount: nodes.count,
+                truncated: false,
+                renderedText: "",
+                nodes: nodes,
+                lineMappings: [],
+                profile: nil
+            ),
+            menuPresentation: nil,
+            focusedElement: FocusedElementDTO(
+                index: nil,
+                displayRole: nil,
+                title: nil,
+                description: nil,
+                secondaryActions: []
+            ),
+            selectionSummary: nil,
+            backgroundSafety: BackgroundSafetyDTO(
+                frontmostBefore: nil,
+                frontmostAfter: nil,
+                backgroundSafeReadObserved: true,
+                backgroundSafeObserved: true
+            ),
+            performance: ReadPerformanceDTO(
+                resolveMs: 1,
+                captureMs: 2,
+                projectionMs: 0,
+                screenshotMs: 3,
+                totalMs: 6
+            ),
+            debug: nil,
+            ocr: nil,
+            notes: []
+        )
+    }
+
+    private func annotationNode(
+        displayIndex: Int,
+        displayRole: String,
+        title: String,
+        frame: RectDTO,
+        point: PointDTO
+    ) -> AXPipelineV2SurfaceNodeDTO {
+        AXPipelineV2SurfaceNodeDTO(
+            index: displayIndex,
+            displayIndex: displayIndex,
+            projectedIndex: displayIndex,
+            parentIndex: nil,
+            depth: 0,
+            primaryCanonicalIndex: displayIndex,
+            canonicalIndices: [displayIndex],
+            childIndices: [],
+            displayRole: displayRole,
+            rawRole: nil,
+            rawSubrole: nil,
+            title: title,
+            description: nil,
+            help: nil,
+            identifier: nil,
+            url: nil,
+            nodeID: "node-\(displayIndex)",
+            identity: nil,
+            refetch: nil,
+            refetchFingerprint: "refetch-\(displayIndex)",
+            value: nil,
+            valueKind: nil,
+            isValueSettable: false,
+            flags: [],
+            secondaryActions: [],
+            secondaryActionBindings: nil,
+            affordances: nil,
+            availableActions: nil,
+            curatedSecondaryActions: nil,
+            curatedAvailableActions: nil,
+            parameterizedAttributes: nil,
+            frameAppKit: frame,
+            activationPointAppKit: nil,
+            suggestedInteractionPointAppKit: point,
+            childCount: 0,
+            collectionInfo: nil,
+            interactionTraits: nil,
+            profileHint: nil,
+            transformNotes: []
+        )
+    }
+
+    private func makePNG(width: Int, height: Int) throws -> Data {
+        let bitmap = try #require(NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: width,
+            pixelsHigh: height,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ))
+        NSGraphicsContext.saveGraphicsState()
+        if let context = NSGraphicsContext(bitmapImageRep: bitmap) {
+            NSGraphicsContext.current = context
+            NSColor.white.setFill()
+            NSRect(x: 0, y: 0, width: width, height: height).fill()
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        return try #require(bitmap.representation(using: .png, properties: [:]))
     }
 }

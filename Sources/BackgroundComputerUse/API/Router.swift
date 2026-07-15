@@ -104,6 +104,16 @@ struct Router {
                 }
             )
 
+        case (.post, "/v1/annotate_window"):
+            return decodeAndExecute(
+                AnnotateWindowRequest.self,
+                routeID: .annotateWindow,
+                from: request,
+                work: { payload in
+                    try services.annotateWindow(payload)
+                }
+            )
+
         case (.post, "/v1/click"):
             return decodeAndExecute(
                 ClickRequest.self,
@@ -503,6 +513,22 @@ struct Router {
                 ),
                 statusCode: 404,
                 reasonPhrase: "Not Found"
+            )
+
+        case WaitForRouteError.invalidRequest(let message):
+            return .json(
+                ErrorResponse(
+                    error: "invalid_request",
+                    message: message,
+                    requestID: UUID().uuidString,
+                    recovery: [
+                        "Call GET /v1/routes and inspect route '\(routeID.rawValue)' request.fields.",
+                        "Use windowTitleContains with gone=true for title disappearance waits.",
+                        "Use windowTitleChanged=true only for waiting until the title differs from the first observed title."
+                    ]
+                ),
+                statusCode: 400,
+                reasonPhrase: "Bad Request"
             )
 
         default:

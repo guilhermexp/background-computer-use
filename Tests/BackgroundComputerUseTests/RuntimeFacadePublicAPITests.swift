@@ -21,6 +21,7 @@ struct RuntimeFacadePublicAPITests {
 
         let listWindows = ListWindowsRequest(app: "Safari")
         let state = GetWindowStateRequest(window: "window-id", imageMode: .path)
+        let annotate = AnnotateWindowRequest(window: "window-id", maxMarks: 40, imageMode: .path)
         let click = ClickRequest(window: "window-id", target: target, clickCount: 1, cursor: cursor)
         let coordinateClick = ClickRequest(window: "window-id", x: 10, y: 20)
         let scroll = ScrollRequest(window: "window-id", target: target, direction: .down)
@@ -34,6 +35,7 @@ struct RuntimeFacadePublicAPITests {
 
         #expect(listWindows.app == "Safari")
         #expect(state.imageMode == .path)
+        #expect(annotate.maxMarks == 40)
         #expect(click.target?.displayIndex == 3)
         #expect(coordinateClick.x == 10)
         #expect(scroll.direction == .down)

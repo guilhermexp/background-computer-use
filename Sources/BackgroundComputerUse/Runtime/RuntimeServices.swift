@@ -15,6 +15,7 @@ struct RuntimeServices {
     private let secondaryActionRouteService: SecondaryActionRouteService
     private let clickRouteService: ClickRouteService
     private let waitForRouteService: WaitForRouteService
+    private let windowAnnotationService: WindowAnnotationService
     private let textRouteService: TextRouteService
     private let cursorFeedbackRouteService: CursorFeedbackRouteService
 
@@ -30,6 +31,7 @@ struct RuntimeServices {
         secondaryActionRouteService = SecondaryActionRouteService(executionOptions: executionOptions)
         clickRouteService = ClickRouteService(executionOptions: executionOptions)
         waitForRouteService = WaitForRouteService(executionOptions: executionOptions)
+        windowAnnotationService = WindowAnnotationService(executionOptions: executionOptions)
         textRouteService = TextRouteService(executionOptions: executionOptions)
         cursorFeedbackRouteService = CursorFeedbackRouteService(executionOptions: executionOptions)
     }
@@ -122,6 +124,12 @@ struct RuntimeServices {
     func waitFor(_ request: WaitForRequest) throws -> WaitForResponse {
         try execute(routeID: .waitFor, target: windowTarget(request.window)) {
             try waitForRouteService.waitFor(request: request)
+        }
+    }
+
+    func annotateWindow(_ request: AnnotateWindowRequest) throws -> AnnotateWindowResponse {
+        try execute(routeID: .annotateWindow, target: windowTarget(request.window)) {
+            try windowAnnotationService.annotateWindow(request: request)
         }
     }
 
