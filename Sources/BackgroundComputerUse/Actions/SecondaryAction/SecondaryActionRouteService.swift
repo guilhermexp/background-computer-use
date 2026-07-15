@@ -595,7 +595,8 @@ struct SecondaryActionRouteService {
             cursor: cursor,
             warnings: warnings,
             notes: notes,
-            verification: verification
+            verification: verification,
+            postScreenshot: postState?.screenshot.status == "omitted" ? nil : postState?.screenshot
         )
     }
 

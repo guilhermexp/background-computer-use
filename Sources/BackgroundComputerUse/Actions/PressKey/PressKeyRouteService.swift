@@ -114,7 +114,7 @@ struct PressKeyRouteService {
         let beforeFrontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let beforeSearchCount = searchFieldSnapshots(in: capture).count
 
-        guard let windowElement = resolveWindowElement(
+        guard let windowElement = try? targetResolver.resolveWindowElement(
             appElement: appElement,
             window: capture.envelope.response.window
         ) else {
@@ -172,7 +172,8 @@ struct PressKeyRouteService {
                     cursor: cursor,
                     warnings: warnings,
                     notes: notes,
-                    verification: verification
+                    verification: verification,
+                    postScreenshot: postScreenshot(from: postCapture)
                 )
             }
         }
@@ -193,7 +194,10 @@ struct PressKeyRouteService {
         AXCursorTargeting.finishPressKey(cursor: cursor)
         sleepRunLoop(settleDelay)
 
-        let refreshedWindow = resolveWindowElement(appElement: appElement, window: capture.envelope.response.window) ?? windowElement
+        let refreshedWindow = (try? targetResolver.resolveWindowElement(
+            appElement: appElement,
+            window: capture.envelope.response.window
+        )) ?? windowElement
         var liveSearchFieldVerified = false
         var liveSearchFieldFocusStatus: AXError?
         if let openedField = findSearchField(in: refreshedWindow) {
@@ -257,7 +261,8 @@ struct PressKeyRouteService {
             cursor: cursor,
             warnings: warnings,
             notes: notes,
-            verification: verification
+            verification: verification,
+            postScreenshot: postScreenshot(from: postCapture)
         )
     }
 
@@ -365,7 +370,8 @@ struct PressKeyRouteService {
                     "Focused text entry target resolved via \(liveElement.resolution).",
                     "AX selected-range status: \(AXActionRuntimeSupport.rawStatusString(for: status)).",
                 ]
-            )
+            ),
+            postScreenshot: postScreenshot(from: postCapture)
         )
     }
 
@@ -562,8 +568,17 @@ struct PressKeyRouteService {
                     "Native key dispatch success flag: \(dispatchSucceeded).",
                     "Native verification checks route-specific search state, focused text value/range changes, selection summary changes, and visual window changes where useful.",
                 ]
-            )
+            ),
+            postScreenshot: postScreenshot(from: postCapture)
         )
+    }
+
+    private func postScreenshot(from capture: AXActionStateCapture?) -> ScreenshotDTO? {
+        guard let screenshot = capture?.envelope.response.screenshot,
+              screenshot.status != "omitted" else {
+            return nil
+        }
+        return screenshot
     }
 
     private func searchVerification(
@@ -617,7 +632,8 @@ struct PressKeyRouteService {
         cursor: ActionCursorTargetResponseDTO,
         warnings: [String],
         notes: [String],
-        verification: PressKeyVerificationEvidenceDTO?
+        verification: PressKeyVerificationEvidenceDTO?,
+        postScreenshot: ScreenshotDTO? = nil
     ) -> PressKeyResponse {
         let effect = Self.effectClassification(
             classification: classification,
@@ -637,7 +653,8 @@ struct PressKeyRouteService {
             cursor: cursor,
             warnings: warnings,
             notes: notes,
-            verification: verification?.withClassification(effect)
+            verification: verification?.withClassification(effect),
+            postScreenshot: postScreenshot
         )
     }
 
@@ -886,39 +903,6 @@ private extension PressKeyRouteService {
         }
 
         return true
-    }
-
-    func resolveWindowElement(appElement: AXUIElement, window: ResolvedWindowDTO) -> AXUIElement? {
-        let windows = AXActionRuntimeSupport.elementArrayAttribute(appElement, attribute: kAXWindowsAttribute as CFString)
-        guard let best = windows.max(by: { lhs, rhs in
-            scoreWindow(lhs, target: window) < scoreWindow(rhs, target: window)
-        }), scoreWindow(best, target: window) > 0 else {
-            return nil
-        }
-        return best
-    }
-
-    func scoreWindow(_ element: AXUIElement, target: ResolvedWindowDTO) -> Int {
-        var score = 0
-        let title = AXActionRuntimeSupport.stringAttribute(element, attribute: kAXTitleAttribute as CFString) ?? ""
-        let frame = frameAttribute(element)
-        let windowNumber = AXActionRuntimeSupport.intAttribute(element, attribute: "AXWindowNumber" as CFString)
-
-        if windowNumber == target.windowNumber {
-            score += 1000
-        }
-        if title == target.title {
-            score += 200
-        } else if target.title.isEmpty == false, title.contains(target.title) || target.title.contains(title) {
-            score += 120
-        }
-        if let frame, approximatelyEqual(frame, rect(from: target.frameAppKit), tolerance: 4) {
-            score += 100
-        }
-        if AXActionRuntimeSupport.boolAttribute(element, attribute: kAXMainAttribute as CFString) == true {
-            score += 20
-        }
-        return score
     }
 
     func findSearchField(in root: AXUIElement) -> AXUIElement? {

@@ -260,7 +260,8 @@ struct ClickRouteService {
             frontmostBundleAfter: outcome.frontmostBundleAfter,
             warnings: outcome.warnings,
             notes: outcome.notes,
-            verification: outcome.verification
+            verification: outcome.verification,
+            postScreenshot: postScreenshot(from: outcome.postCapture)
         )
     }
 
@@ -401,7 +402,8 @@ struct ClickRouteService {
                 frontmostBundleAfter: outcome.frontmostBundleAfter,
                 warnings: outcome.warnings,
                 notes: outcome.notes,
-                verification: outcome.verification
+                verification: outcome.verification,
+                postScreenshot: postScreenshot(from: outcome.postCapture)
             )
         }
 
@@ -1624,7 +1626,8 @@ struct ClickRouteService {
             frontmostBundleAfter: semantic.frontmostBundleAfter,
             warnings: semantic.warnings,
             notes: semantic.notes,
-            verification: semantic.verification
+            verification: semantic.verification,
+            postScreenshot: postScreenshot(from: semantic.postCapture)
         )
     }
 
@@ -1665,7 +1668,9 @@ struct ClickRouteService {
             frontmostBundleAfter: fallback.frontmostBundleAfter ?? semantic.frontmostBundleAfter,
             warnings: fallback.warnings,
             notes: fallback.notes,
-            verification: fallback.verification ?? semantic.verification
+            verification: fallback.verification ?? semantic.verification,
+            postScreenshot: postScreenshot(from: fallback.postCapture) ??
+                postScreenshot(from: semantic.postCapture)
         )
     }
 
@@ -1692,7 +1697,8 @@ struct ClickRouteService {
         frontmostBundleAfter: String?,
         warnings: [String],
         notes: [String],
-        verification: ClickVerificationEvidenceDTO?
+        verification: ClickVerificationEvidenceDTO?,
+        postScreenshot: ScreenshotDTO? = nil
     ) -> ClickResponse {
         ClickResponse(
             contractVersion: ContractVersion.current,
@@ -1719,8 +1725,17 @@ struct ClickRouteService {
             frontmostBundleAfter: frontmostBundleAfter,
             warnings: warnings,
             notes: notes,
-            verification: verification
+            verification: verification,
+            postScreenshot: postScreenshot
         )
+    }
+
+    private func postScreenshot(from capture: AXActionStateCapture?) -> ScreenshotDTO? {
+        guard let screenshot = capture?.envelope.response.screenshot,
+              screenshot.status != "omitted" else {
+            return nil
+        }
+        return screenshot
     }
 
     private func semanticStep(_ semantic: ClickSemanticOutcome) -> [ClickRouteStepDTO] {

@@ -90,6 +90,14 @@ struct AXActionResolvedLiveElement {
     let resolution: String
 }
 
+struct AXWindowMatchAttributes {
+    let title: String
+    let frame: CGRect?
+    let windowNumber: Int?
+    let isMain: Bool
+    let isFocused: Bool
+}
+
 enum AXActionTargetResolverError: Error, CustomStringConvertible {
     case unresolvedTarget(String)
 
@@ -720,7 +728,7 @@ struct AXActionTargetResolver {
         return rawNode.role ?? "unknown"
     }
 
-    private func resolveWindowElement(appElement: AXUIElement, window: ResolvedWindowDTO) throws -> AXUIElement {
+    func resolveWindowElement(appElement: AXUIElement, window: ResolvedWindowDTO) throws -> AXUIElement {
         let directWindows = AXActionRuntimeSupport.elementArrayAttribute(appElement, attribute: kAXWindowsAttribute as CFString)
         let windows = directWindows.isEmpty
             ? AXActionRuntimeSupport.elementAttribute(appElement, attribute: kAXFocusedWindowAttribute as CFString).map { [$0] } ?? []
@@ -742,27 +750,39 @@ struct AXActionTargetResolver {
         return best
     }
 
-    private func scoreWindow(_ element: AXUIElement, target: ResolvedWindowDTO) -> Int {
-        var score = 0
-        let title = AXActionRuntimeSupport.stringAttribute(element, attribute: kAXTitleAttribute as CFString) ?? ""
-        let frame = AXActionRuntimeSupport.rectAttribute(element, attribute: "AXFrame" as CFString)
-        let windowNumber = AXActionRuntimeSupport.intAttribute(element, attribute: "AXWindowNumber" as CFString)
+    func scoreWindow(_ element: AXUIElement, target: ResolvedWindowDTO) -> Int {
+        scoreWindow(
+            AXWindowMatchAttributes(
+                title: AXActionRuntimeSupport.stringAttribute(element, attribute: kAXTitleAttribute as CFString) ?? "",
+                frame: AXActionRuntimeSupport.rectAttribute(element, attribute: "AXFrame" as CFString),
+                windowNumber: AXActionRuntimeSupport.intAttribute(element, attribute: "AXWindowNumber" as CFString),
+                isMain: AXActionRuntimeSupport.boolAttribute(element, attribute: kAXMainAttribute as CFString) == true,
+                isFocused: AXActionRuntimeSupport.boolAttribute(element, attribute: kAXFocusedAttribute as CFString) == true
+            ),
+            target: target
+        )
+    }
 
-        if windowNumber == target.windowNumber {
+    func scoreWindow(_ attributes: AXWindowMatchAttributes, target: ResolvedWindowDTO) -> Int {
+        var score = 0
+
+        if attributes.windowNumber == target.windowNumber {
             score += 1000
         }
-        if title == target.title {
+        if attributes.title == target.title {
             score += 200
-        } else if target.title.isEmpty == false, title.contains(target.title) || target.title.contains(title) {
+        } else if target.title.isEmpty == false,
+                  attributes.title.contains(target.title) || target.title.contains(attributes.title) {
             score += 120
         }
-        if let frame, approximatelyEqual(frame, rect(from: target.frameAppKit), tolerance: 3) {
+        if let frame = attributes.frame,
+           approximatelyEqual(frame, rect(from: target.frameAppKit), tolerance: 3) {
             score += 80
         }
-        if AXActionRuntimeSupport.boolAttribute(element, attribute: kAXMainAttribute as CFString) == true {
+        if attributes.isMain {
             score += 20
         }
-        if AXActionRuntimeSupport.boolAttribute(element, attribute: kAXFocusedAttribute as CFString) == true {
+        if attributes.isFocused {
             score += 10
         }
 

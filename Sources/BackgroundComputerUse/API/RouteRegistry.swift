@@ -433,7 +433,7 @@ enum RouteRegistry {
         case RouteID.getWindowState.rawValue:
             return json([
                 field("window", "string", required: true, "Stable window ID from list_windows."),
-                field("includeMenuBar", "boolean", "Include macOS menu bar nodes in the annotation candidate set.", defaultValue: "false"),
+                field("includeMenuBar", "boolean", "Include macOS menu bar nodes in the state capture.", defaultValue: "true"),
                 field("menuPath", "string[]", "Optional menu path to open before reading transient menu state, e.g. [\"File\"]."),
                 field("webTraversal", "visible | full", "Use full only for deep WebKit/Electron parity/debug traversal; visible keeps the fast AXVisibleChildren default for web areas.", defaultValue: "visible"),
                 field("maxNodes", "integer", defaultValue: "6500"),
@@ -452,7 +452,7 @@ enum RouteRegistry {
         case RouteID.annotateWindow.rawValue:
             return json([
                 field("window", "string", required: true, "Stable window ID from list_windows."),
-                field("includeMenuBar", "boolean", defaultValue: "true"),
+                field("includeMenuBar", "boolean", defaultValue: "false"),
                 field("webTraversal", "visible | full", "Use full only for deep WebKit/Electron parity/debug traversal; visible keeps the fast AXVisibleChildren default for web areas.", defaultValue: "visible"),
                 field("maxNodes", "integer", defaultValue: "6500"),
                 field("maxMarks", "integer", "Maximum numbered marks to draw and return.", defaultValue: "80"),
@@ -488,11 +488,9 @@ enum RouteRegistry {
                 ),
                 field("direction", "up | down | left | right", required: true),
                 field("pages", "number"),
-                field("verificationMode", "strict | fast"),
                 field("cursor", "CursorRequest"),
                 field("includeMenuBar", "boolean"),
                 field("maxNodes", "integer"),
-                field("imageMode", "path | base64 | omit"),
                 debugField()
             ])
         case RouteID.performSecondaryAction.rawValue:
@@ -517,16 +515,16 @@ enum RouteRegistry {
         case RouteID.drag.rawValue:
             return json([
                 field("window", "string", required: true),
-                field("toX", "number", required: true),
-                field("toY", "number", required: true),
+                field("toX", "number", required: true, "Destination window-origin x in AppKit-global logical points with a bottom-left origin."),
+                field("toY", "number", required: true, "Destination window-origin y in AppKit-global logical points with a bottom-left origin."),
                 field("cursor", "CursorRequest")
             ])
         case RouteID.resize.rawValue:
             return json([
                 field("window", "string", required: true),
                 field("handle", "ResizeHandle", required: true),
-                field("toX", "number", required: true),
-                field("toY", "number", required: true),
+                field("toX", "number", required: true, "Destination handle x in AppKit-global logical points with a bottom-left origin."),
+                field("toY", "number", required: true, "Destination handle y in AppKit-global logical points with a bottom-left origin."),
                 field("cursor", "CursorRequest")
             ])
         case RouteID.setWindowFrame.rawValue:
@@ -552,7 +550,6 @@ enum RouteRegistry {
                 field("cursor", "CursorRequest"),
                 field("includeMenuBar", "boolean"),
                 field("maxNodes", "integer"),
-                field("imageMode", "path | base64 | omit"),
                 confirmField("Required to type into secure/password-like text entries."),
                 debugField()
             ])
@@ -560,7 +557,7 @@ enum RouteRegistry {
             return json([
                 field("window", "string", required: true),
                 field("stateToken", "string"),
-                field("key", "string", required: true),
+                field("key", "string", required: true, "Key or chord separated by +. Modifier aliases: command/cmd/meta/super, control/ctrl, option/alt, and shift. Examples: command+f, ctrl+shift+tab, option+left."),
                 field("cursor", "CursorRequest"),
                 field("includeMenuBar", "boolean"),
                 field("maxNodes", "integer"),
@@ -580,7 +577,6 @@ enum RouteRegistry {
                 field("cursor", "CursorRequest"),
                 field("includeMenuBar", "boolean"),
                 field("maxNodes", "integer"),
-                field("imageMode", "path | base64 | omit"),
                 confirmField("Required to write secure/password-like fields or clear an existing value."),
                 debugField()
             ])
@@ -744,6 +740,7 @@ enum RouteRegistry {
                 field("selectedRange", "TextSelectionRange | null"),
                 field("preStateToken", "string | null"),
                 field("postStateToken", "string | null"),
+                field("postScreenshot", "Screenshot | null", "Returned when imageMode is path or base64 and the post-action reread captures an image."),
                 field("warnings", "string[]", required: true),
                 debugNotesField()
             ])
@@ -820,7 +817,8 @@ enum RouteRegistry {
             field("frontmostBundleAfter", "string | null"),
             field("warnings", "string[]", required: true),
             debugNotesField(),
-            field("verification", "ClickVerification | null")
+            field("verification", "ClickVerification | null"),
+            field("postScreenshot", "Screenshot | null", "Returned when imageMode is path or base64 and the post-action reread captures an image.")
         ])
     }
 
@@ -873,7 +871,8 @@ enum RouteRegistry {
             field("cursor", "ActionCursorTarget", required: true),
             field("warnings", "string[]", required: true),
             debugNotesField(),
-            field("verification", "PressKeyVerification | null", "Post-action verification block. verification.classification is success | dispatched_no_observed_effect | failed; also includes route-specific search, selection, text-state, selection-summary, focused-element, and visual-diff evidence plus the post stateToken when available.")
+            field("verification", "PressKeyVerification | null", "Post-action verification block. verification.classification is success | dispatched_no_observed_effect | failed; also includes route-specific search, selection, text-state, selection-summary, focused-element, and visual-diff evidence plus the post stateToken when available."),
+            field("postScreenshot", "Screenshot | null", "Returned when imageMode is path or base64 and the post-action reread captures an image.")
         ])
     }
 
@@ -928,7 +927,8 @@ enum RouteRegistry {
             field("cursor", "ActionCursorTarget", required: true),
             field("warnings", "string[]", required: true),
             debugNotesField(),
-            field("verification", "SecondaryActionVerification | null", required: false, "Effect-specific verifier evidence. Prefer imageMode with screenshots when visible UI interpretation matters.")
+            field("verification", "SecondaryActionVerification | null", required: false, "Effect-specific verifier evidence. Prefer imageMode with screenshots when visible UI interpretation matters."),
+            field("postScreenshot", "Screenshot | null", "Returned when imageMode is path or base64 and the post-action reread captures an image.")
         ])
     }
 

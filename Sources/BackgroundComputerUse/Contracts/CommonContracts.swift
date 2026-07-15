@@ -36,11 +36,6 @@ public enum ScrollDirectionDTO: String, Decodable, Encodable, Sendable {
     case right
 }
 
-public enum ActionVerificationModeDTO: String, Decodable, Encodable, Sendable {
-    case strict
-    case fast
-}
-
 public enum CoordinateSpaceDTO: String, Decodable, Encodable, Sendable {
     case modelFacingScreenshot
     case rawRetinaCapture

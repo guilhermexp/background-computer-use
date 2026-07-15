@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import json
+import math
 import os
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -22,8 +24,45 @@ def usage() -> int:
 def manifest_path() -> Path:
     if os.environ.get("BCU_MANIFEST_PATH"):
         return Path(os.environ["BCU_MANIFEST_PATH"])
-    tmpdir = os.environ.get("TMPDIR", "/tmp").rstrip("/")
+    tmpdir = os.environ.get("TMPDIR") or darwin_user_temp_directory()
+    tmpdir = tmpdir.rstrip("/")
     return Path(tmpdir) / "background-computer-use" / "runtime-manifest.json"
+
+
+def darwin_user_temp_directory() -> str:
+    try:
+        value = subprocess.check_output(
+            ["getconf", "DARWIN_USER_TEMP_DIR"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        value = ""
+    return value or "/tmp"
+
+
+def configured_timeout() -> float:
+    raw_value = os.environ.get("BCU_TIMEOUT", "30")
+    try:
+        value = float(raw_value)
+    except ValueError as exc:
+        raise SystemExit(f"BCU_TIMEOUT must be a positive number, got {raw_value!r}") from exc
+    if not math.isfinite(value) or value <= 0:
+        raise SystemExit(f"BCU_TIMEOUT must be a positive number, got {raw_value!r}")
+    return value
+
+
+def request_timeout(route_path: str, body: object) -> float:
+    timeout = configured_timeout()
+    if route_path == "/v1/wait_for" and isinstance(body, dict):
+        wait_timeout = body.get("timeoutSeconds")
+        if (
+            isinstance(wait_timeout, (int, float))
+            and not isinstance(wait_timeout, bool)
+            and math.isfinite(float(wait_timeout))
+        ):
+            timeout = max(timeout, float(wait_timeout) + 5.0)
+    return timeout
 
 
 def base_url() -> str:
@@ -59,16 +98,17 @@ def main(argv: list[str]) -> int:
         route_path = "/" + route_path
 
     body = None
+    parsed_body: object = None
     headers = {"accept": "application/json"}
     token = auth_token()
     if token:
         headers["X-Background-Computer-Use-Token"] = token
     if len(argv) == 4:
         try:
-            parsed = json.loads(argv[3])
+            parsed_body = json.loads(argv[3])
         except json.JSONDecodeError as exc:
             raise SystemExit(f"JSON body is invalid: {exc}") from exc
-        body = json.dumps(parsed).encode("utf-8")
+        body = json.dumps(parsed_body).encode("utf-8")
         headers["content-type"] = "application/json"
 
     request = urllib.request.Request(
@@ -79,7 +119,7 @@ def main(argv: list[str]) -> int:
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=request_timeout(route_path, parsed_body)) as response:
             payload = response.read()
             status = response.status
     except urllib.error.HTTPError as exc:

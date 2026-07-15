@@ -14,6 +14,7 @@ struct RuntimeSessionDecision: Sendable {
 final class RuntimeSessionLimiter: @unchecked Sendable {
     private let lock = NSLock()
     private var activeSessionID: String?
+    private var activeSessionRequestCount = 0
     private var maxActionsPerSecond: Double?
     private var lastActionAt: TimeInterval?
 
@@ -34,6 +35,7 @@ final class RuntimeSessionLimiter: @unchecked Sendable {
             return .rejected("Runtime is already in use by session \(activeSessionID).")
         }
         activeSessionID = sessionID
+        activeSessionRequestCount += 1
         _ = now
         return .allowed
     }
@@ -42,7 +44,10 @@ final class RuntimeSessionLimiter: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         if activeSessionID == sessionID {
-            activeSessionID = nil
+            activeSessionRequestCount = max(0, activeSessionRequestCount - 1)
+            if activeSessionRequestCount == 0 {
+                activeSessionID = nil
+            }
         }
     }
 

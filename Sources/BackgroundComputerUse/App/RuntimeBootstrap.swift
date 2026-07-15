@@ -30,7 +30,6 @@ final class RuntimeBootstrap: @unchecked Sendable {
     private func writeManifest(baseURL: URL, startedAt: Date) throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("background-computer-use", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let manifestURL = directory.appendingPathComponent("runtime-manifest.json")
         let permissions = RuntimePermissionsSnapshot.current().dto
@@ -46,7 +45,7 @@ final class RuntimeBootstrap: @unchecked Sendable {
             guide: APIDocumentation.guide,
             routes: RouteRegistry.bootstrapRouteDescriptors(baseURL: baseURL)
         )
-        try JSONSupport.encoder.encode(manifest).write(to: manifestURL, options: .atomic)
+        try SecureFileWriter.write(JSONSupport.encoder.encode(manifest), to: manifestURL)
         return manifestURL
     }
 }

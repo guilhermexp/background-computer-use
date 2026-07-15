@@ -13,7 +13,7 @@ final class LoopbackServer: @unchecked Sendable {
     private(set) var baseURL: URL?
     private(set) var startedAt: Date?
 
-    init(auth: RuntimeAuth = .disabled) {
+    init(auth: RuntimeAuth) {
         router = Router(auth: auth)
     }
 

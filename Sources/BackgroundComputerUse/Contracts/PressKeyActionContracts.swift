@@ -133,4 +133,5 @@ public struct PressKeyResponse: Encodable, Sendable {
     public let warnings: [String]
     public let notes: [String]
     public let verification: PressKeyVerificationEvidenceDTO?
+    public let postScreenshot: ScreenshotDTO?
 }

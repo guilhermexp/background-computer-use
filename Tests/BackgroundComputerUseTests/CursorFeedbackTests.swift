@@ -405,7 +405,7 @@ struct CursorFeedbackRouteTests {
 
     private func post(path: String, body: String) throws -> HTTPResponse {
         let request = try makeFeedbackRequest(method: "POST", path: path, body: body)
-        return Router().response(
+        return Router(auth: .disabled).response(
             for: request,
             context: RouterContext(baseURL: nil, startedAt: nil)
         )

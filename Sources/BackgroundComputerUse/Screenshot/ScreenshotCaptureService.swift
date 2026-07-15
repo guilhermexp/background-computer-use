@@ -112,14 +112,13 @@ enum ScreenshotCaptureService {
             let capturesDirectory = FileManager.default.temporaryDirectory
                 .appending(path: "background-computer-use", directoryHint: .isDirectory)
                 .appending(path: "captures", directoryHint: .isDirectory)
-            try FileManager.default.createDirectory(at: capturesDirectory, withIntermediateDirectories: true)
             let modelDestination = capturesDirectory.appending(path: "\(window.windowID)-\(stateToken)-model.png")
-            try modelPNGData.write(to: modelDestination, options: .atomic)
+            try SecureFileWriter.write(modelPNGData, to: modelDestination)
             modelImagePath = modelDestination.path
 
             if let rawPNGData {
                 let rawDestination = capturesDirectory.appending(path: "\(window.windowID)-\(stateToken)-raw.png")
-                try rawPNGData.write(to: rawDestination, options: .atomic)
+                try SecureFileWriter.write(rawPNGData, to: rawDestination)
                 rawImagePath = rawDestination.path
             } else {
                 rawImagePath = nil

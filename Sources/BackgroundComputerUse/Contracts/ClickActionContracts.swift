@@ -143,4 +143,5 @@ public struct ClickResponse: Encodable, Sendable {
     public let warnings: [String]
     public let notes: [String]
     public let verification: ClickVerificationEvidenceDTO?
+    public let postScreenshot: ScreenshotDTO?
 }

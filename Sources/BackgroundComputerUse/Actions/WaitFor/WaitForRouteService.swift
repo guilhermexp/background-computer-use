@@ -11,6 +11,11 @@ enum WaitForRouteError: Error, CustomStringConvertible {
     }
 }
 
+enum WaitForCaptureStage {
+    case poll
+    case finalCapture
+}
+
 struct WaitForRouteService {
     private let targetResolver: AXActionTargetResolver
 
@@ -47,14 +52,28 @@ struct WaitForRouteService {
         var lastCapture: AXActionStateCapture?
         var baselineWindowTitle: String?
         var conditionMet = false
+        var windowClosedDuringPoll = false
+        var notes: [String] = []
 
         repeat {
-            let capture = try targetResolver.capture(
-                windowID: request.window,
-                includeMenuBar: request.includeMenuBar ?? true,
-                maxNodes: request.maxNodes ?? 6500,
-                imageMode: pollImageMode
-            )
+            let capture: AXActionStateCapture
+            do {
+                capture = try targetResolver.capture(
+                    windowID: request.window,
+                    includeMenuBar: request.includeMenuBar ?? true,
+                    maxNodes: request.maxNodes ?? 6500,
+                    imageMode: pollImageMode
+                )
+            } catch let DiscoveryError.windowNotFound(windowID) {
+                guard lastCapture != nil else {
+                    throw DiscoveryError.windowNotFound(windowID)
+                }
+                let outcome = Self.closedWindowOutcome(waitForGone: waitForGone, stage: .poll)
+                conditionMet = outcome.conditionMet
+                notes.append(outcome.note)
+                windowClosedDuringPoll = true
+                break
+            }
             lastCapture = capture
             baselineWindowTitle = baselineWindowTitle ?? capture.envelope.response.window.title
             let found = WaitForMatcher.conditionMatches(
@@ -73,16 +92,34 @@ struct WaitForRouteService {
                 break
             }
             if Date() < deadline {
-                RunLoop.current.run(until: Date().addingTimeInterval(pollInterval))
+                sleepRunLoop(pollInterval)
             }
         } while Date() < deadline
 
-        let capture = try targetResolver.capture(
-            windowID: request.window,
-            includeMenuBar: request.includeMenuBar ?? true,
-            maxNodes: request.maxNodes ?? 6500,
-            imageMode: finalImageMode
-        )
+        let capture: AXActionStateCapture
+        var returnedLastLiveState = false
+        if windowClosedDuringPoll, let lastCapture {
+            capture = lastCapture
+            returnedLastLiveState = true
+        } else {
+            do {
+                capture = try targetResolver.capture(
+                    windowID: request.window,
+                    includeMenuBar: request.includeMenuBar ?? true,
+                    maxNodes: request.maxNodes ?? 6500,
+                    imageMode: finalImageMode
+                )
+            } catch let DiscoveryError.windowNotFound(windowID) {
+                guard let lastCapture else {
+                    throw DiscoveryError.windowNotFound(windowID)
+                }
+                let outcome = Self.closedWindowOutcome(waitForGone: waitForGone, stage: .finalCapture)
+                conditionMet = outcome.conditionMet
+                notes.append(outcome.note)
+                capture = lastCapture
+                returnedLastLiveState = true
+            }
+        }
         let elapsedMs = Date().timeIntervalSince(start) * 1000
         let targetDescription = [
             request.role.map { "role '\($0)'" },
@@ -107,10 +144,24 @@ struct WaitForRouteService {
             elapsedMs: sanitizedJSONDouble(elapsedMs),
             summary: summary,
             state: capture.envelope.response,
-            notes: [
+            notes: notes + [
                 "wait_for polled every \(Int(pollInterval * 1000))ms for up to \(String(format: "%.1f", timeout))s.",
-                "Intermediate polls used imageMode=omit; the returned state was captured with imageMode=\(finalImageMode.rawValue)."
+                returnedLastLiveState
+                    ? "The target window closed; state contains the last live poll captured with imageMode=omit."
+                    : "Intermediate polls used imageMode=omit; the returned state was captured with imageMode=\(finalImageMode.rawValue)."
             ]
+        )
+    }
+
+    static func closedWindowOutcome(
+        waitForGone: Bool,
+        stage: WaitForCaptureStage
+    ) -> (conditionMet: Bool, note: String) {
+        let stageDescription = stage == .poll ? "during polling" : "before the final capture"
+        let result = waitForGone ? "condition met" : "condition not met"
+        return (
+            conditionMet: waitForGone,
+            note: "The target window closed \(stageDescription); \(result) without returning window_not_found."
         )
     }
 }

@@ -180,7 +180,8 @@ struct TextRouteService {
             preStateToken: capture.envelope.response.stateToken,
             postStateToken: postCapture?.envelope.response.stateToken,
             warnings: warnings,
-            notes: ["Resolved live element via \(liveElement.resolution)."]
+            notes: ["Resolved live element via \(liveElement.resolution)."],
+            postScreenshot: postScreenshot(from: postCapture)
         )
     }
 
@@ -194,7 +195,8 @@ struct TextRouteService {
         preStateToken: String?,
         postStateToken: String?,
         warnings: [String],
-        notes: [String]
+        notes: [String],
+        postScreenshot: ScreenshotDTO? = nil
     ) -> SelectTextResponse {
         SelectTextResponse(
             contractVersion: ContractVersion.current,
@@ -208,7 +210,16 @@ struct TextRouteService {
             preStateToken: preStateToken,
             postStateToken: postStateToken,
             warnings: warnings,
-            notes: notes
+            notes: notes,
+            postScreenshot: postScreenshot
         )
+    }
+
+    private func postScreenshot(from capture: AXActionStateCapture?) -> ScreenshotDTO? {
+        guard let screenshot = capture?.envelope.response.screenshot,
+              screenshot.status != "omitted" else {
+            return nil
+        }
+        return screenshot
     }
 }

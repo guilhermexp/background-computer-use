@@ -4,7 +4,12 @@ set -euo pipefail
 APP_NAME="BackgroundComputerUse"
 INSTALL_DIR="${BACKGROUND_COMPUTER_USE_INSTALL_DIR:-$HOME/Applications}"
 APP_BUNDLE="${BCU_APP_BUNDLE:-$INSTALL_DIR/$APP_NAME.app}"
-TMP_ROOT="${TMPDIR:-/tmp}"
+if [ -n "${TMPDIR:-}" ]; then
+  TMP_ROOT="$TMPDIR"
+else
+  TMP_ROOT="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)"
+  TMP_ROOT="${TMP_ROOT:-/tmp}"
+fi
 TMP_ROOT="${TMP_ROOT%/}"
 MANIFEST_PATH="${BCU_MANIFEST_PATH:-$TMP_ROOT/background-computer-use/runtime-manifest.json}"
 WAIT_ATTEMPTS="${BCU_WAIT_ATTEMPTS:-120}"

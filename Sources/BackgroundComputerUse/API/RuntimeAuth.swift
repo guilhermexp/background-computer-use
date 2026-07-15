@@ -21,7 +21,24 @@ struct RuntimeAuth: Sendable {
             return true
         }
 
-        return request.headerValue(named: Self.headerName) == token
+        guard let suppliedToken = request.headerValue(named: Self.headerName) else {
+            return false
+        }
+        return Self.constantTimeEqual(suppliedToken, token)
+    }
+
+    static func constantTimeEqual(_ lhs: String, _ rhs: String) -> Bool {
+        let lhsBytes = [UInt8](lhs.utf8)
+        let rhsBytes = [UInt8](rhs.utf8)
+        let byteCount = max(lhsBytes.count, rhsBytes.count)
+        var difference = lhsBytes.count ^ rhsBytes.count
+
+        for index in 0..<byteCount {
+            let lhsByte = index < lhsBytes.count ? lhsBytes[index] : 0
+            let rhsByte = index < rhsBytes.count ? rhsBytes[index] : 0
+            difference |= Int(lhsByte ^ rhsByte)
+        }
+        return difference == 0
     }
 
     var dto: RuntimeAuthDTO {

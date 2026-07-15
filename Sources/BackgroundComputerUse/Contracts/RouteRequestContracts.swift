@@ -424,11 +424,9 @@ public struct ScrollRequest: Decodable, Sendable {
     public let target: ActionTargetRequestDTO
     public let direction: ScrollDirectionDTO
     public let pages: Double?
-    public let verificationMode: ActionVerificationModeDTO?
     public let cursor: CursorRequestDTO?
     public let includeMenuBar: Bool?
     public let maxNodes: Int?
-    public let imageMode: ImageMode?
     public let debug: Bool?
 
     public init(
@@ -437,11 +435,9 @@ public struct ScrollRequest: Decodable, Sendable {
         target: ActionTargetRequestDTO,
         direction: ScrollDirectionDTO,
         pages: Double? = nil,
-        verificationMode: ActionVerificationModeDTO? = nil,
         cursor: CursorRequestDTO? = nil,
         includeMenuBar: Bool? = nil,
         maxNodes: Int? = nil,
-        imageMode: ImageMode? = nil,
         debug: Bool? = nil
     ) {
         self.window = window
@@ -449,11 +445,9 @@ public struct ScrollRequest: Decodable, Sendable {
         self.target = target
         self.direction = direction
         self.pages = pages
-        self.verificationMode = verificationMode
         self.cursor = cursor
         self.includeMenuBar = includeMenuBar
         self.maxNodes = maxNodes
-        self.imageMode = imageMode
         self.debug = debug
     }
 
@@ -463,11 +457,9 @@ public struct ScrollRequest: Decodable, Sendable {
         case target
         case direction
         case pages
-        case verificationMode
         case cursor
         case includeMenuBar
         case maxNodes
-        case imageMode
         case debug
     }
 
@@ -478,11 +470,9 @@ public struct ScrollRequest: Decodable, Sendable {
         target = try container.decode(ActionTargetRequestDTO.self, forKey: .target)
         direction = try container.decode(ScrollDirectionDTO.self, forKey: .direction)
         pages = try container.decodeIfPresent(Double.self, forKey: .pages)
-        verificationMode = try container.decodeIfPresent(ActionVerificationModeDTO.self, forKey: .verificationMode)
         cursor = try container.decodeIfPresent(CursorRequestDTO.self, forKey: .cursor)
         includeMenuBar = try container.decodeIfPresent(Bool.self, forKey: .includeMenuBar)
         maxNodes = try container.decodeIfPresent(Int.self, forKey: .maxNodes)
-        imageMode = try container.decodeIfPresent(ImageMode.self, forKey: .imageMode)
         debug = try container.decodeIfPresent(Bool.self, forKey: .debug)
     }
 }
@@ -639,7 +629,6 @@ public struct TypeTextRequest: Decodable, Sendable {
     public let cursor: CursorRequestDTO?
     public let includeMenuBar: Bool?
     public let maxNodes: Int?
-    public let imageMode: ImageMode?
     public let debug: Bool?
     public let confirm: Bool?
 
@@ -652,7 +641,6 @@ public struct TypeTextRequest: Decodable, Sendable {
         cursor: CursorRequestDTO? = nil,
         includeMenuBar: Bool? = nil,
         maxNodes: Int? = nil,
-        imageMode: ImageMode? = nil,
         debug: Bool? = nil,
         confirm: Bool? = nil
     ) {
@@ -664,7 +652,6 @@ public struct TypeTextRequest: Decodable, Sendable {
         self.cursor = cursor
         self.includeMenuBar = includeMenuBar
         self.maxNodes = maxNodes
-        self.imageMode = imageMode
         self.debug = debug
         self.confirm = confirm
     }
@@ -678,7 +665,6 @@ public struct TypeTextRequest: Decodable, Sendable {
         case cursor
         case includeMenuBar
         case maxNodes
-        case imageMode
         case debug
         case confirm
     }
@@ -693,7 +679,6 @@ public struct TypeTextRequest: Decodable, Sendable {
         cursor = try container.decodeIfPresent(CursorRequestDTO.self, forKey: .cursor)
         includeMenuBar = try container.decodeIfPresent(Bool.self, forKey: .includeMenuBar)
         maxNodes = try container.decodeIfPresent(Int.self, forKey: .maxNodes)
-        imageMode = try container.decodeIfPresent(ImageMode.self, forKey: .imageMode)
         debug = try container.decodeIfPresent(Bool.self, forKey: .debug)
         confirm = try container.decodeIfPresent(Bool.self, forKey: .confirm)
     }
@@ -741,7 +726,6 @@ public struct SetValueRequest: Decodable, Sendable {
     public let cursor: CursorRequestDTO?
     public let includeMenuBar: Bool?
     public let maxNodes: Int?
-    public let imageMode: ImageMode?
     public let debug: Bool?
     public let confirm: Bool?
 
@@ -753,7 +737,6 @@ public struct SetValueRequest: Decodable, Sendable {
         cursor: CursorRequestDTO? = nil,
         includeMenuBar: Bool? = nil,
         maxNodes: Int? = nil,
-        imageMode: ImageMode? = nil,
         debug: Bool? = nil,
         confirm: Bool? = nil
     ) {
@@ -764,7 +747,6 @@ public struct SetValueRequest: Decodable, Sendable {
         self.cursor = cursor
         self.includeMenuBar = includeMenuBar
         self.maxNodes = maxNodes
-        self.imageMode = imageMode
         self.debug = debug
         self.confirm = confirm
     }
@@ -777,7 +759,6 @@ public struct SetValueRequest: Decodable, Sendable {
         case cursor
         case includeMenuBar
         case maxNodes
-        case imageMode
         case debug
         case confirm
     }
@@ -791,7 +772,6 @@ public struct SetValueRequest: Decodable, Sendable {
         cursor = try container.decodeIfPresent(CursorRequestDTO.self, forKey: .cursor)
         includeMenuBar = try container.decodeIfPresent(Bool.self, forKey: .includeMenuBar)
         maxNodes = try container.decodeIfPresent(Int.self, forKey: .maxNodes)
-        imageMode = try container.decodeIfPresent(ImageMode.self, forKey: .imageMode)
         debug = try container.decodeIfPresent(Bool.self, forKey: .debug)
         confirm = try container.decodeIfPresent(Bool.self, forKey: .confirm)
     }

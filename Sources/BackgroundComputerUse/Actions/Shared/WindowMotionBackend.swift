@@ -300,7 +300,7 @@ struct AXFrameProjectionBackend: WindowMotionExecutionBackend {
             sizeStatus = AXHelpers.setSize(element, size: endFrame.size)
 
             if positionChanged, sizeStatus == .success {
-                sleepRunLoop(1.0 / 60.0)
+                RunLoop.current.run(until: Date().addingTimeInterval(1.0 / 60.0))
             }
         }
 
@@ -382,7 +382,7 @@ struct AXFrameProjectionBackend: WindowMotionExecutionBackend {
             nextSampleTime += frameInterval
             let sleepDuration = max(0, nextSampleTime - CACurrentMediaTime())
             if sleepDuration > 0 {
-                sleepRunLoop(sleepDuration)
+                RunLoop.current.run(until: Date().addingTimeInterval(sleepDuration))
             } else {
                 RunLoop.current.run(mode: .default, before: Date())
             }

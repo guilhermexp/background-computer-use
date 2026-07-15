@@ -24,6 +24,16 @@ enum APIDocumentation {
                 fields: nil
             ),
             APIConceptDTO(
+                name: "session",
+                description: "Optional action-exclusion lane selected with the X-Background-Computer-Use-Session header. Concurrent requests from the same session share the lane; another session receives HTTP 409 while it is held, and action-rate throttling returns HTTP 429.",
+                fields: nil
+            ),
+            APIConceptDTO(
+                name: "coordinates",
+                description: "Window motion coordinates use AppKit-global logical points with a bottom-left origin. Screenshot coordinates are model-facing pixels with a top-left origin; use each route field description and screenshot coordinate contract to avoid mixing spaces.",
+                fields: nil
+            ),
+            APIConceptDTO(
                 name: "target",
                 description: "Semantic action target from get_window_state. Use {\"kind\":\"display_index\",\"value\":N} for a rendered line, {\"kind\":\"node_id\",\"value\":\"...\"} for a stable node, or {\"kind\":\"refetch_fingerprint\",\"value\":\"...\"} when node_id is unavailable. Refresh state after actions because labels, titles, and layout can change.",
                 fields: [
@@ -159,7 +169,7 @@ enum APIDocumentation {
                 useAfter: ["Call get_window_state and choose a target in or near the scrollable region."],
                 successSignals: ["classification=success for movement, boundary for a real edge, or issueBucket explains unresolved failures."],
                 nextSteps: ["Use postStateToken or read state again before targeting newly visible content."],
-                exampleRequest: #"{"window":"WINDOW_ID","stateToken":"STATE_TOKEN","target":{"kind":"display_index","value":20},"direction":"down","pages":1,"imageMode":"path"}"#
+                exampleRequest: #"{"window":"WINDOW_ID","stateToken":"STATE_TOKEN","target":{"kind":"display_index","value":20},"direction":"down","pages":1}"#
             )
         case .performSecondaryAction:
             return usage(
@@ -171,7 +181,7 @@ enum APIDocumentation {
             )
         case .drag:
             return usage(
-                whenToUse: "Move a window to a target model-facing screen coordinate.",
+                whenToUse: "Move a window origin to an AppKit-global coordinate in logical points with a bottom-left origin.",
                 useAfter: ["Call list_windows and choose a windowID."],
                 successSignals: ["ok=true, action.effectVerified=true, and window.frameAfterAppKit reflects the requested movement."],
                 nextSteps: ["Use get_window_state or list_windows to confirm final layout when needed."],
@@ -179,7 +189,7 @@ enum APIDocumentation {
             )
         case .resize:
             return usage(
-                whenToUse: "Resize a window by dragging a named edge or corner handle to a target coordinate.",
+                whenToUse: "Resize a window by moving a named edge or corner handle to an AppKit-global coordinate in logical points with a bottom-left origin.",
                 useAfter: ["Call list_windows and choose a windowID."],
                 successSignals: ["ok=true, action.effectVerified=true, and window.frameAfterAppKit changed as intended."],
                 nextSteps: ["Use get_window_state or list_windows to confirm final layout when needed."],
@@ -199,7 +209,7 @@ enum APIDocumentation {
                 useAfter: ["Call get_window_state and identify a text-entry target, or deliberately rely on the current focused element."],
                 successSignals: ["ok=true and verification exact value or selection evidence matches the requested text."],
                 nextSteps: ["Use press_key for explicit Return/Tab submission; type_text does not auto-submit."],
-                exampleRequest: #"{"window":"WINDOW_ID","stateToken":"STATE_TOKEN","target":{"kind":"display_index","value":4},"text":"hello","focusAssistMode":"focus_and_caret_end","imageMode":"path"}"#
+                exampleRequest: #"{"window":"WINDOW_ID","stateToken":"STATE_TOKEN","target":{"kind":"display_index","value":4},"text":"hello","focusAssistMode":"focus_and_caret_end"}"#
             )
         case .pressKey:
             return usage(
@@ -215,7 +225,7 @@ enum APIDocumentation {
                 useAfter: ["Call get_window_state and choose a target whose node reports value-set support."],
                 successSignals: ["ok=true and verification exactValueMatch is true."],
                 nextSteps: ["Use type_text instead when you need keystroke semantics, focus movement, autocomplete, or submission behavior."],
-                exampleRequest: #"{"window":"WINDOW_ID","stateToken":"STATE_TOKEN","target":{"kind":"display_index","value":4},"value":"hello","imageMode":"path"}"#
+                exampleRequest: #"{"window":"WINDOW_ID","stateToken":"STATE_TOKEN","target":{"kind":"display_index","value":4},"value":"hello"}"#
             )
         case .readText:
             return usage(

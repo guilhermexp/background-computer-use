@@ -299,9 +299,8 @@ enum WindowAnnotationRenderer {
             .appending(path: "background-computer-use", directoryHint: .isDirectory)
             .appending(path: "captures", directoryHint: .isDirectory)
         do {
-            try FileManager.default.createDirectory(at: capturesDirectory, withIntermediateDirectories: true)
             let destination = capturesDirectory.appending(path: "\(windowID)-\(stateToken)-annotated.png")
-            try pngData.write(to: destination, options: .atomic)
+            try SecureFileWriter.write(pngData, to: destination)
             return ScreenshotImageDTO(
                 imagePath: destination.path,
                 imageBase64: imageMode == .base64 ? pngData.base64EncodedString() : nil,

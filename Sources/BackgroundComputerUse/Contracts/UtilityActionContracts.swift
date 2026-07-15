@@ -38,4 +38,5 @@ public struct SelectTextResponse: Encodable, Sendable {
     public let postStateToken: String?
     public let warnings: [String]
     public let notes: [String]
+    public let postScreenshot: ScreenshotDTO?
 }

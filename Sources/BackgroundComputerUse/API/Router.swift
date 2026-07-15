@@ -12,7 +12,7 @@ struct Router {
     private let sessionLimiter: RuntimeSessionLimiter
 
     init(
-        auth: RuntimeAuth = .disabled,
+        auth: RuntimeAuth,
         debugArtifactRecorder: DebugArtifactRecorder = DebugArtifactRecorder(),
         sessionLimiter: RuntimeSessionLimiter = RuntimeSessionLimiter()
     ) {
@@ -26,6 +26,9 @@ struct Router {
     }
 
     func response(for request: HTTPRequest, context: RouterContext) -> HTTPResponse {
+        guard request.path == "/health" || isLoopbackHost(request.headerValue(named: "Host")) else {
+            return invalidHostResponse()
+        }
         guard request.path == "/health" || auth.isAuthorized(request: request) else {
             return unauthorizedResponse()
         }
@@ -259,7 +262,11 @@ struct Router {
     ) -> HTTPResponse {
         let requestID = UUID().uuidString
         if let unknownFields = unknownTopLevelFields(routeID: routeID, body: request.body) {
-            let response = unknownFieldResponse(unknownFields: unknownFields, routeID: routeID)
+            let response = unknownFieldResponse(
+                unknownFields: unknownFields,
+                routeID: routeID,
+                requestID: requestID
+            )
             recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
             return response
         }
@@ -271,7 +278,8 @@ struct Router {
                     error: "rate_limited",
                     message: throttleDecision.reason ?? "Action rate limit exceeded.",
                     statusCode: 429,
-                    reasonPhrase: "Too Many Requests"
+                    reasonPhrase: "Too Many Requests",
+                    requestID: requestID
                 )
                 recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
                 return response
@@ -289,7 +297,8 @@ struct Router {
                     error: "session_busy",
                     message: sessionDecision.reason ?? "Runtime is already in use by another session.",
                     statusCode: 409,
-                    reasonPhrase: "Conflict"
+                    reasonPhrase: "Conflict",
+                    requestID: requestID
                 )
                 recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
                 return response
@@ -312,12 +321,12 @@ struct Router {
             return response
         } catch {
             if error is DecodingError {
-                let response = invalidRequestResponse(for: error, routeID: routeID)
+                let response = invalidRequestResponse(for: error, routeID: routeID, requestID: requestID)
                 recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
                 return response
             }
 
-            let response = errorResponse(for: error, routeID: routeID)
+            let response = errorResponse(for: error, routeID: routeID, requestID: requestID)
             recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
             return response
         }
@@ -327,13 +336,14 @@ struct Router {
         error: String,
         message: String,
         statusCode: Int,
-        reasonPhrase: String
+        reasonPhrase: String,
+        requestID: String
     ) -> HTTPResponse {
         .json(
             ErrorResponse(
                 error: error,
                 message: message,
-                requestID: UUID().uuidString,
+                requestID: requestID,
                 recovery: [
                     "Retry after the current action completes.",
                     "Use X-Background-Computer-Use-Session to coordinate exclusive action batches."
@@ -374,6 +384,34 @@ struct Router {
         )
     }
 
+    private func invalidHostResponse() -> HTTPResponse {
+        .json(
+            ErrorResponse(
+                error: "invalid_host",
+                message: "The Host header must name the loopback runtime (127.0.0.1 or localhost).",
+                requestID: UUID().uuidString,
+                recovery: [
+                    "Use baseURL from the runtime manifest without replacing its host.",
+                    "Send a Host header beginning with 127.0.0.1 or localhost."
+                ]
+            ),
+            statusCode: 403,
+            reasonPhrase: "Forbidden"
+        )
+    }
+
+    private func isLoopbackHost(_ host: String?) -> Bool {
+        guard let normalized = host?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() else {
+            return false
+        }
+        return normalized == "127.0.0.1"
+            || normalized.hasPrefix("127.0.0.1:")
+            || normalized == "localhost"
+            || normalized.hasPrefix("localhost:")
+    }
+
     private func includeDebugNotes<Request>(for routeID: RouteID, payload: Request) -> Bool {
         guard isActionRoute(routeID),
               let debugRequest = payload as? DebugNotesRequest else {
@@ -401,7 +439,11 @@ struct Router {
         return unknown.isEmpty ? nil : unknown
     }
 
-    private func unknownFieldResponse(unknownFields: [String], routeID: RouteID) -> HTTPResponse {
+    private func unknownFieldResponse(
+        unknownFields: [String],
+        routeID: RouteID,
+        requestID: String
+    ) -> HTTPResponse {
         let accepted = RouteRegistry.requestFieldNames(for: routeID)
         let acceptedList = accepted.isEmpty ? "(none)" : accepted.joined(separator: ", ")
         let unknownList = unknownFields.joined(separator: ", ")
@@ -409,7 +451,7 @@ struct Router {
             ErrorResponse(
                 error: "invalid_request",
                 message: "Request body for \(routeID.rawValue) included unknown field(s): \(unknownList). Accepted fields: \(acceptedList).",
-                requestID: UUID().uuidString,
+                requestID: requestID,
                 recovery: [
                     "Remove the unknown field(s) \(unknownList) or correct the spelling against the route schema.",
                     "Call GET /v1/routes and inspect route '\(routeID.rawValue)' request.fields for the accepted fields.",
@@ -421,12 +463,16 @@ struct Router {
         )
     }
 
-    private func invalidRequestResponse(for error: Error, routeID: RouteID) -> HTTPResponse {
+    private func invalidRequestResponse(
+        for error: Error,
+        routeID: RouteID,
+        requestID: String
+    ) -> HTTPResponse {
         .json(
             ErrorResponse(
                 error: "invalid_request",
                 message: invalidRequestMessage(for: error, routeID: routeID),
-                requestID: UUID().uuidString,
+                requestID: requestID,
                 recovery: [
                     "Call GET /v1/routes and inspect route '\(routeID.rawValue)' request.fields.",
                     "Include all required fields and match enum values exactly.",
@@ -468,14 +514,44 @@ struct Router {
         return path.isEmpty ? "$" : path
     }
 
-    private func errorResponse(for error: Error, routeID: RouteID) -> HTTPResponse {
+    func errorResponse(for error: Error, routeID: RouteID, requestID: String) -> HTTPResponse {
         switch error {
+        case let screenshotError as CGWindowCaptureError:
+            return .json(
+                ErrorResponse(
+                    error: "screenshot_failed",
+                    message: "Screenshot capture failed for \(routeID.rawValue): \(String(describing: screenshotError))",
+                    requestID: requestID,
+                    recovery: [
+                        "Confirm Screen Recording permission is granted to the signed BackgroundComputerUse app.",
+                        "Retry after confirming the target window is still visible and captureable."
+                    ]
+                ),
+                statusCode: 500,
+                reasonPhrase: "Internal Server Error"
+            )
+
+        case let captureError as StatePipelineExperimentError:
+            return .json(
+                ErrorResponse(
+                    error: "capture_failed",
+                    message: "State capture failed for \(routeID.rawValue): \(String(describing: captureError))",
+                    requestID: requestID,
+                    recovery: [
+                        "Retry once if the target UI was changing during capture.",
+                        "Keep this requestID and inspect debug artifacts if the failure repeats."
+                    ]
+                ),
+                statusCode: 500,
+                reasonPhrase: "Internal Server Error"
+            )
+
         case DiscoveryError.accessibilityDenied:
             return .json(
                 ErrorResponse(
                     error: "accessibility_denied",
                     message: "Accessibility permission is required for \(routeID.rawValue).",
-                    requestID: UUID().uuidString,
+                    requestID: requestID,
                     recovery: [
                         "Grant Accessibility permission to BackgroundComputerUse in System Settings > Privacy & Security > Accessibility.",
                         "Quit and relaunch the signed app bundle through script/start.sh or script/build_and_run.sh run."
@@ -490,7 +566,7 @@ struct Router {
                 ErrorResponse(
                     error: "app_not_found",
                     message: "No targetable app matched query '\(query)'.",
-                    requestID: UUID().uuidString,
+                    requestID: requestID,
                     recovery: [
                         "Call POST /v1/list_apps and retry with an exact app name or bundleID.",
                         "Confirm the app is running and has at least one targetable process."
@@ -505,7 +581,7 @@ struct Router {
                 ErrorResponse(
                     error: "window_not_found",
                     message: "No live window matched window ID '\(windowID)'.",
-                    requestID: UUID().uuidString,
+                    requestID: requestID,
                     recovery: [
                         "Call POST /v1/list_windows again and use a current windowID.",
                         "Confirm the target window has not closed, minimized, or moved to a non-targetable state."
@@ -520,7 +596,7 @@ struct Router {
                 ErrorResponse(
                     error: "invalid_request",
                     message: message,
-                    requestID: UUID().uuidString,
+                    requestID: requestID,
                     recovery: [
                         "Call GET /v1/routes and inspect route '\(routeID.rawValue)' request.fields.",
                         "Use windowTitleContains with gone=true for title disappearance waits.",
@@ -535,8 +611,8 @@ struct Router {
             return .json(
                 ErrorResponse(
                     error: "internal_error",
-                    message: "Route \(routeID.rawValue) failed.",
-                    requestID: UUID().uuidString,
+                    message: "Route \(routeID.rawValue) failed: \(String(describing: error))",
+                    requestID: requestID,
                     recovery: [
                         "Retry once if the target UI was changing.",
                         "If the route supports it, retry with debug=true and keep the requestID for logs."

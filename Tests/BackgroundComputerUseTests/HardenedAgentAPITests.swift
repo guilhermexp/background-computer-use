@@ -28,7 +28,7 @@ struct StrictRequestDecodingTests {
     @Test
     func invalidRequestsDoNotConsumeActionRateLimit() throws {
         let limiter = RuntimeSessionLimiter()
-        let router = Router(sessionLimiter: limiter)
+        let router = Router(auth: .disabled, sessionLimiter: limiter)
         limiter.configure(maxActionsPerSecond: 1)
         let request = try makeRequest(
             method: "POST",
@@ -108,13 +108,13 @@ struct StrictRequestDecodingTests {
         ]))
         #expect(Set(RouteRegistry.requestFieldNames(for: .scroll)).isSuperset(of: [
             "window", "stateToken", "target", "direction", "pages",
-            "verificationMode", "cursor", "includeMenuBar", "maxNodes", "imageMode", "debug"
+            "cursor", "includeMenuBar", "maxNodes", "debug"
         ]))
     }
 
     private func post(path: String, body: String) throws -> HTTPResponse {
         let request = try makeRequest(method: "POST", path: path, body: body)
-        return Router().response(
+        return Router(auth: .disabled).response(
             for: request,
             context: RouterContext(baseURL: nil, startedAt: nil)
         )

@@ -137,4 +137,5 @@ public struct PerformSecondaryActionResponse: Encodable, Sendable {
     public let warnings: [String]
     public let notes: [String]
     public let verification: SecondaryActionVerificationDTO?
+    public let postScreenshot: ScreenshotDTO?
 }

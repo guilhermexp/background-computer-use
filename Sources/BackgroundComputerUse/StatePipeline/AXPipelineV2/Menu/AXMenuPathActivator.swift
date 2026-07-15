@@ -146,6 +146,12 @@ struct AXMenuPathActivator {
     }
 
     private func sleepRunLoop(_ duration: TimeInterval) {
-        RunLoop.current.run(until: Date().addingTimeInterval(duration))
+        guard duration > 0 else { return }
+
+        if Thread.isMainThread {
+            RunLoop.current.run(until: Date().addingTimeInterval(duration))
+        } else {
+            Thread.sleep(forTimeInterval: duration)
+        }
     }
 }

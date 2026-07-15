@@ -109,7 +109,7 @@ struct APIDocumentationTests {
             body: "{}"
         )
 
-        let response = Router().response(
+        let response = Router(auth: .disabled).response(
             for: request,
             context: RouterContext(baseURL: nil, startedAt: nil)
         )
