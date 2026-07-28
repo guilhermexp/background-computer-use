@@ -80,6 +80,31 @@ wait_for_runtime() {
   return 1
 }
 
+stop_stale_runtime() {
+  if ! /usr/bin/pgrep -x "$APP_NAME" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  /usr/bin/pkill -TERM -x "$APP_NAME" >/dev/null 2>&1 || true
+  for _ in $(seq 1 40); do
+    if ! /usr/bin/pgrep -x "$APP_NAME" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  /usr/bin/pkill -KILL -x "$APP_NAME" >/dev/null 2>&1 || true
+  for _ in $(seq 1 10); do
+    if ! /usr/bin/pgrep -x "$APP_NAME" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  echo "Could not stop stale $APP_NAME process." >&2
+  return 1
+}
+
 start_from_source() {
   local source_dir="$1"
   if [ ! -x "$source_dir/script/start.sh" ]; then
@@ -93,8 +118,9 @@ launch_installed_app() {
   if [ ! -d "$APP_BUNDLE" ]; then
     return 1
   fi
+  stop_stale_runtime || return 1
   rm -f "$MANIFEST_PATH"
-  /usr/bin/open "$APP_BUNDLE"
+  /usr/bin/open -n "$APP_BUNDLE"
 }
 
 if current_runtime_ok; then

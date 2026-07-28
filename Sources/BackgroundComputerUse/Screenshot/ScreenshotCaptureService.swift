@@ -8,7 +8,8 @@ enum ScreenshotCaptureService {
         stateToken: String,
         imageMode: ImageMode,
         includeRawRetinaCapture: Bool = false,
-        includeCursorOverlay: Bool = true
+        includeCursorOverlay: Bool = true,
+        attachedSurfaces: [AttachedSurfaceDTO] = []
     ) -> ScreenshotDTO {
         if imageMode == .omit {
             return makeResponse(
@@ -20,11 +21,30 @@ enum ScreenshotCaptureService {
             )
         }
 
-        let rawCapture = CGWindowCaptureService.capture(windowNumber: window.windowNumber)
+        let rootFrame = CGRect(
+            x: window.frameAppKit.x,
+            y: window.frameAppKit.y,
+            width: window.frameAppKit.width,
+            height: window.frameAppKit.height
+        )
+        let attachedRecords = AttachedSurfaceCompositionPlanner.records(
+            ownerPID: window.pid,
+            rootWindowNumber: window.windowNumber,
+            rootFrame: rootFrame,
+            surfaces: attachedSurfaces,
+            inventory: CGWindowInventory.current(onScreenOnly: true)
+        )
+        let rawCapture = CGWindowCaptureService.captureComposite(
+            rootWindowNumber: window.windowNumber,
+            rootFrame: rootFrame,
+            attachedRecords: attachedRecords
+        )
         let rawImage: CGImage
+        let captureWarnings: [String]
         switch rawCapture {
         case let .success(capture):
             rawImage = capture.image
+            captureWarnings = capture.warnings
         case let .failure(error):
             let status: String
             switch error {
@@ -193,7 +213,8 @@ enum ScreenshotCaptureService {
                 rawRequested: includeRawRetinaCapture,
                 rawEncoded: rawPNGData != nil,
                 coordinateContract: coordinateContract,
-                cursorOverlayError: cursorOverlayError
+                cursorOverlayError: cursorOverlayError,
+                captureWarnings: captureWarnings
             )
         )
     }
@@ -241,9 +262,11 @@ enum ScreenshotCaptureService {
         rawRequested: Bool,
         rawEncoded: Bool,
         coordinateContract: ScreenshotCoordinateContract?,
-        cursorOverlayError: String?
+        cursorOverlayError: String?,
+        captureWarnings: [String]
     ) -> String? {
         var errors: [String] = []
+        errors.append(contentsOf: captureWarnings)
         if modelImagePath == nil {
             errors.append("Captured and normalized the image but failed to persist the model-facing PNG artifact.")
         }

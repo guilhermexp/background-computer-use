@@ -126,6 +126,73 @@ struct PressKeyParserTests {
     }
 
     @Test
+    func testNativeTabRequiresAndAcceptsObservedFocusChange() throws {
+        let service = PressKeyRouteService()
+        let parsed = try PressKeyParser.parse("Tab")
+
+        #expect(service.nativeEffectVerified(
+            dispatchSucceeded: true,
+            parsed: parsed,
+            renderedChanged: false,
+            focusedChanged: true,
+            textStateChanged: false,
+            selectionChanged: false,
+            visualChanged: false,
+            search: nil
+        ))
+        #expect(!service.nativeEffectVerified(
+            dispatchSucceeded: true,
+            parsed: parsed,
+            renderedChanged: false,
+            focusedChanged: false,
+            textStateChanged: false,
+            selectionChanged: false,
+            visualChanged: true,
+            search: nil
+        ))
+        #expect(service.nativeEffectVerified(
+            dispatchSucceeded: true,
+            parsed: parsed,
+            renderedChanged: false,
+            focusedChanged: false,
+            textStateChanged: false,
+            selectionChanged: false,
+            visualChanged: true,
+            search: nil,
+            focusedElementReadable: false
+        ))
+    }
+
+    @Test
+    func testNativeTextKeyIgnoresIncidentalRenderChangeWhenFocusedTextIsReadable() throws {
+        let service = PressKeyRouteService()
+        let parsed = try PressKeyParser.parse("a")
+
+        #expect(!service.nativeEffectVerified(
+            dispatchSucceeded: true,
+            parsed: parsed,
+            renderedChanged: true,
+            focusedChanged: true,
+            textStateChanged: false,
+            selectionChanged: false,
+            visualChanged: true,
+            search: nil,
+            focusedElementReadable: true
+        ))
+        #expect(service.nativeEffectVerified(
+            dispatchSucceeded: true,
+            parsed: parsed,
+            renderedChanged: true,
+            focusedChanged: false,
+            textStateChanged: false,
+            selectionChanged: false,
+            visualChanged: false,
+            search: nil,
+            focusedElementReadable: false
+        ))
+    }
+
+    @Test
     func testWindowServerPreparationRequiresSuccessfulTargetFocusAndKeyWindowRecordsForKeys() {
         let preparedForClick = NativeWindowServerPreparationResult(
             psnStatus: 0,

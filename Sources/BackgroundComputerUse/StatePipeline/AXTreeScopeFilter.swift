@@ -7,6 +7,12 @@ struct AXTreeScopeFilter {
     }
 
     static func filter(_ tree: AXPipelineV2TreeDTO, target: ActionTargetRequestDTO) -> Result? {
+        if target.kind == .ocrAnchor {
+            return Result(
+                tree: tree,
+                note: "scopeTarget ocr_anchor is unsupported for structural AX scoping; returning the full tree."
+            )
+        }
         guard let root = node(in: tree, matching: target) else {
             return nil
         }
@@ -49,6 +55,8 @@ struct AXTreeScopeFilter {
             return tree.nodes.first { $0.nodeID == target.value }
         case .refetchFingerprint:
             return tree.nodes.first { $0.refetchFingerprint == target.value }
+        case .ocrAnchor:
+            return nil
         }
     }
 

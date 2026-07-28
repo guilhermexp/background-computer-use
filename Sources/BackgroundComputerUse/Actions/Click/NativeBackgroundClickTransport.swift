@@ -115,7 +115,10 @@ final class NativeBackgroundClickTransport {
 
     private func makeEventSequence(request: NativeBackgroundClickDispatchRequest) -> [CGEvent] {
         var events: [CGEvent] = []
-        let targetWindowLocal = windowLocalTopLeft(point: request.eventTapPointTopLeft, target: request.target)
+        let targetWindowLocal = Self.windowLocalAppKit(
+            point: request.appKitPoint,
+            windowFrameAppKit: request.target.frameAppKit
+        )
 
         appendEvent(
             type: .mouseMoved,
@@ -246,15 +249,13 @@ final class NativeBackgroundClickTransport {
         }
     }
 
-    private func windowLocalTopLeft(point: CGPoint, target: RoutedClickTarget) -> CGPoint {
-        if let bounds = target.cgBoundsTopLeft {
-            return CGPoint(x: point.x - bounds.minX, y: point.y - bounds.minY)
-        }
-        return CGPoint(
-            x: point.x - target.frameAppKit.minX,
-            y: point.y - (DesktopGeometry.desktopTop() - target.frameAppKit.maxY)
+    static func windowLocalAppKit(point: CGPoint, windowFrameAppKit: CGRect) -> CGPoint {
+        CGPoint(
+            x: point.x - windowFrameAppKit.minX,
+            y: point.y - windowFrameAppKit.minY
         )
     }
+
 }
 
 struct NativeWindowServerRouting {
@@ -265,6 +266,7 @@ struct NativeWindowServerRouting {
     let cgBoundsTopLeft: CGRect?
     let notes: [String]
 }
+
 
 struct NativeWindowServerRoutingResolver {
     func resolve(windowNumber: Int) throws -> NativeWindowServerRouting {

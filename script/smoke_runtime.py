@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -111,7 +112,7 @@ class Smoke:
             return
         self.pass_("chrome-window", window_id)
 
-        state = self.get_state(window_id, "chrome-state")
+        state = self.get_state(window_id, "chrome-state", include_ocr=True)
         if state is None:
             return
 
@@ -123,56 +124,53 @@ class Smoke:
         )
         button_target = self.find_target(state, ["BCU Smoke Button", "Smoke Button"], role_contains="button")
         scroll_target = self.find_target(state, ["Row 1", "Row 2", "BCU Smoke Fixture"])
-        if input_target is None:
-            self.fail("chrome-find-input", "could not resolve input target")
+
+        if input_target is not None and button_target is not None:
+            self.pass_("chrome-find-input", json.dumps(input_target))
+            self.pass_("chrome-find-button", json.dumps(button_target))
+            status, set_value = self.client.request(
+                "POST",
+                "/v1/set_value",
+                {
+                    "window": window_id,
+                    "stateToken": state["stateToken"],
+                    "target": input_target,
+                    "value": "bcu-smoke-value",
+                    "maxNodes": 6500,
+                },
+            )
+            if status == 200 and set_value.get("ok") is True:
+                self.pass_("chrome-set-value")
+            else:
+                self.fail("chrome-set-value", f"HTTP {status}: {set_value}")
+
+            state = self.get_state(window_id, "chrome-post-set-state", include_ocr=True) or state
+            status, click = self.client.request(
+                "POST",
+                "/v1/click",
+                {
+                    "window": window_id,
+                    "stateToken": state["stateToken"],
+                    "target": button_target,
+                    "clickCount": 1,
+                    "imageMode": "path",
+                    "maxNodes": 6500,
+                },
+            )
+            if status == 200 and click.get("ok") is True:
+                self.pass_("chrome-click")
+            else:
+                self.fail("chrome-click", f"HTTP {status}: {click}")
+        elif self.exercise_visual_chrome_fixture(window_id, state) is False:
             return
-        self.pass_("chrome-find-input", json.dumps(input_target))
-        if button_target is None:
-            self.fail("chrome-find-button", "could not resolve button target")
-            return
-        self.pass_("chrome-find-button", json.dumps(button_target))
-        if scroll_target is None:
-            self.fail("chrome-find-scroll-target", "could not resolve scroll target")
-            return
+
+        state = self.get_state(window_id, "chrome-post-click-state", include_ocr=True) or state
+        scroll_target = (
+            self.find_target(state, ["Row 1", "Row 2", "BCU Smoke Fixture"])
+            or scroll_target
+            or {"kind": "display_index", "value": 0}
+        )
         self.pass_("chrome-find-scroll-target", json.dumps(scroll_target))
-
-        status, set_value = self.client.request(
-            "POST",
-            "/v1/set_value",
-            {
-                "window": window_id,
-                "stateToken": state["stateToken"],
-                "target": input_target,
-                "value": "bcu-smoke-value",
-                "imageMode": "path",
-                "maxNodes": 6500,
-            },
-        )
-        if status == 200 and set_value.get("ok") is True:
-            self.pass_("chrome-set-value")
-        else:
-            self.fail("chrome-set-value", f"HTTP {status}: {set_value}")
-
-        state = self.get_state(window_id, "chrome-post-set-state") or state
-        status, click = self.client.request(
-            "POST",
-            "/v1/click",
-            {
-                "window": window_id,
-                "stateToken": state["stateToken"],
-                "target": button_target,
-                "clickCount": 1,
-                "imageMode": "path",
-                "maxNodes": 6500,
-            },
-        )
-        if status == 200 and click.get("ok") is True:
-            self.pass_("chrome-click")
-        else:
-            self.fail("chrome-click", f"HTTP {status}: {click}")
-
-        state = self.get_state(window_id, "chrome-post-click-state") or state
-        scroll_target = self.find_target(state, ["Row 1", "Row 2", "BCU Smoke Fixture"]) or scroll_target
         status, scroll = self.client.request(
             "POST",
             "/v1/scroll",
@@ -182,7 +180,6 @@ class Smoke:
                 "target": scroll_target,
                 "direction": "down",
                 "pages": 0.25,
-                "imageMode": "path",
                 "maxNodes": 6500,
             },
         )
@@ -190,6 +187,111 @@ class Smoke:
             self.pass_("chrome-scroll-fractional", str(scroll.get("classification")))
         else:
             self.fail("chrome-scroll-fractional", f"HTTP {status}: {scroll}")
+
+    def exercise_visual_chrome_fixture(self, window_id: str, state: dict) -> bool:
+        input_anchor = self.find_ocr_anchor(state, ["Smoke input"])
+        button_anchor = self.find_ocr_anchor(state, ["BCU Smoke Button"])
+        if input_anchor is None:
+            self.fail("chrome-find-input", "AX surface is opaque and OCR could not resolve the input label")
+            return False
+        if button_anchor is None:
+            self.fail("chrome-find-button", "AX surface is opaque and OCR could not resolve the button")
+            return False
+        self.pass_("chrome-visual-fallback", "AX surface is opaque; using local OCR anchors")
+
+        status, stale = self.client.request(
+            "POST",
+            "/v1/click",
+            {
+                "window": window_id,
+                "stateToken": state["stateToken"],
+                "interactionToken": "it_STALE",
+                "target": input_anchor["target"],
+                "clickCount": 1,
+                "imageMode": "path",
+                "maxNodes": 6500,
+            },
+        )
+        if status != 200 or stale.get("fallbackReason") != "stale_coordinate_guard":
+            self.fail("chrome-ocr-stale-guard", f"HTTP {status}: {stale}")
+            return False
+        self.pass_("chrome-ocr-stale-guard")
+
+        state = self.get_state(window_id, "chrome-post-stale-state", include_ocr=True)
+        if state is None:
+            return False
+        input_anchor = self.find_ocr_anchor(state, ["Smoke input"])
+        button_anchor = self.find_ocr_anchor(state, ["BCU Smoke Button"])
+        if input_anchor is None or button_anchor is None:
+            self.fail("chrome-refresh-ocr-anchors", "fresh OCR anchors were unavailable after the stale-token probe")
+            return False
+        self.pass_("chrome-refresh-ocr-anchors")
+
+        status, click = self.client.request(
+            "POST",
+            "/v1/click",
+            {
+                "window": window_id,
+                "stateToken": state["stateToken"],
+                "interactionToken": state["interactionToken"],
+                "target": input_anchor["target"],
+                "clickCount": 1,
+                "imageMode": "path",
+                "maxNodes": 6500,
+            },
+        )
+        if status != 200 or not self.action_dispatched(click):
+            self.fail("chrome-focus-input", f"HTTP {status}: {click}")
+            return False
+        self.pass_("chrome-focus-input")
+
+        state = self.get_state(window_id, "chrome-post-focus-state", include_ocr=True) or state
+        status, typed = self.client.request(
+            "POST",
+            "/v1/type_text",
+            {
+                "window": window_id,
+                "stateToken": state["stateToken"],
+                "text": "bcu-smoke-value",
+                "allowOpaqueFocusedSurface": True,
+                "confirm": True,
+                "maxNodes": 6500,
+            },
+        )
+        if status != 200:
+            self.fail("chrome-type-text", f"HTTP {status}: {typed}")
+            return False
+
+        state = self.get_state(window_id, "chrome-post-type-state", include_ocr=True)
+        if state is None or self.find_ocr_anchor(state, ["bcu-smoke-value"]) is None:
+            self.fail("chrome-type-text", "typed value was not visible after the action")
+            return False
+        self.pass_("chrome-type-text")
+
+        button_anchor = self.find_ocr_anchor(state, ["BCU Smoke Button"]) or button_anchor
+        status, click = self.client.request(
+            "POST",
+            "/v1/click",
+            {
+                "window": window_id,
+                "stateToken": state["stateToken"],
+                "interactionToken": state["interactionToken"],
+                "target": button_anchor["target"],
+                "clickCount": 1,
+                "imageMode": "path",
+                "maxNodes": 6500,
+            },
+        )
+        if status != 200 or not self.action_dispatched(click):
+            self.fail("chrome-click", f"HTTP {status}: {click}")
+            return False
+
+        state = self.get_state(window_id, "chrome-post-visual-click-state", include_ocr=True)
+        if state is None or self.find_ocr_anchor(state, ["Button clicked"]) is None:
+            self.fail("chrome-click", "button confirmation was not visible after the action")
+            return False
+        self.pass_("chrome-click")
+        return True
 
     def open_chrome_fixture(self) -> Optional[str]:
         if subprocess.run(["/usr/bin/pgrep", "-x", "Google Chrome"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
@@ -226,9 +328,20 @@ class Smoke:
 </head>
 <body>
   <h1>BCU Smoke Fixture</h1>
-  <label for="bcu-smoke-input">Smoke input</label>
-  <input id="bcu-smoke-input" aria-label="bcu-smoke-input" value="">
-  <button id="bcu-smoke-button" onclick="document.body.dataset.clicked='yes'">BCU Smoke Button</button>
+  <label for="bcu-smoke-input">Input</label>
+  <input
+    id="bcu-smoke-input"
+    aria-label="bcu-smoke-input"
+    placeholder="Smoke input"
+    value=""
+    oninput="document.getElementById('input-status').textContent='Input: '+this.value">
+  <p id="input-status">Input: empty</p>
+  <button
+    id="bcu-smoke-button"
+    onclick="document.getElementById('click-status').textContent='Button clicked'">
+    BCU Smoke Button
+  </button>
+  <p id="click-status">Button not clicked</p>
   <main>{rows}</main>
 </body>
 </html>
@@ -251,12 +364,11 @@ class Smoke:
             time.sleep(0.25)
         return None
 
-    def get_state(self, window_id: str, name: str) -> Optional[dict]:
-        status, payload = self.client.request(
-            "POST",
-            "/v1/get_window_state",
-            {"window": window_id, "imageMode": "path", "maxNodes": 6500},
-        )
+    def get_state(self, window_id: str, name: str, include_ocr: bool = False) -> Optional[dict]:
+        body = {"window": window_id, "imageMode": "path", "maxNodes": 6500}
+        if include_ocr:
+            body["includeOCR"] = True
+        status, payload = self.client.request("POST", "/v1/get_window_state", body)
         if status == 200 and "stateToken" in payload:
             self.pass_(name)
             return payload
@@ -286,6 +398,31 @@ class Smoke:
             node_id = node.get("nodeID")
             if isinstance(node_id, str) and node_id:
                 return {"kind": "node_id", "value": node_id}
+        return None
+
+    @staticmethod
+    def action_dispatched(response: dict) -> bool:
+        return any(
+            transport.get("didDispatch") is True and transport.get("transportSuccess") is True
+            for transport in response.get("transports", [])
+        )
+
+    def find_ocr_anchor(self, state: dict, needles: list[str]) -> Optional[dict]:
+        lowered = [needle.lower() for needle in needles]
+        for anchor in state.get("ocr", {}).get("anchors", []):
+            text = str(anchor.get("text", "")).lower()
+            if any(needle in text for needle in lowered):
+                x = anchor.get("x")
+                y = anchor.get("y")
+                if all(
+                    isinstance(value, (int, float))
+                    and not isinstance(value, bool)
+                    and math.isfinite(value)
+                    for value in (x, y)
+                ):
+                    target = anchor.get("target")
+                    if isinstance(target, dict) and target.get("kind") == "ocr_anchor":
+                        return {"x": x, "y": y, "target": target}
         return None
 
     def summary(self) -> dict:

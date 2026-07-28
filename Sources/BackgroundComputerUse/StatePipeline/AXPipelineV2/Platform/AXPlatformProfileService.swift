@@ -35,7 +35,7 @@ struct AXPlatformProfileService {
         let enhancedAttempt = enablementAttempt(
             attribute: Self.enhancedUserInterfaceAttribute,
             mode: "enhancedUserInterface",
-            shouldAttempt: shouldTryEnhancedUI,
+            shouldAttempt: shouldTryEnhancedUI || isChromiumLike,
             appElement: appElement,
             note: "Best-effort richer AppKit/Catalyst accessibility surface."
         )

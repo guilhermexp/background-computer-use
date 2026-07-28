@@ -394,7 +394,10 @@ struct PressKeyRouteService {
         let liveTextElement = focusedLiveTextElement(in: capture)
         let beforeTextState = liveTextElement.map { AXActionRuntimeSupport.readTextState($0.element) }
         let beforeWindowImage = shouldCaptureVisualEvidence(for: parsed)
-            ? CGWindowCaptureService.captureImage(window: capture.envelope.response.window)
+            ? CGWindowCaptureService.captureImage(
+                window: capture.envelope.response.window,
+                attachedSurfaces: capture.envelope.response.attachedSurfaces
+            )
             : nil
         let beforeFrontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let preparation = NativeWindowServerPreparation.targetOnlyFocusAndKeyWindow(
@@ -464,7 +467,12 @@ struct PressKeyRouteService {
             }
         }
         var selectionChanged = postCapture.map { selectionSummaryChanged(before: capture, after: $0) }
-        var afterWindowImage = beforeWindowImage == nil ? nil : CGWindowCaptureService.captureImage(window: postCapture?.envelope.response.window ?? capture.envelope.response.window)
+        var afterWindowImage = beforeWindowImage == nil
+            ? nil
+            : CGWindowCaptureService.captureImage(
+                window: postCapture?.envelope.response.window ?? capture.envelope.response.window,
+                attachedSurfaces: postCapture?.envelope.response.attachedSurfaces ?? capture.envelope.response.attachedSurfaces
+            )
         var visualChangeRatio = sampledDifferenceRatio(lhs: beforeWindowImage, rhs: afterWindowImage)
         var visualChanged = visualChangeRatio.map { $0 >= 0.018 }
         var searchEvidence = parsed.intent == .openFindOrSearch
@@ -486,7 +494,8 @@ struct PressKeyRouteService {
             textStateChanged: nativeTextStateChanged,
             selectionChanged: selectionChanged,
             visualChanged: visualChanged,
-            search: searchEvidence
+            search: searchEvidence,
+            focusedElementReadable: beforeTextState != nil
         )
         if verifiedEffect == false, parsed.key == "escape" {
             sleepRunLoop(0.25)
@@ -494,7 +503,12 @@ struct PressKeyRouteService {
             renderedChanged = postCapture.map { renderedTextChanged(before: capture, after: $0) }
             focusChanged = postCapture.map { focusedElementChanged(before: capture, after: $0) }
             selectionChanged = postCapture.map { selectionSummaryChanged(before: capture, after: $0) }
-            afterWindowImage = beforeWindowImage == nil ? nil : CGWindowCaptureService.captureImage(window: postCapture?.envelope.response.window ?? capture.envelope.response.window)
+            afterWindowImage = beforeWindowImage == nil
+                ? nil
+                : CGWindowCaptureService.captureImage(
+                    window: postCapture?.envelope.response.window ?? capture.envelope.response.window,
+                    attachedSurfaces: postCapture?.envelope.response.attachedSurfaces ?? capture.envelope.response.attachedSurfaces
+                )
             visualChangeRatio = sampledDifferenceRatio(lhs: beforeWindowImage, rhs: afterWindowImage)
             visualChanged = visualChangeRatio.map { $0 >= 0.018 }
             searchEvidence = parsed.intent == .openFindOrSearch
@@ -516,24 +530,32 @@ struct PressKeyRouteService {
                 textStateChanged: nativeTextStateChanged,
                 selectionChanged: selectionChanged,
                 visualChanged: visualChanged,
-                search: searchEvidence
+                search: searchEvidence,
+                focusedElementReadable: beforeTextState != nil
             )
             if verifiedEffect {
                 notes.append("Escape verification succeeded after a delayed reread for menu/popover dismissal.")
             }
         }
         if verifiedEffect == false {
-            let prepareSurfaceNote = "The key was delivered to the target app/window, but no visible effect was verified. Some custom, browser, or Electron surfaces require a prior safe click/focus inside the content area before shortcuts are accepted; try a safe click in the target content surface, then retry press_key."
+            let diagnostic = capture.envelope.response.tree.profile == AXProjectionProfile.richWeb.rawValue
+                ? "opaque_renderer_focus_unconfirmed"
+                : "native_key_effect_unconfirmed"
+            let prepareSurfaceNote = dispatchSucceeded
+                ? "\(diagnostic): the key was delivered to the target app/window, but no visible effect was verified. Custom, browser, or Electron surfaces may require a prior verified click/focus inside the content area."
+                : "\(diagnostic): native key delivery did not report successful dispatch to the target app/window."
             warnings.append(prepareSurfaceNote)
             notes.append(prepareSurfaceNote)
         }
 
         return response(
             classification: verifiedEffect ? .success : .effectNotVerified,
-            failureDomain: verifiedEffect ? nil : .verification,
+            failureDomain: verifiedEffect ? nil : (dispatchSucceeded ? .verification : .transport),
             summary: verifiedEffect
                 ? "Native key delivery produced a route-specific verified effect in the target window."
-                : "Native key delivery was attempted, but no route-specific target-window effect was verified.",
+                : dispatchSucceeded
+                    ? "Native key delivery was attempted, but no route-specific target-window effect was verified."
+                    : "Native key delivery did not report successful dispatch to the target window.",
             window: postCapture?.envelope.response.window ?? capture.envelope.response.window,
             parsedKey: parsed.dto,
             action: PressKeyActionDTO(
@@ -1341,7 +1363,8 @@ extension PressKeyRouteService {
         textStateChanged: Bool?,
         selectionChanged: Bool?,
         visualChanged: Bool?,
-        search: PressKeySearchVerificationDTO?
+        search: PressKeySearchVerificationDTO?,
+        focusedElementReadable: Bool = true
     ) -> Bool {
         guard dispatchSucceeded else {
             return false
@@ -1356,8 +1379,22 @@ extension PressKeyRouteService {
             return textStateChanged == true || selectionChanged == true
         }
 
+        if parsed.key == "tab" {
+            if textStateChanged == true ||
+                selectionChanged == true ||
+                focusedChanged == true {
+                return true
+            }
+            return focusedElementReadable == false &&
+                (renderedChanged == true || visualChanged == true)
+        }
+
         if isTextEditingOrNavigationKey(parsed) {
-            return textStateChanged == true || selectionChanged == true || renderedChanged == true
+            if textStateChanged == true || selectionChanged == true {
+                return true
+            }
+            guard focusedElementReadable == false else { return false }
+            return renderedChanged == true || focusedChanged == true
         }
 
         if isCommandChord(parsed) {

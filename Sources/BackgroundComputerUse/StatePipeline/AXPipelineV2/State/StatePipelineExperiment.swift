@@ -87,6 +87,7 @@ struct StatePipelineExperiment {
     private let semanticEnricher = AXSemanticEnricher()
     private let projectedTreeBuilder = AXProjectedTreeBuilder()
     private let menuLiveCaptureService = AXMenuLiveCaptureService()
+    private let attachedSurfaceDiscovery = AXAttachedSurfaceDiscovery()
 
     init() {}
 
@@ -111,10 +112,14 @@ struct StatePipelineExperiment {
                 menuPathComponents: options.menuPathComponents
             )
         )
+        let attachedSurfaceRecords = attachedSurfaceDiscovery.records(
+            for: resolved.window.element,
+            ownerPID: resolved.app.processIdentifier
+        )
 
         let focusedElement = AXHelpers.elementAttribute(resolved.appElement, attribute: kAXFocusedUIElementAttribute as CFString)
         let liveCapture = rawCaptureService.capture(
-            roots: menuContext.roots,
+            roots: menuContext.roots + attachedSurfaceRecords.map(\.element),
             focusedElement: focusedElement,
             maxNodes: options.maxNodes,
             webTraversal: options.webTraversal
@@ -133,6 +138,8 @@ struct StatePipelineExperiment {
             semanticTree: semanticTree,
             policy: projectionPolicy
         )
+        let surfaceTree = makeSurfaceTreeDTO(projectedTree: projectedTree, rawCapture: rawCapture)
+        let attachedSurfaces = attachedSurfaceRecords.map(\.dto)
 
         let generatedAt = Date()
         let windowID = WindowID.make(
@@ -147,6 +154,14 @@ struct StatePipelineExperiment {
             frame: resolved.window.frameAppKit,
             projectedTree: projectedTree,
             selectionSummary: rawCapture.focusSelection,
+            pixelWidth: nil,
+            pixelHeight: nil
+        )
+        let interactionToken = InteractionToken.make(
+            windowID: windowID,
+            title: resolved.window.title,
+            frame: resolved.window.frameAppKit,
+            tree: surfaceTree,
             pixelWidth: nil,
             pixelHeight: nil
         )
@@ -177,7 +192,8 @@ struct StatePipelineExperiment {
             window: window,
             stateToken: stateToken,
             imageMode: options.imageMode,
-            includeCursorOverlay: options.includeCursorOverlay
+            includeCursorOverlay: options.includeCursorOverlay,
+            attachedSurfaces: attachedSurfaces
         )
 
         let focusedProjectedNode = projectedTree.focusedProjectedIndex.flatMap { projectedTree.nodes[safe: $0] }
@@ -197,13 +213,14 @@ struct StatePipelineExperiment {
             platformProfile: platformProfile,
             menuContext: menuContext
         )
-        let surfaceTree = makeSurfaceTreeDTO(projectedTree: projectedTree, rawCapture: rawCapture)
         let clickReadiness = AXClickReadinessSupport.metrics(for: surfaceTree.nodes)
 
         let response = AXPipelineV2Response(
             contractVersion: StatePipelineContractVersion.current,
             stateToken: stateToken,
+            interactionToken: interactionToken,
             window: window,
+            attachedSurfaces: attachedSurfaces,
             screenshot: screenshot,
             tree: surfaceTree,
             menuPresentation: menuContext.menuPresentation,
@@ -286,10 +303,14 @@ struct StatePipelineExperiment {
                 menuPathComponents: menuPathComponents
             )
         )
+        let attachedSurfaceRecords = attachedSurfaceDiscovery.records(
+            for: resolved.window.element,
+            ownerPID: resolved.app.processIdentifier
+        )
 
         let focusedElement = AXHelpers.elementAttribute(resolved.appElement, attribute: kAXFocusedUIElementAttribute as CFString)
         let liveCapture = rawCaptureService.capture(
-            roots: menuContext.roots,
+            roots: menuContext.roots + attachedSurfaceRecords.map(\.element),
             focusedElement: focusedElement,
             maxNodes: maxNodes,
             webTraversal: webTraversal
@@ -308,6 +329,8 @@ struct StatePipelineExperiment {
             semanticTree: semanticTree,
             policy: projectionPolicy
         )
+        let surfaceTree = makeSurfaceTreeDTO(projectedTree: projectedTree, rawCapture: rawCapture)
+        let attachedSurfaces = attachedSurfaceRecords.map(\.dto)
 
         let generatedAt = Date()
         let windowID = resolved.windowID
@@ -317,6 +340,14 @@ struct StatePipelineExperiment {
             frame: resolved.window.frameAppKit,
             projectedTree: projectedTree,
             selectionSummary: rawCapture.focusSelection,
+            pixelWidth: nil,
+            pixelHeight: nil
+        )
+        let interactionToken = InteractionToken.make(
+            windowID: windowID,
+            title: resolved.window.title,
+            frame: resolved.window.frameAppKit,
+            tree: surfaceTree,
             pixelWidth: nil,
             pixelHeight: nil
         )
@@ -347,7 +378,8 @@ struct StatePipelineExperiment {
             window: window,
             stateToken: stateToken,
             imageMode: imageMode,
-            includeCursorOverlay: includeCursorOverlay
+            includeCursorOverlay: includeCursorOverlay,
+            attachedSurfaces: attachedSurfaces
         )
 
         let focusedProjectedNode = projectedTree.focusedProjectedIndex.flatMap { projectedTree.nodes[safe: $0] }
@@ -379,13 +411,14 @@ struct StatePipelineExperiment {
             platformProfile: platformProfile,
             menuContext: menuContext
         )
-        let surfaceTree = makeSurfaceTreeDTO(projectedTree: projectedTree, rawCapture: rawCapture)
         let clickReadiness = AXClickReadinessSupport.metrics(for: surfaceTree.nodes)
 
         let response = AXPipelineV2Response(
             contractVersion: StatePipelineContractVersion.current,
             stateToken: stateToken,
+            interactionToken: interactionToken,
             window: window,
+            attachedSurfaces: attachedSurfaces,
             screenshot: screenshot,
             tree: surfaceTree,
             menuPresentation: menuContext.menuPresentation,
@@ -456,6 +489,10 @@ struct StatePipelineExperiment {
                 activeMenuTopLevelTitle: replayPreparation.menuPresentation?.activeTopLevelTitle
             )
         )
+        let surfaceTree = makeSurfaceTreeDTO(
+            projectedTree: projectedTree,
+            rawCapture: replayPreparation.rawCapture
+        )
         let stateToken = StateToken.make(
             windowID: fixture.window.windowID,
             title: fixture.window.title,
@@ -470,6 +507,19 @@ struct StatePipelineExperiment {
             pixelWidth: nil,
             pixelHeight: nil
         )
+        let interactionToken = InteractionToken.make(
+            windowID: fixture.window.windowID,
+            title: fixture.window.title,
+            frame: CGRect(
+                x: fixture.window.frameAppKit.x,
+                y: fixture.window.frameAppKit.y,
+                width: fixture.window.frameAppKit.width,
+                height: fixture.window.frameAppKit.height
+            ),
+            tree: surfaceTree,
+            pixelWidth: nil,
+            pixelHeight: nil
+        )
         let screenshot = ScreenshotDTO(
             status: "fixture_replay",
             image: nil,
@@ -479,13 +529,14 @@ struct StatePipelineExperiment {
         )
         let focusedProjectedNode = projectedTree.focusedProjectedIndex.flatMap { projectedTree.nodes[safe: $0] }
 
-        let surfaceTree = makeSurfaceTreeDTO(projectedTree: projectedTree, rawCapture: replayPreparation.rawCapture)
         let clickReadiness = AXClickReadinessSupport.metrics(for: surfaceTree.nodes)
 
         let response = AXPipelineV2Response(
             contractVersion: StatePipelineContractVersion.current,
             stateToken: stateToken,
+            interactionToken: interactionToken,
             window: fixture.window,
+            attachedSurfaces: [],
             screenshot: screenshot,
             tree: surfaceTree,
             menuPresentation: replayPreparation.menuPresentation,

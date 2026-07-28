@@ -3,12 +3,24 @@ import Foundation
 import Vision
 
 enum OCRRecognitionService {
-    static func recognize(imagePath: String) -> OCRAnchorSummaryDTO? {
+    static func recognize(
+        imagePath: String,
+        interactionToken: String = "legacy"
+    ) -> OCRAnchorSummaryDTO {
         guard let image = NSImage(contentsOfFile: imagePath),
               let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            return nil
+            return OCRAnchorSummaryBuilder.failure(
+                status: .imageUnavailable,
+                diagnostic: "OCR could not read the captured screenshot image."
+            )
         }
+        return recognize(cgImage: cgImage, interactionToken: interactionToken)
+    }
 
+    static func recognize(
+        cgImage: CGImage,
+        interactionToken: String
+    ) -> OCRAnchorSummaryDTO {
         let request = VNRecognizeTextRequest()
         request.recognitionLevel = .accurate
         request.usesLanguageCorrection = false
@@ -17,7 +29,10 @@ enum OCRRecognitionService {
         do {
             try handler.perform([request])
         } catch {
-            return nil
+            return OCRAnchorSummaryBuilder.failure(
+                status: .recognitionFailed,
+                diagnostic: "Apple Vision text recognition failed."
+            )
         }
 
         let width = Double(cgImage.width)
@@ -39,6 +54,6 @@ enum OCRRecognitionService {
             )
         }
 
-        return OCRAnchorSummaryBuilder.summary(lines: lines)
+        return OCRAnchorSummaryBuilder.summary(lines: lines, interactionToken: interactionToken)
     }
 }

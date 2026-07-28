@@ -39,6 +39,15 @@ struct TypeTextRouteService {
         }
 
         guard let candidate else {
+            if request.target == nil, request.allowOpaqueFocusedSurface == true {
+                return typeTextOnOpaqueFocusedSurface(
+                    request: request,
+                    capture: capture,
+                    focusAssistMode: focusAssistMode,
+                    warnings: warnings,
+                    notes: notes
+                )
+            }
             let summary = request.target.map {
                 targetResolver.targetResolutionFailureDescription(for: $0, in: capture)
             } ?? "No focused text-entry target was available for type_text."
@@ -315,6 +324,188 @@ struct TypeTextRouteService {
     private struct TextDispatchResult {
         let succeeded: Bool
         let primitive: String
+    }
+
+    private func typeTextOnOpaqueFocusedSurface(
+        request: TypeTextRequest,
+        capture: AXActionStateCapture,
+        focusAssistMode: TypeTextFocusAssistModeDTO,
+        warnings: [String],
+        notes: [String]
+    ) -> TypeTextResponse {
+        var warnings = warnings
+        var notes = notes
+        let cursor = AXCursorTargeting.notAttempted(
+            requested: request.cursor,
+            reason: "Cursor movement was not attempted because the AX-opaque focused surface has no semantic target.",
+            options: executionOptions
+        )
+        guard request.confirm == true else {
+            return response(
+                classification: .unsupported,
+                failureDomain: .unsupported,
+                summary: "Opaque focused-surface typing requires confirm=true because secure-field detection is unavailable.",
+                window: capture.envelope.response.window,
+                target: nil,
+                text: request.text,
+                focusAssistMode: focusAssistMode,
+                dispatchPrimitive: nil,
+                dispatchSucceeded: nil,
+                semanticAppropriate: nil,
+                semanticReasons: [],
+                liveElementResolution: nil,
+                preStateToken: capture.envelope.response.stateToken,
+                postStateToken: nil,
+                cursor: cursor,
+                warnings: warnings,
+                notes: notes,
+                verification: nil
+            )
+        }
+
+        let preDispatchCapture: AXActionStateCapture
+        do {
+            preDispatchCapture = try targetResolver.capture(
+                windowID: request.window,
+                includeMenuBar: request.includeMenuBar ?? true,
+                maxNodes: request.maxNodes ?? 6500
+            )
+        } catch {
+            return response(
+                classification: .effectNotVerified,
+                failureDomain: .targeting,
+                summary: "Opaque focused-surface typing was not attempted because the requested window could not be recaptured: \(error)",
+                window: capture.envelope.response.window,
+                target: nil,
+                text: request.text,
+                focusAssistMode: focusAssistMode,
+                dispatchPrimitive: nil,
+                dispatchSucceeded: false,
+                semanticAppropriate: nil,
+                semanticReasons: [],
+                liveElementResolution: nil,
+                preStateToken: capture.envelope.response.stateToken,
+                postStateToken: nil,
+                cursor: cursor,
+                warnings: warnings,
+                notes: notes,
+                verification: nil
+            )
+        }
+
+        let initialWindow = capture.envelope.response.window
+        let dispatchWindow = preDispatchCapture.envelope.response.window
+        guard dispatchWindow.pid == initialWindow.pid,
+              dispatchWindow.windowNumber == initialWindow.windowNumber else {
+            return response(
+                classification: .effectNotVerified,
+                failureDomain: .targeting,
+                summary: "Opaque focused-surface typing was not attempted because the requested window identity changed before dispatch.",
+                window: dispatchWindow,
+                target: nil,
+                text: request.text,
+                focusAssistMode: focusAssistMode,
+                dispatchPrimitive: nil,
+                dispatchSucceeded: false,
+                semanticAppropriate: nil,
+                semanticReasons: [],
+                liveElementResolution: nil,
+                preStateToken: preDispatchCapture.envelope.response.stateToken,
+                postStateToken: nil,
+                cursor: cursor,
+                warnings: warnings,
+                notes: notes,
+                verification: nil
+            )
+        }
+
+        let preparation = NativeWindowServerPreparation.targetOnlyFocusAndKeyWindow(
+            pid: dispatchWindow.pid,
+            windowNumber: dispatchWindow.windowNumber
+        )
+        notes.append(contentsOf: preparation.notes)
+        warnings.append(contentsOf: preparation.warnings)
+        guard preparation.preparedTargetWindow(requireKeyWindowRecords: true) else {
+            let preflightFailure = "PID-scoped Unicode posting was not attempted because WindowServer could not establish the requested AX-opaque window as the key input recipient."
+            warnings.append(preflightFailure)
+            notes.append(preflightFailure)
+            return response(
+                classification: .effectNotVerified,
+                failureDomain: .transport,
+                summary: "Opaque focused-surface typing failed closed during target-window preflight.",
+                window: dispatchWindow,
+                target: nil,
+                text: request.text,
+                focusAssistMode: focusAssistMode,
+                dispatchPrimitive: nil,
+                dispatchSucceeded: false,
+                semanticAppropriate: nil,
+                semanticReasons: [],
+                liveElementResolution: nil,
+                preStateToken: preDispatchCapture.envelope.response.stateToken,
+                postStateToken: nil,
+                cursor: cursor,
+                warnings: warnings,
+                notes: notes,
+                verification: nil
+            )
+        }
+
+        let dispatched = AXActionRuntimeSupport.postUnicodeText(request.text, to: dispatchWindow.pid)
+        guard dispatched else {
+            return response(
+                classification: .effectNotVerified,
+                failureDomain: .transport,
+                summary: "PID-scoped Unicode posting failed for the AX-opaque focused surface.",
+                window: dispatchWindow,
+                target: nil,
+                text: request.text,
+                focusAssistMode: focusAssistMode,
+                dispatchPrimitive: dispatchPrimitive,
+                dispatchSucceeded: false,
+                semanticAppropriate: nil,
+                semanticReasons: [],
+                liveElementResolution: nil,
+                preStateToken: preDispatchCapture.envelope.response.stateToken,
+                postStateToken: nil,
+                cursor: cursor,
+                warnings: warnings,
+                notes: notes,
+                verification: nil
+            )
+        }
+
+        sleepRunLoop(settleDelay)
+        let postCapture: AXActionStateCapture?
+        do {
+            postCapture = try targetResolver.reread(after: preDispatchCapture)
+        } catch {
+            postCapture = nil
+            notes.append("Post-type reread failed: \(error).")
+        }
+        notes.append(
+            "Explicit opaque focused-surface fallback posted Unicode after successful target-window preflight; call get_window_state with imageMode path or base64 to verify the result before continuing."
+        )
+        return response(
+            classification: .verifierAmbiguous,
+            failureDomain: .verification,
+            summary: "Text was dispatched to the AX-opaque focused surface; visual verification is required.",
+            window: dispatchWindow,
+            target: nil,
+            text: request.text,
+            focusAssistMode: focusAssistMode,
+            dispatchPrimitive: dispatchPrimitive,
+            dispatchSucceeded: true,
+            semanticAppropriate: nil,
+            semanticReasons: [],
+            liveElementResolution: nil,
+            preStateToken: preDispatchCapture.envelope.response.stateToken,
+            postStateToken: postCapture?.envelope.response.stateToken,
+            cursor: cursor,
+            warnings: warnings,
+            notes: notes,
+            verification: nil
+        )
     }
 
     private func dispatchText(

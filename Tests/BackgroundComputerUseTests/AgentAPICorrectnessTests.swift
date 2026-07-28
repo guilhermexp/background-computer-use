@@ -242,12 +242,12 @@ struct RuntimeSecurityCorrectnessTests {
             responseBody: Data(#"{"ok":true}"#.utf8)
         )
         let requestJSON = try decodeJSON(Data(contentsOf: paths.requestPath))
-        let fileMode = try fileMode(at: paths.requestPath)
-        let directoryMode = try fileMode(at: paths.directory)
+        let requestFileMode = try fileMode(at: paths.requestPath)
+        let artifactsDirectoryMode = try fileMode(at: paths.directory)
 
         #expect(requestJSON["text"] as? String == "<redacted len=6>")
-        #expect(fileMode == 0o600)
-        #expect(directoryMode == 0o700)
+        #expect(requestFileMode == 0o600)
+        #expect(artifactsDirectoryMode == 0o700)
     }
 
     @Test

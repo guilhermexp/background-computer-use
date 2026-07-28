@@ -18,13 +18,13 @@ public enum ActionTargetRequestValidationError: Error, CustomStringConvertible, 
     }
 }
 
-public enum ActionTargetKindDTO: String, Decodable, Encodable, Sendable {
+public enum ActionTargetKindDTO: String, Decodable, Encodable, Equatable, Sendable {
     case displayIndex = "display_index"
     case nodeID = "node_id"
     case refetchFingerprint = "refetch_fingerprint"
+    case ocrAnchor = "ocr_anchor"
 }
-
-public struct ActionTargetRequestDTO: Decodable, Encodable, Sendable {
+public struct ActionTargetRequestDTO: Decodable, Encodable, Equatable, Sendable {
     public let kind: ActionTargetKindDTO
     public let value: String
 
@@ -59,6 +59,18 @@ public struct ActionTargetRequestDTO: Decodable, Encodable, Sendable {
         )
     }
 
+    public static func ocrAnchor(_ value: String) throws -> ActionTargetRequestDTO {
+        ActionTargetRequestDTO(
+            uncheckedKind: .ocrAnchor,
+            value: try validatedValue(kind: .ocrAnchor, value: value)
+        )
+    }
+
+    static func generatedOCRAnchor(_ value: String) -> ActionTargetRequestDTO {
+        precondition(value.isEmpty == false)
+        return ActionTargetRequestDTO(uncheckedKind: .ocrAnchor, value: value)
+    }
+
     public var displayIndex: Int? {
         guard kind == .displayIndex else { return nil }
         return Int(value)
@@ -72,6 +84,8 @@ public struct ActionTargetRequestDTO: Decodable, Encodable, Sendable {
             return "node_id '\(value)'"
         case .refetchFingerprint:
             return "refetch_fingerprint '\(value)'"
+        case .ocrAnchor:
+            return "ocr_anchor '\(value)'"
         }
     }
 
@@ -84,7 +98,7 @@ public struct ActionTargetRequestDTO: Decodable, Encodable, Sendable {
             }
             return String(index)
 
-        case .nodeID, .refetchFingerprint:
+        case .nodeID, .refetchFingerprint, .ocrAnchor:
             let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
             guard trimmed.isEmpty == false else {
                 throw ActionTargetRequestValidationError.emptyTargetValue(kind)
@@ -114,7 +128,7 @@ public struct ActionTargetRequestDTO: Decodable, Encodable, Sendable {
             }
             value = String(index)
 
-        case .nodeID, .refetchFingerprint:
+        case .nodeID, .refetchFingerprint, .ocrAnchor:
             let rawValue = try container.decode(String.self, forKey: .value)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard rawValue.isEmpty == false else {
@@ -290,6 +304,7 @@ public struct GetWindowStateRequest: Decodable, Sendable {
 public struct ClickRequest: Decodable, Sendable {
     public let window: String
     public let stateToken: String?
+    public let interactionToken: String?
     public let target: ActionTargetRequestDTO?
     public let x: Double?
     public let y: Double?
@@ -306,6 +321,7 @@ public struct ClickRequest: Decodable, Sendable {
     public init(
         window: String,
         stateToken: String? = nil,
+        interactionToken: String? = nil,
         target: ActionTargetRequestDTO,
         mode: ClickModeDTO? = nil,
         clickCount: Int? = nil,
@@ -319,6 +335,7 @@ public struct ClickRequest: Decodable, Sendable {
     ) {
         self.window = window
         self.stateToken = stateToken
+        self.interactionToken = interactionToken
         self.target = target
         self.x = nil
         self.y = nil
@@ -336,6 +353,7 @@ public struct ClickRequest: Decodable, Sendable {
     public init(
         window: String,
         stateToken: String? = nil,
+        interactionToken: String? = nil,
         x: Double,
         y: Double,
         mode: ClickModeDTO? = nil,
@@ -350,6 +368,7 @@ public struct ClickRequest: Decodable, Sendable {
     ) {
         self.window = window
         self.stateToken = stateToken
+        self.interactionToken = interactionToken
         self.target = nil
         self.x = x
         self.y = y
@@ -367,6 +386,7 @@ public struct ClickRequest: Decodable, Sendable {
     enum CodingKeys: String, CodingKey {
         case window
         case stateToken
+        case interactionToken
         case target
         case x
         case y
@@ -385,6 +405,7 @@ public struct ClickRequest: Decodable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         window = try container.decode(String.self, forKey: .window)
         stateToken = try container.decodeIfPresent(String.self, forKey: .stateToken)
+        interactionToken = try container.decodeIfPresent(String.self, forKey: .interactionToken)
         target = try container.decodeIfPresent(ActionTargetRequestDTO.self, forKey: .target)
         x = try container.decodeIfPresent(Double.self, forKey: .x)
         y = try container.decodeIfPresent(Double.self, forKey: .y)
@@ -421,6 +442,7 @@ public struct ClickRequest: Decodable, Sendable {
 public struct ScrollRequest: Decodable, Sendable {
     public let window: String
     public let stateToken: String?
+    public let interactionToken: String?
     public let target: ActionTargetRequestDTO
     public let direction: ScrollDirectionDTO
     public let pages: Double?
@@ -432,6 +454,7 @@ public struct ScrollRequest: Decodable, Sendable {
     public init(
         window: String,
         stateToken: String? = nil,
+        interactionToken: String? = nil,
         target: ActionTargetRequestDTO,
         direction: ScrollDirectionDTO,
         pages: Double? = nil,
@@ -442,6 +465,7 @@ public struct ScrollRequest: Decodable, Sendable {
     ) {
         self.window = window
         self.stateToken = stateToken
+        self.interactionToken = interactionToken
         self.target = target
         self.direction = direction
         self.pages = pages
@@ -454,6 +478,7 @@ public struct ScrollRequest: Decodable, Sendable {
     enum CodingKeys: String, CodingKey {
         case window
         case stateToken
+        case interactionToken
         case target
         case direction
         case pages
@@ -467,6 +492,7 @@ public struct ScrollRequest: Decodable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         window = try container.decode(String.self, forKey: .window)
         stateToken = try container.decodeIfPresent(String.self, forKey: .stateToken)
+        interactionToken = try container.decodeIfPresent(String.self, forKey: .interactionToken)
         target = try container.decode(ActionTargetRequestDTO.self, forKey: .target)
         direction = try container.decode(ScrollDirectionDTO.self, forKey: .direction)
         pages = try container.decodeIfPresent(Double.self, forKey: .pages)
@@ -480,6 +506,7 @@ public struct ScrollRequest: Decodable, Sendable {
 public struct PerformSecondaryActionRequest: Decodable, Sendable {
     public let window: String
     public let stateToken: String?
+    public let interactionToken: String?
     public let target: ActionTargetRequestDTO
     public let action: String
     public let actionID: String?
@@ -495,6 +522,7 @@ public struct PerformSecondaryActionRequest: Decodable, Sendable {
     public init(
         window: String,
         stateToken: String? = nil,
+        interactionToken: String? = nil,
         target: ActionTargetRequestDTO,
         action: String,
         actionID: String? = nil,
@@ -509,6 +537,7 @@ public struct PerformSecondaryActionRequest: Decodable, Sendable {
     ) {
         self.window = window
         self.stateToken = stateToken
+        self.interactionToken = interactionToken
         self.target = target
         self.action = action
         self.actionID = actionID
@@ -525,6 +554,7 @@ public struct PerformSecondaryActionRequest: Decodable, Sendable {
     enum CodingKeys: String, CodingKey {
         case window
         case stateToken
+        case interactionToken
         case target
         case action
         case actionID
@@ -542,6 +572,7 @@ public struct PerformSecondaryActionRequest: Decodable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         window = try container.decode(String.self, forKey: .window)
         stateToken = try container.decodeIfPresent(String.self, forKey: .stateToken)
+        interactionToken = try container.decodeIfPresent(String.self, forKey: .interactionToken)
         target = try container.decode(ActionTargetRequestDTO.self, forKey: .target)
         action = try container.decode(String.self, forKey: .action)
         actionID = try container.decodeIfPresent(String.self, forKey: .actionID)
@@ -623,9 +654,11 @@ public struct SetWindowFrameRequest: Decodable, Sendable {
 public struct TypeTextRequest: Decodable, Sendable {
     public let window: String
     public let stateToken: String?
+    public let interactionToken: String?
     public let target: ActionTargetRequestDTO?
     public let text: String
     public let focusAssistMode: TypeTextFocusAssistModeDTO?
+    public let allowOpaqueFocusedSurface: Bool?
     public let cursor: CursorRequestDTO?
     public let includeMenuBar: Bool?
     public let maxNodes: Int?
@@ -635,9 +668,11 @@ public struct TypeTextRequest: Decodable, Sendable {
     public init(
         window: String,
         stateToken: String? = nil,
+        interactionToken: String? = nil,
         target: ActionTargetRequestDTO? = nil,
         text: String,
         focusAssistMode: TypeTextFocusAssistModeDTO? = nil,
+        allowOpaqueFocusedSurface: Bool? = nil,
         cursor: CursorRequestDTO? = nil,
         includeMenuBar: Bool? = nil,
         maxNodes: Int? = nil,
@@ -646,9 +681,11 @@ public struct TypeTextRequest: Decodable, Sendable {
     ) {
         self.window = window
         self.stateToken = stateToken
+        self.interactionToken = interactionToken
         self.target = target
         self.text = text
         self.focusAssistMode = focusAssistMode
+        self.allowOpaqueFocusedSurface = allowOpaqueFocusedSurface
         self.cursor = cursor
         self.includeMenuBar = includeMenuBar
         self.maxNodes = maxNodes
@@ -659,9 +696,11 @@ public struct TypeTextRequest: Decodable, Sendable {
     enum CodingKeys: String, CodingKey {
         case window
         case stateToken
+        case interactionToken
         case target
         case text
         case focusAssistMode
+        case allowOpaqueFocusedSurface
         case cursor
         case includeMenuBar
         case maxNodes
@@ -673,9 +712,11 @@ public struct TypeTextRequest: Decodable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         window = try container.decode(String.self, forKey: .window)
         stateToken = try container.decodeIfPresent(String.self, forKey: .stateToken)
+        interactionToken = try container.decodeIfPresent(String.self, forKey: .interactionToken)
         target = try container.decodeIfPresent(ActionTargetRequestDTO.self, forKey: .target)
         text = try container.decode(String.self, forKey: .text)
         focusAssistMode = try container.decodeIfPresent(TypeTextFocusAssistModeDTO.self, forKey: .focusAssistMode)
+        allowOpaqueFocusedSurface = try container.decodeIfPresent(Bool.self, forKey: .allowOpaqueFocusedSurface)
         cursor = try container.decodeIfPresent(CursorRequestDTO.self, forKey: .cursor)
         includeMenuBar = try container.decodeIfPresent(Bool.self, forKey: .includeMenuBar)
         maxNodes = try container.decodeIfPresent(Int.self, forKey: .maxNodes)
@@ -687,6 +728,7 @@ public struct TypeTextRequest: Decodable, Sendable {
 public struct PressKeyRequest: Decodable, Sendable {
     public let window: String
     public let stateToken: String?
+    public let interactionToken: String?
     public let key: String
     public let cursor: CursorRequestDTO?
     public let includeMenuBar: Bool?
@@ -698,6 +740,7 @@ public struct PressKeyRequest: Decodable, Sendable {
     public init(
         window: String,
         stateToken: String? = nil,
+        interactionToken: String? = nil,
         key: String,
         cursor: CursorRequestDTO? = nil,
         includeMenuBar: Bool? = nil,
@@ -708,6 +751,7 @@ public struct PressKeyRequest: Decodable, Sendable {
     ) {
         self.window = window
         self.stateToken = stateToken
+        self.interactionToken = interactionToken
         self.key = key
         self.cursor = cursor
         self.includeMenuBar = includeMenuBar
@@ -721,6 +765,7 @@ public struct PressKeyRequest: Decodable, Sendable {
 public struct SetValueRequest: Decodable, Sendable {
     public let window: String
     public let stateToken: String?
+    public let interactionToken: String?
     public let target: ActionTargetRequestDTO
     public let value: String
     public let cursor: CursorRequestDTO?
@@ -732,6 +777,7 @@ public struct SetValueRequest: Decodable, Sendable {
     public init(
         window: String,
         stateToken: String? = nil,
+        interactionToken: String? = nil,
         target: ActionTargetRequestDTO,
         value: String,
         cursor: CursorRequestDTO? = nil,
@@ -742,6 +788,7 @@ public struct SetValueRequest: Decodable, Sendable {
     ) {
         self.window = window
         self.stateToken = stateToken
+        self.interactionToken = interactionToken
         self.target = target
         self.value = value
         self.cursor = cursor
@@ -754,6 +801,7 @@ public struct SetValueRequest: Decodable, Sendable {
     enum CodingKeys: String, CodingKey {
         case window
         case stateToken
+        case interactionToken
         case target
         case value
         case cursor
@@ -767,6 +815,7 @@ public struct SetValueRequest: Decodable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         window = try container.decode(String.self, forKey: .window)
         stateToken = try container.decodeIfPresent(String.self, forKey: .stateToken)
+        interactionToken = try container.decodeIfPresent(String.self, forKey: .interactionToken)
         target = try container.decode(ActionTargetRequestDTO.self, forKey: .target)
         value = try container.decode(String.self, forKey: .value)
         cursor = try container.decodeIfPresent(CursorRequestDTO.self, forKey: .cursor)
@@ -882,6 +931,7 @@ public struct ReadTextRequest: Decodable, Sendable {
 public struct SelectTextRequest: Decodable, Sendable {
     public let window: String
     public let stateToken: String?
+    public let interactionToken: String?
     public let target: ActionTargetRequestDTO
     public let text: String
     public let occurrence: Int?
@@ -895,6 +945,7 @@ public struct SelectTextRequest: Decodable, Sendable {
     public init(
         window: String,
         stateToken: String? = nil,
+        interactionToken: String? = nil,
         target: ActionTargetRequestDTO,
         text: String,
         occurrence: Int? = nil,
@@ -907,6 +958,7 @@ public struct SelectTextRequest: Decodable, Sendable {
     ) {
         self.window = window
         self.stateToken = stateToken
+        self.interactionToken = interactionToken
         self.target = target
         self.text = text
         self.occurrence = occurrence

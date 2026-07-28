@@ -2,11 +2,13 @@ import Foundation
 
 public enum ClickTargetKindDTO: String, Encodable, Sendable {
     case semanticTarget = "semantic_target"
+    case ocrAnchor = "ocr_anchor"
     case coordinate
 }
 
 public enum ClickFinalRouteDTO: String, Encodable, Sendable {
     case coordinateXY = "coordinate_xy"
+    case ocrAnchorXY = "ocr_anchor_xy"
     case semanticAX = "semantic_ax"
     case axElementPointerXY = "ax_element_pointer_xy"
     case semanticAXThenRemainingXY = "semantic_ax_then_remaining_xy"
@@ -22,6 +24,7 @@ public enum ClickFallbackReasonDTO: String, Encodable, Sendable {
     case unsupportedMouseButton = "unsupported_mouse_button"
     case invalidClickCount = "invalid_click_count"
     case invalidTarget = "invalid_target"
+    case ocrUnavailable = "ocr_unavailable"
     case staleCoordinateGuard = "stale_coordinate_guard"
     case transportFailed = "transport_failed"
 }
@@ -113,6 +116,11 @@ public struct ClickVerificationEvidenceDTO: Encodable, Sendable {
     public let windowTitleChanged: Bool?
     public let modalDialogOpened: Bool?
     public let targetStateChanged: Bool?
+    public let ocrAnchorMatched: Bool?
+    public let ocrAnchorRelocated: Bool?
+    public let ocrAnchorDisappeared: Bool?
+    public let targetRegionChangeRatio: Double?
+    public let fullImageChangeRatio: Double?
     public let foregroundPreserved: Bool?
     public let verificationNotes: [String]
 }

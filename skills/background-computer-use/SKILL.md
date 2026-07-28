@@ -1,6 +1,6 @@
 ---
 name: background-computer-use
-description: "Launch and use the local BackgroundComputerUse macOS runtime through its self-documenting loopback API. Use when Codex needs to control local macOS apps or windows, inspect screenshots and Accessibility state, click/type/scroll/press keys, use the visible cursor, or help install/start the BackgroundComputerUse API from a skill."
+description: "Launch and use the local BackgroundComputerUse macOS runtime through its self-documenting loopback API. Use when an agent needs to control local macOS apps or windows, inspect screenshots and Accessibility state, click/type/scroll/press keys, use the visible cursor, or help install/start the BackgroundComputerUse API from a skill."
 version: 1.0.0
 platforms: [macos]
 metadata:

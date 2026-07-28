@@ -24,6 +24,11 @@ enum APIDocumentation {
                 fields: nil
             ),
             APIConceptDTO(
+                name: "interactionToken",
+                description: "Opaque target-identity and geometry token returned by get_window_state. It ignores rendered-text-only changes. Pass it with click target.kind=ocr_anchor so stale OCR anchors fail closed.",
+                fields: nil
+            ),
+            APIConceptDTO(
                 name: "session",
                 description: "Optional action-exclusion lane selected with the X-Background-Computer-Use-Session header. Concurrent requests from the same session share the lane; another session receives HTTP 409 while it is held, and action-rate throttling returns HTTP 429.",
                 fields: nil
@@ -35,11 +40,16 @@ enum APIDocumentation {
             ),
             APIConceptDTO(
                 name: "target",
-                description: "Semantic action target from get_window_state. Use {\"kind\":\"display_index\",\"value\":N} for a rendered line, {\"kind\":\"node_id\",\"value\":\"...\"} for a stable node, or {\"kind\":\"refetch_fingerprint\",\"value\":\"...\"} when node_id is unavailable. Refresh state after actions because labels, titles, and layout can change.",
+                description: "Action target from get_window_state. Use {\"kind\":\"display_index\",\"value\":N} for a rendered line, {\"kind\":\"node_id\",\"value\":\"...\"} for a stable node, or {\"kind\":\"refetch_fingerprint\",\"value\":\"...\"} when node_id is unavailable. Click additionally accepts {\"kind\":\"ocr_anchor\",\"value\":\"...\"} from get_window_state.ocr together with interactionToken. Refresh state after actions because target identity or geometry can change.",
                 fields: [
-                    RouteFieldDTO(name: "kind", type: "display_index | node_id | refetch_fingerprint", required: true, description: "How the route should resolve the target.", defaultValue: nil),
-                    RouteFieldDTO(name: "value", type: "integer | string", required: true, description: "Integer for display_index; string for node_id and refetch_fingerprint.", defaultValue: nil),
+                    RouteFieldDTO(name: "kind", type: "display_index | node_id | refetch_fingerprint | ocr_anchor (click only)", required: true, description: "How the route should resolve the target.", defaultValue: nil),
+                    RouteFieldDTO(name: "value", type: "integer | string", required: true, description: "Integer for display_index; string for node_id, refetch_fingerprint, and ocr_anchor.", defaultValue: nil),
                 ]
+            ),
+            APIConceptDTO(
+                name: "attachedSurfaces",
+                description: "Same-process AXSheet/AXDialog surfaces attached to a root window. get_window_state and list_windows expose them explicitly; screenshot capture composites their CG windows over the root when available.",
+                fields: nil
             ),
             APIConceptDTO(
                 name: "imageMode",

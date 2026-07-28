@@ -29,7 +29,12 @@ struct RuntimeFacadePublicAPITests {
         let drag = DragRequest(window: "window-id", toX: 100, toY: 120)
         let resize = ResizeRequest(window: "window-id", handle: .bottomRight, toX: 300, toY: 320)
         let frame = SetWindowFrameRequest(window: "window-id", x: 10, y: 20, width: 500, height: 400)
-        let typeText = TypeTextRequest(window: "window-id", target: target, text: "hello")
+        let typeText = TypeTextRequest(
+            window: "window-id",
+            text: "hello",
+            allowOpaqueFocusedSurface: true,
+            confirm: true
+        )
         let pressKey = PressKeyRequest(window: "window-id", key: "command+a")
         let setValue = SetValueRequest(window: "window-id", target: target, value: "hello")
 
@@ -44,6 +49,7 @@ struct RuntimeFacadePublicAPITests {
         #expect(resize.handle == .bottomRight)
         #expect(frame.width == 500)
         #expect(typeText.text == "hello")
+        #expect(typeText.allowOpaqueFocusedSurface == true)
         #expect(pressKey.key == "command+a")
         #expect(setValue.value == "hello")
     }

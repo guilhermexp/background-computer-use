@@ -39,7 +39,8 @@ struct WindowStateService {
             stateToken: capture.envelope.response.stateToken,
             imageMode: request.imageMode ?? .path,
             includeRawRetinaCapture: request.includeRawScreenshot ?? false,
-            includeCursorOverlay: executionOptions.visualCursorEnabled
+            includeCursorOverlay: executionOptions.visualCursorEnabled,
+            attachedSurfaces: capture.envelope.response.attachedSurfaces
         )
         let screenshotFinished = DispatchTime.now().uptimeNanoseconds
 
@@ -68,17 +69,32 @@ struct WindowStateService {
                 notes.append("scopeTarget \(scopeTarget.summary) was not found; returning the full tree.")
             }
         }
-        let ocr = request.includeOCR == true
-            ? screenshot.image?.imagePath.flatMap(OCRRecognitionService.recognize(imagePath:))
-            : nil
-        if request.includeOCR == true, ocr == nil {
-            notes.append("OCR was requested but no text anchors were detected or the screenshot image was unavailable.")
+        let ocr: OCRAnchorSummaryDTO?
+        if request.includeOCR == true {
+            if let imagePath = screenshot.image?.imagePath {
+                ocr = OCRRecognitionService.recognize(
+                    imagePath: imagePath,
+                    interactionToken: capture.envelope.response.interactionToken
+                )
+            } else {
+                ocr = OCRAnchorSummaryBuilder.failure(
+                    status: .imageUnavailable,
+                    diagnostic: "OCR requires a path-backed screenshot image."
+                )
+            }
+            if let diagnostic = ocr?.diagnostic {
+                notes.append(diagnostic)
+            }
+        } else {
+            ocr = nil
         }
 
         return GetWindowStateResponse(
             contractVersion: capture.envelope.response.contractVersion,
             stateToken: capture.envelope.response.stateToken,
+            interactionToken: capture.envelope.response.interactionToken,
             window: capture.envelope.response.window,
+            attachedSurfaces: capture.envelope.response.attachedSurfaces,
             screenshot: screenshot,
             tree: tree,
             menuPresentation: capture.envelope.menuPresentation,

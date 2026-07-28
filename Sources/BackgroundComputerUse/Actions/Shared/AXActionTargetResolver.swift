@@ -224,6 +224,8 @@ struct AXActionTargetResolver {
         case .refetchFingerprint:
             let matches = capture.envelope.response.tree.nodes.filter { $0.refetchFingerprint == requestedTarget.value }
             return matches.only
+        case .ocrAnchor:
+            return nil
         }
     }
 
@@ -253,6 +255,8 @@ struct AXActionTargetResolver {
                 return "\(requestedTarget.summary) matched \(matchCount) projected nodes; use display_index or node_id from the current rendered tree."
             }
             return "No projected target matched \(requestedTarget.summary)."
+        case .ocrAnchor:
+            return "OCR anchor targets are click-only and cannot resolve through the AX semantic target lane."
         }
     }
 

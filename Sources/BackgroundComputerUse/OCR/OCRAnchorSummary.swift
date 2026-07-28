@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 public struct OCRBoxDTO: Codable, Equatable, Sendable {
     public let x: Double
@@ -34,14 +35,27 @@ public struct OCRLineDTO: Codable, Equatable, Sendable {
     }
 }
 
+public enum OCRRecognitionStatusDTO: String, Codable, Equatable, Sendable {
+    case success
+    case noText = "no_text"
+    case imageUnavailable = "image_unavailable"
+    case recognitionFailed = "recognition_failed"
+}
+
 public struct OCRAnchorDTO: Codable, Equatable, Sendable {
+    public let id: String
     public let text: String
+    public let occurrence: Int
     public let x: Int
     public let y: Int
     public let confidence: Double
+    public let box: OCRBoxDTO
+    public let target: ActionTargetRequestDTO
 }
 
 public struct OCRAnchorSummaryDTO: Codable, Equatable, Sendable {
+    public let status: OCRRecognitionStatusDTO
+    public let diagnostic: String?
     public let promptHint: String
     public let anchors: [OCRAnchorDTO]
     public let matchesCount: Int
@@ -50,8 +64,10 @@ public struct OCRAnchorSummaryDTO: Codable, Equatable, Sendable {
 enum OCRAnchorSummaryBuilder {
     static func summary(
         lines: [OCRLineDTO],
-        maxAnchors: Int = 8
-    ) -> OCRAnchorSummaryDTO? {
+        interactionToken: String = "legacy",
+        maxAnchors: Int = 24
+    ) -> OCRAnchorSummaryDTO {
+        var occurrences: [String: Int] = [:]
         let anchors = lines
             .filter { useful($0) }
             .sorted { lhs, rhs in
@@ -61,27 +77,82 @@ enum OCRAnchorSummaryBuilder {
                 return lhs.box.x < rhs.box.x
             }
             .prefix(max(0, maxAnchors))
-            .map {
-                OCRAnchorDTO(
-                    text: $0.text,
-                    x: Int($0.centerX.rounded()),
-                    y: Int($0.centerY.rounded()),
-                    confidence: $0.confidence
+            .map { line -> OCRAnchorDTO in
+                let normalizedText = normalized(line.text)
+                let occurrence = occurrences[normalizedText, default: 0] + 1
+                occurrences[normalizedText] = occurrence
+                let id = anchorID(
+                    text: normalizedText,
+                    occurrence: occurrence,
+                    box: line.box,
+                    interactionToken: interactionToken
+                )
+                return OCRAnchorDTO(
+                    id: id,
+                    text: line.text,
+                    occurrence: occurrence,
+                    x: Int(line.centerX.rounded()),
+                    y: Int(line.centerY.rounded()),
+                    confidence: line.confidence,
+                    box: line.box,
+                    target: .generatedOCRAnchor(id)
                 )
             }
 
-        guard anchors.isEmpty == false else {
-            return nil
-        }
-
         let prompt = anchors
-            .map { "\"\($0.text)\" at (\($0.x), \($0.y))" }
+            .map { "\"\($0.text)\" at (\($0.x), \($0.y)) target \($0.id)" }
             .joined(separator: "; ")
         return OCRAnchorSummaryDTO(
-            promptHint: "OCR anchors: \(prompt). Use these local coordinates from this image.",
+            status: anchors.isEmpty ? .noText : .success,
+            diagnostic: nil,
+            promptHint: anchors.isEmpty
+                ? "OCR found no actionable text in this image."
+                : "OCR anchors: \(prompt). Prefer each anchor's target for clicks.",
             anchors: anchors,
             matchesCount: lines.count
         )
+    }
+
+    static func failure(
+        status: OCRRecognitionStatusDTO,
+        diagnostic: String
+    ) -> OCRAnchorSummaryDTO {
+        precondition(status != .success && status != .noText)
+        return OCRAnchorSummaryDTO(
+            status: status,
+            diagnostic: diagnostic,
+            promptHint: diagnostic,
+            anchors: [],
+            matchesCount: 0
+        )
+    }
+
+    private static func anchorID(
+        text: String,
+        occurrence: Int,
+        box: OCRBoxDTO,
+        interactionToken: String
+    ) -> String {
+        let quantizedBox = [box.x, box.y, box.width, box.height]
+            .map { Int(($0 / 4).rounded()) }
+            .map(String.init)
+            .joined(separator: ",")
+        let payload = "\(interactionToken)|\(text)|\(occurrence)|\(quantizedBox)"
+        let digest = SHA256.hash(data: Data(payload.utf8))
+        let encodedText = Data(text.utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        let hash = digest.prefix(10).map { String(format: "%02x", $0) }.joined()
+        return "ocr_\(occurrence).\(encodedText).\(quantizedBox).\(hash)"
+    }
+
+    private static func normalized(_ text: String) -> String {
+        text
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .split(whereSeparator: \.isWhitespace)
+            .joined(separator: " ")
     }
 
     private static func useful(_ line: OCRLineDTO) -> Bool {

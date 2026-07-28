@@ -33,6 +33,15 @@ public struct RectDTO: Codable, Sendable {
     }
 }
 
+public struct AttachedSurfaceDTO: Codable, Sendable {
+    public let id: String
+    public let role: String
+    public let title: String?
+    public let frameAppKit: RectDTO
+    public let windowNumber: Int?
+    public let isLiveActionSurface: Bool
+}
+
 public struct WindowDTO: Encodable, Sendable {
     public let windowID: String
     public let title: String
@@ -47,6 +56,7 @@ public struct WindowDTO: Encodable, Sendable {
     public let isMain: Bool
     public let isMinimized: Bool
     public let isOnScreen: Bool
+    public let attachedSurfaces: [AttachedSurfaceDTO]
 }
 
 public struct AppReferenceDTO: Encodable, Sendable {

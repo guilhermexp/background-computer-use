@@ -547,6 +547,12 @@ enum RouteRegistry {
                 ),
                 field("text", "string", required: true),
                 field("focusAssistMode", "none | focus | focus_and_caret_end", defaultValue: "none"),
+                field(
+                    "allowOpaqueFocusedSurface",
+                    "boolean",
+                    "After a coordinate click focuses a known text entry on an AX-opaque surface, allow PID-scoped Unicode posting when no semantic focused target is visible. Also requires confirm=true.",
+                    defaultValue: "false"
+                ),
                 field("cursor", "CursorRequest"),
                 field("includeMenuBar", "boolean"),
                 field("maxNodes", "integer"),
@@ -643,7 +649,7 @@ enum RouteRegistry {
             return json([
                 field("contractVersion", "string", required: true),
                 field("app", "AppReference", required: true),
-                field("windows", "WindowSummary[]", required: true),
+                field("windows", "WindowSummary[]", required: true, "Each window includes attachedSurfaces discovered through AXSheet/AXDialog relationships."),
                 field("notes", "string[]", required: true)
             ])
         case RouteID.cursorFeedback.rawValue:
@@ -664,7 +670,9 @@ enum RouteRegistry {
             return json([
                 field("contractVersion", "string", required: true),
                 field("stateToken", "string", required: true),
+                field("interactionToken", "string", required: true, "Stable across rendered-text-only changes; changes when target identity or geometry changes."),
                 field("window", "ResolvedWindow", required: true),
+                field("attachedSurfaces", "AttachedSurface[]", required: true, "Live same-process sheets/dialogs attached to the root window."),
                 field("screenshot", "Screenshot", required: true),
                 field("tree", "AXTree", required: true),
                 field("menuPresentation", "AXMenuPresentation | null"),
@@ -773,9 +781,11 @@ enum RouteRegistry {
         json([
             field("window", "string", required: true),
             field("stateToken", "string"),
+            field("interactionToken", "string", "Required with target.kind=ocr_anchor. Copy from the same get_window_state response that produced the OCR anchor."),
             actionTargetField(
                 required: false,
-                "Semantic target from get_window_state. Mutually exclusive with x/y."
+                includeOCR: true,
+                "Semantic target from get_window_state, or a local OCR anchor from get_window_state.ocr. Mutually exclusive with x/y."
             ),
             field("x", "number", "Model-facing screenshot x coordinate. Must be supplied with y and without target."),
             field("y", "number", "Model-facing screenshot y coordinate. Must be supplied with x and without target."),
@@ -803,7 +813,7 @@ enum RouteRegistry {
             field("target", "AXActionTarget | null"),
             field("clickCount", "integer | null"),
             field("mouseButton", "left | right | middle | null"),
-            field("finalRoute", "coordinate_xy | semantic_ax | ax_element_pointer_xy | semantic_ax_then_remaining_xy | rejected", required: true),
+            field("finalRoute", "coordinate_xy | ocr_anchor_xy | semantic_ax | ax_element_pointer_xy | semantic_ax_then_remaining_xy | rejected", required: true),
             field("fallbackReason", "none | ax_coordinate_required | ax_multi_click_requires_xy | ax_first_click_unverified_using_full_element_pointer | missing_stable_ax_coordinate | unsupported_mouse_button | invalid_click_count | invalid_target | stale_coordinate_guard | transport_failed", required: true),
             field("axAttempt", "exact_primary_ax_action | set_container_selected_rows | set_row_selected_true | safe_unique_descendant_retarget | ambiguous_descendant_click | coordinate_required | unsupported_primary_click | none | null"),
             field("coordinate", "ClickCoordinateMapping | null"),
@@ -954,11 +964,15 @@ enum RouteRegistry {
 
     private static func actionTargetField(
         required: Bool,
+        includeOCR: Bool = false,
         _ description: String
     ) -> RouteFieldDTO {
-        field(
+        let kind = includeOCR
+            ? #"display_index"|"node_id"|"refetch_fingerprint"|"ocr_anchor"#
+            : #"display_index"|"node_id"|"refetch_fingerprint"#
+        return field(
             "target",
-            #"{"kind":"display_index"|"node_id"|"refetch_fingerprint","value":integer|string}"#,
+            #"{"kind":"\#(kind)","value":integer|string}"#,
             required: required,
             description
         )

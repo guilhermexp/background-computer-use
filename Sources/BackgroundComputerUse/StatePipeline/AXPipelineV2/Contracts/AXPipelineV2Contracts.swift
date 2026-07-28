@@ -496,7 +496,9 @@ public struct AXPipelineV2TreeDTO: Codable, Sendable {
 public struct AXPipelineV2Response: Codable, Sendable {
     public let contractVersion: String
     public let stateToken: String
+    public let interactionToken: String
     public let window: ResolvedWindowDTO
+    public let attachedSurfaces: [AttachedSurfaceDTO]
     public let screenshot: ScreenshotDTO
     public let tree: AXPipelineV2TreeDTO
     public let menuPresentation: AXMenuPresentationDTO?

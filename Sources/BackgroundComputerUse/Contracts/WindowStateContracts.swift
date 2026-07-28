@@ -109,7 +109,9 @@ public struct GetWindowStateDebugDTO: Codable, Sendable {
 public struct GetWindowStateResponse: Codable, Sendable {
     public let contractVersion: String
     public let stateToken: String
+    public let interactionToken: String
     public let window: ResolvedWindowDTO
+    public let attachedSurfaces: [AttachedSurfaceDTO]
     public let screenshot: ScreenshotDTO
     public let tree: AXPipelineV2TreeDTO
     public let menuPresentation: AXMenuPresentationDTO?

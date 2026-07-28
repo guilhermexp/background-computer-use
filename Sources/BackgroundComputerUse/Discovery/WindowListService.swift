@@ -4,6 +4,7 @@ import Foundation
 struct WindowListService {
     private let runningAppService = RunningAppService()
     private let axWindowDiscovery = AXWindowDiscovery()
+    private let attachedSurfaceDiscovery = AXAttachedSurfaceDiscovery()
     private let targetCache = WindowTargetCache.shared
 
     func listWindows(appQuery: String) throws -> ListWindowsResponse {
@@ -55,7 +56,11 @@ struct WindowListService {
                     isFocused: window.isFocused,
                     isMain: window.isMain,
                     isMinimized: window.isMinimized,
-                    isOnScreen: window.isOnScreen
+                    isOnScreen: window.isOnScreen,
+                    attachedSurfaces: attachedSurfaceDiscovery.surfaces(
+                        for: window.element,
+                        ownerPID: app.processIdentifier
+                    )
                 )
             },
             notes: notes

@@ -72,6 +72,18 @@ struct APIDocumentationTests {
     }
 
     @Test
+    func typeTextDocumentsExplicitOpaqueFocusedSurfaceFallback() throws {
+        let route = try #require(
+            RouteRegistry.publicRoutes().first { $0.id == RouteID.typeText.rawValue }
+        )
+        let request = try #require(route.request)
+        let fallback = try #require(request.fields.first { $0.name == "allowOpaqueFocusedSurface" })
+
+        #expect(fallback.type == "boolean")
+        #expect(fallback.description?.contains("coordinate click") == true)
+    }
+
+    @Test
     func scrollRouteAcceptsFractionalPages() throws {
         let body = """
         {

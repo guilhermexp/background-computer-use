@@ -4,9 +4,9 @@ Servidor HTTP loopback (macOS) que controla e lê janelas nativas em background 
 
 ## Tech stack
 
-- **Swift 6.2**, `platforms: [.macOS(.v14)]` (macOS 14 mínimo). Zero dependências externas — só SDK Apple (AppKit, ApplicationServices, CoreGraphics, Vision).
+- **Swift 6.2**, `platforms: [.macOS(.v14)]` (macOS 14 mínimo). O app/runtime usa somente SDKs Apple (AppKit, ApplicationServices, CoreGraphics, Vision); dependências externas ficam restritas ao target de testes.
 - **Package.swift:** library `BackgroundComputerUseKit` (target `BackgroundComputerUse`) + executable `BackgroundComputerUse` (target `BackgroundComputerUseServer`, trivial: `BackgroundComputerUseServer.run()`).
-- **Testes:** Swift Testing (`import Testing`, `@Suite`, `@Test`, `#expect`). **Não** XCTest. Rodam com `swift test` — **requer Xcode.app** (o módulo `Testing` não vem nas Command Line Tools standalone).
+- **Testes:** Swift Testing (`import Testing`, `@Suite`, `@Test`, `#expect`). **Não** XCTest. `Package.swift` fixa `swift-testing` em `swift-6.2.3-RELEASE` como dependência exclusiva do test target, permitindo `swift test` também em instalações de Command Line Tools sem o módulo `Testing` embutido.
 
 ## Convenções
 

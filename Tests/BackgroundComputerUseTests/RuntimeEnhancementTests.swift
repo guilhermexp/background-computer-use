@@ -64,6 +64,7 @@ struct RuntimeEnhancementTests {
         let state = AXPipelineV2Response(
             contractVersion: ContractVersion.current,
             stateToken: "token",
+            interactionToken: "interaction",
             window: ResolvedWindowDTO(
                 windowID: "window",
                 title: "Studio - Deployments",
@@ -74,6 +75,7 @@ struct RuntimeEnhancementTests {
                 frameAppKit: RectDTO(x: 0, y: 0, width: 800, height: 600),
                 resolutionStrategy: "test"
             ),
+            attachedSurfaces: [],
             screenshot: ScreenshotDTO(
                 status: "omitted",
                 image: nil,
@@ -365,8 +367,145 @@ struct RuntimeEnhancementTests {
             maxAnchors: 2
         )
 
-        #expect(summary?.anchors.map(\.text) == ["Deploy", "Logs"])
-        #expect(summary?.promptHint.contains(#""Deploy" at (40, 30)"#) == true)
+        #expect(summary.anchors.map(\.text) == ["Deploy", "Logs"])
+        #expect(summary.promptHint.contains(#""Deploy" at (40, 30)"#) == true)
+    }
+
+    @Test
+    func ocrAnchorSummaryDefaultIncludesContentBelowBrowserChrome() {
+        let browserChrome = (0..<10).map { index in
+            OCRLineDTO(
+                text: "Browser item \(index)",
+                confidence: 0.99,
+                box: .init(x: 10, y: Double(index * 12), width: 100, height: 10)
+            )
+        }
+        let summary = OCRAnchorSummaryBuilder.summary(
+            lines: browserChrome + [
+                .init(
+                    text: "Smoke input",
+                    confidence: 0.99,
+                    box: .init(x: 20, y: 180, width: 120, height: 20)
+                ),
+            ]
+        )
+
+        #expect(summary.anchors.contains { $0.text == "Smoke input" })
+    }
+
+    @Test
+    func ocrAnchorSummaryCarriesStableClickTargets() throws {
+        let lines = [
+            OCRLineDTO(
+                text: "Update Server",
+                confidence: 0.99,
+                box: .init(x: 100, y: 200, width: 120, height: 32)
+            ),
+        ]
+
+        let first = OCRAnchorSummaryBuilder.summary(lines: lines, interactionToken: "it_ABC")
+        let second = OCRAnchorSummaryBuilder.summary(lines: lines, interactionToken: "it_ABC")
+        let anchor = try #require(first.anchors.first)
+
+        #expect(first.status == .success)
+        #expect(anchor.id == second.anchors.first?.id)
+        #expect(anchor.box == lines[0].box)
+        #expect(anchor.target.kind == .ocrAnchor)
+        #expect(anchor.target.value == anchor.id)
+    }
+
+    @Test
+    func ocrAnchorSummaryReportsNoTextExplicitly() {
+        let summary = OCRAnchorSummaryBuilder.summary(lines: [], interactionToken: "it_ABC")
+
+        #expect(summary.status == .noText)
+        #expect(summary.anchors.isEmpty)
+        #expect(summary.matchesCount == 0)
+    }
+
+    @Test
+    func ocrActionTargetDecodesAndRejectsEmptyValues() throws {
+        let decoded = try JSONDecoder().decode(
+            ActionTargetRequestDTO.self,
+            from: Data(#"{"kind":"ocr_anchor","value":"ocr_ABC"}"#.utf8)
+        )
+        #expect(decoded.kind == .ocrAnchor)
+        #expect(decoded.value == "ocr_ABC")
+
+        #expect(throws: DecodingError.self) {
+            _ = try JSONDecoder().decode(
+                ActionTargetRequestDTO.self,
+                from: Data(#"{"kind":"ocr_anchor","value":"  "}"#.utf8)
+            )
+        }
+    }
+
+    @Test
+    func interactionTokenIgnoresRenderedTextButTracksTargetGeometry() {
+        let firstNode = annotationNode(
+            displayIndex: 1,
+            displayRole: "button",
+            title: "Clock 10:00",
+            frame: RectDTO(x: 20, y: 40, width: 120, height: 32),
+            point: PointDTO(x: 80, y: 56),
+            refetchFingerprint: "button|Clock 10:00",
+        )
+        let secondNode = annotationNode(
+            displayIndex: 1,
+            displayRole: "button",
+            title: "Clock 10:01",
+            frame: RectDTO(x: 20, y: 40, width: 120, height: 32),
+            point: PointDTO(x: 80, y: 56),
+            refetchFingerprint: "button|Clock 10:01",
+        )
+        let movedNode = annotationNode(
+            displayIndex: 1,
+            displayRole: "button",
+            title: "Clock 10:01",
+            frame: RectDTO(x: 28, y: 40, width: 120, height: 32),
+            point: PointDTO(x: 88, y: 56),
+            refetchFingerprint: "button|Clock 10:01",
+        )
+        let tree: (AXPipelineV2SurfaceNodeDTO, String) -> AXPipelineV2TreeDTO = { node, renderedText in
+            AXPipelineV2TreeDTO(
+                nodeCount: 1,
+                truncated: false,
+                renderedText: renderedText,
+                nodes: [node],
+                lineMappings: [],
+                profile: "default"
+            )
+        }
+        let frame = CGRect(x: 0, y: 0, width: 800, height: 600)
+
+        let first = InteractionToken.make(
+            windowID: "window",
+            title: "Test",
+            frame: frame,
+            tree: tree(firstNode, "[1] Clock 10:00"),
+            pixelWidth: 800,
+            pixelHeight: 600
+        )
+        let second = InteractionToken.make(
+            windowID: "window",
+            title: "Test",
+            frame: frame,
+            tree: tree(secondNode, "[1] Clock 10:01"),
+            pixelWidth: 800,
+            pixelHeight: 600
+        )
+        let moved = InteractionToken.make(
+            windowID: "window",
+            title: "Test",
+            frame: frame,
+            tree: tree(movedNode, "[1] Clock 10:01"),
+            pixelWidth: 800,
+            pixelHeight: 600
+        )
+
+        #expect(first == second)
+        #expect(first != moved)
+        #expect(first.hasPrefix("it_"))
     }
 
     @Test
@@ -398,6 +537,7 @@ struct RuntimeEnhancementTests {
         GetWindowStateResponse(
             contractVersion: ContractVersion.current,
             stateToken: "state",
+            interactionToken: "interaction",
             window: ResolvedWindowDTO(
                 windowID: "window",
                 title: "Test",
@@ -408,6 +548,7 @@ struct RuntimeEnhancementTests {
                 frameAppKit: RectDTO(x: 0, y: 0, width: 800, height: 600),
                 resolutionStrategy: "test"
             ),
+            attachedSurfaces: [],
             screenshot: ScreenshotDTO(
                 status: "captured",
                 image: ScreenshotImageDTO(
@@ -465,7 +606,8 @@ struct RuntimeEnhancementTests {
         displayRole: String,
         title: String,
         frame: RectDTO,
-        point: PointDTO
+        point: PointDTO,
+        refetchFingerprint: String? = nil
     ) -> AXPipelineV2SurfaceNodeDTO {
         AXPipelineV2SurfaceNodeDTO(
             index: displayIndex,
@@ -487,7 +629,7 @@ struct RuntimeEnhancementTests {
             nodeID: "node-\(displayIndex)",
             identity: nil,
             refetch: nil,
-            refetchFingerprint: "refetch-\(displayIndex)",
+            refetchFingerprint: refetchFingerprint ?? "refetch-\(displayIndex)",
             value: nil,
             valueKind: nil,
             isValueSettable: false,

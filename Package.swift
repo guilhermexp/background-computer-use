@@ -8,6 +8,12 @@ let package = Package(
         .library(name: "BackgroundComputerUseKit", targets: ["BackgroundComputerUse"]),
         .executable(name: "BackgroundComputerUse", targets: ["BackgroundComputerUseServer"]),
     ],
+    dependencies: [
+        .package(
+            url: "https://github.com/swiftlang/swift-testing.git",
+            revision: "swift-6.2.3-RELEASE"
+        ),
+    ],
     targets: [
         .target(
             name: "BackgroundComputerUse",
@@ -20,7 +26,10 @@ let package = Package(
         ),
         .testTarget(
             name: "BackgroundComputerUseTests",
-            dependencies: ["BackgroundComputerUse"],
+            dependencies: [
+                "BackgroundComputerUse",
+                .product(name: "Testing", package: "swift-testing"),
+            ],
             path: "Tests/BackgroundComputerUseTests"
         ),
     ]

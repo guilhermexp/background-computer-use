@@ -98,6 +98,7 @@ private final class ProjectionContext {
                     rawNode: rawNode,
                     semanticNode: semanticTree.nodes[index]
                 ),
+                foldedCanonicalIndices: [],
                 disposition: .normal,
                 summaryStyle: nil,
                 transformNotes: [],
@@ -107,6 +108,9 @@ private final class ProjectionContext {
     }
 
     func build() -> AXProjectedTreeDTO {
+        applyPass(name: "canonicalizeAttachedSheets") {
+            passCanonicalizeAttachedSheets()
+        }
         applyPass(name: "associateRelationshipLabels") {
             passAssociateRelationshipLabels()
         }
@@ -198,7 +202,7 @@ private final class ProjectionContext {
             parentProjectedIndex: parentProjectedIndex,
             depth: depth,
             primaryCanonicalIndex: canonicalIndex,
-            canonicalIndices: [canonicalIndex],
+            canonicalIndices: [canonicalIndex] + state.foldedCanonicalIndices,
             displayRole: semanticNode.displayRole,
             label: state.label,
             metadata: state.metadata,
@@ -218,6 +222,9 @@ private final class ProjectionContext {
             rootProjectedIndices.append(projectedIndex)
         }
         canonicalToProjected[canonicalIndex] = projectedIndex
+        for foldedCanonicalIndex in state.foldedCanonicalIndices {
+            canonicalToProjected[foldedCanonicalIndex] = projectedIndex
+        }
 
         if state.summaryStyle != nil {
             return
@@ -247,6 +254,47 @@ private final class ProjectionContext {
                 notes: changedNodeCount == 0 ? ["No node state changes."] : []
             )
         )
+    }
+
+    private func passCanonicalizeAttachedSheets() -> Int {
+        let nodes = rawNodes.indices.map { index in
+            AXAttachedSheetProjectionNode(
+                index: index,
+                parentIndex: rawNodes[index].parentIndex,
+                childIndices: rawNodes[index].childIndices,
+                role: rawNodes[index].role,
+                subrole: rawNodes[index].subrole,
+                displayRole: semanticNodes[index].displayRole,
+                label: states[index].label,
+                title: rawNodes[index].title,
+                description: rawNodes[index].description,
+                isInteractive: semanticNodes[index].isInteractive,
+                frameAppKit: rawNodes[index].frameAppKit
+            )
+        }
+        let plan = AXAttachedSheetCanonicalizer.plan(nodes: nodes)
+        var changed = 0
+        for sheetIndex in plan.sheetIndices {
+            changed += mutateState(sheetIndex) { state in
+                state.flags.append(contentsOf: ["attached_sheet", "live_action_surface"])
+                state.flags = uniqueOrdered(state.flags)
+                state.metadata.append("Live attached action surface")
+                state.metadata = uniqueOrdered(state.metadata)
+                state.transformNotes.append("attached-sheet")
+                if let foldedIndices = plan.foldedIndicesBySheet[sheetIndex] {
+                    state.foldedCanonicalIndices.append(contentsOf: foldedIndices)
+                    state.foldedCanonicalIndices = Array(Set(state.foldedCanonicalIndices)).sorted()
+                    state.transformNotes.append("absorbed-duplicate-surface")
+                }
+            }
+            for duplicateRoot in plan.duplicateRootsBySheet[sheetIndex] ?? [] {
+                changed += mutateState(duplicateRoot) { state in
+                    state.disposition = .hiddenSubtree
+                    state.transformNotes.append("duplicate-attached-sheet")
+                }
+            }
+        }
+        return changed
     }
 
     private func passAssociateRelationshipLabels() -> Int {
@@ -1936,6 +1984,7 @@ private struct NodeProjectionState: Equatable {
     var metadata: [String]
     var flags: [String]
     var affordances: [AXAffordanceDTO]
+    var foldedCanonicalIndices: [Int]
     var disposition: NodeRenderDisposition
     var summaryStyle: BranchSummaryStyle?
     var transformNotes: [String]

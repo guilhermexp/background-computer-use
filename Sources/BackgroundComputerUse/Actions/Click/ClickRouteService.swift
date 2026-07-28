@@ -73,7 +73,9 @@ struct ClickRouteService {
             windowID: request.window,
             includeMenuBar: request.includeMenuBar ?? true,
             maxNodes: request.maxNodes ?? 6500,
-            imageMode: request.imageMode ?? .omit
+            imageMode: request.target?.kind == .ocrAnchor
+                ? Self.ocrCaptureImageMode(requested: request.imageMode ?? .omit)
+                : (request.imageMode ?? .omit)
         )
         let warnings = targetResolver.stateTokenWarnings(
             suppliedStateToken: request.stateToken,
@@ -158,6 +160,18 @@ struct ClickRouteService {
                     warnings: warnings,
                     notes: notes,
                     summary: "Target clickCount must be 1 or 2."
+                )
+            }
+            if target.kind == .ocrAnchor {
+                return clickOCRTarget(
+                    request: request,
+                    capture: capture,
+                    requestedActionTarget: target,
+                    clickCount: clickCount,
+                    mouseButton: mouseButton,
+                    frontmostBefore: frontmostBefore,
+                    warnings: warnings,
+                    notes: notes
                 )
             }
             return try clickTarget(
@@ -262,6 +276,332 @@ struct ClickRouteService {
             notes: outcome.notes,
             verification: outcome.verification,
             postScreenshot: postScreenshot(from: outcome.postCapture)
+        )
+    }
+
+    private func clickOCRTarget(
+        request: ClickRequest,
+        capture: AXActionStateCapture,
+        requestedActionTarget: ActionTargetRequestDTO,
+        clickCount: Int,
+        mouseButton: MouseButtonDTO,
+        frontmostBefore: String?,
+        warnings: [String],
+        notes: [String]
+    ) -> ClickResponse {
+        guard clickCount == 1 else {
+            return ocrFailureResponse(
+                request: request,
+                capture: capture,
+                requestedTarget: requestedActionTarget,
+                clickCount: clickCount,
+                mouseButton: mouseButton,
+                frontmostBefore: frontmostBefore,
+                warnings: warnings,
+                notes: notes,
+                summary: "OCR anchor clicks support a single click only.",
+                fallbackReason: .invalidClickCount
+            )
+        }
+        guard let imagePath = capture.envelope.response.screenshot.image?.imagePath else {
+            return ocrFailureResponse(
+                request: request,
+                capture: capture,
+                requestedTarget: requestedActionTarget,
+                clickCount: clickCount,
+                mouseButton: mouseButton,
+                frontmostBefore: frontmostBefore,
+                warnings: warnings,
+                notes: notes,
+                summary: "OCR anchor resolution requires a captured screenshot image.",
+                fallbackReason: .invalidTarget
+            )
+        }
+
+        let liveInteractionToken = capture.envelope.response.interactionToken
+        let ocr = OCRRecognitionService.recognize(
+            imagePath: imagePath,
+            interactionToken: liveInteractionToken
+        )
+        if ocr.status != .success, ocr.status != .noText {
+            let diagnostic = ocr.diagnostic ?? "OCR recognition failed for the captured screenshot."
+            return ocrFailureResponse(
+                request: request,
+                capture: capture,
+                requestedTarget: requestedActionTarget,
+                clickCount: clickCount,
+                mouseButton: mouseButton,
+                frontmostBefore: frontmostBefore,
+                warnings: warnings + [diagnostic],
+                notes: notes + [diagnostic],
+                summary: diagnostic,
+                fallbackReason: .ocrUnavailable,
+                failureDomain: .verification
+            )
+        }
+        let resolution = OCRClickTargetResolver.resolve(
+            requestedID: requestedActionTarget.value,
+            suppliedInteractionToken: request.interactionToken,
+            liveInteractionToken: liveInteractionToken,
+            anchors: ocr.anchors
+        )
+        let anchor: OCRAnchorDTO
+        let relocated: Bool
+        switch resolution {
+        case let .matched(resolvedAnchor, wasRelocated):
+            anchor = resolvedAnchor
+            relocated = wasRelocated
+        case .staleInteractionToken:
+            return ocrFailureResponse(
+                request: request,
+                capture: capture,
+                requestedTarget: requestedActionTarget,
+                clickCount: clickCount,
+                mouseButton: mouseButton,
+                frontmostBefore: frontmostBefore,
+                warnings: warnings,
+                notes: notes,
+                summary: "The supplied interactionToken is missing or stale; refresh get_window_state before clicking this OCR anchor.",
+                fallbackReason: .staleCoordinateGuard
+            )
+        case .ambiguous:
+            return ocrFailureResponse(
+                request: request,
+                capture: capture,
+                requestedTarget: requestedActionTarget,
+                clickCount: clickCount,
+                mouseButton: mouseButton,
+                frontmostBefore: frontmostBefore,
+                warnings: warnings,
+                notes: notes,
+                summary: "The OCR anchor matched multiple nearby text regions; refresh state and choose a current target.",
+                fallbackReason: .invalidTarget
+            )
+        case .missing:
+            return ocrFailureResponse(
+                request: request,
+                capture: capture,
+                requestedTarget: requestedActionTarget,
+                clickCount: clickCount,
+                mouseButton: mouseButton,
+                frontmostBefore: frontmostBefore,
+                warnings: warnings,
+                notes: notes,
+                summary: "The OCR anchor no longer resolves in the current screenshot.",
+                fallbackReason: .invalidTarget
+            )
+        }
+
+        let safetyDecision = RuntimeSafetyPolicy.evaluateLabel(anchor.text, confirmed: request.confirm == true)
+        guard safetyDecision.blocked == false else {
+            return ocrFailureResponse(
+                request: request,
+                capture: capture,
+                requestedTarget: requestedActionTarget,
+                clickCount: clickCount,
+                mouseButton: mouseButton,
+                frontmostBefore: frontmostBefore,
+                warnings: warnings,
+                notes: notes,
+                summary: safetyDecision.reason ?? "OCR click target requires explicit confirmation.",
+                fallbackReason: .invalidTarget
+            )
+        }
+
+        let window = capture.envelope.response.window
+        let beforeImage = modelFacingImage(from: capture)
+        let outcome = executeCoordinateClick(
+            request: request,
+            capture: capture,
+            target: nil,
+            x: Double(anchor.x),
+            y: Double(anchor.y),
+            clickCount: clickCount,
+            mouseButton: mouseButton,
+            finalRoute: .ocrAnchorXY,
+            fallbackReason: .none,
+            source: "ocr_anchor_center",
+            inheritedTransports: [],
+            inheritedSteps: [],
+            warnings: warnings,
+            notes: notes + (relocated ? ["OCR anchor was safely relocated by text, occurrence, and bounded geometry."] : []),
+            postImageMode: Self.ocrCaptureImageMode(requested: request.imageMode ?? .omit)
+        )
+        let afterImage = outcome.postCapture.flatMap(modelFacingImage)
+        let modelSize = modelPixelSize(for: capture.envelope.response)
+        let visual: VisualChangeAnalyzer.Result?
+        if modelSize.width > 0, modelSize.height > 0 {
+            let normalizedRegion = Self.normalizedOCRVerificationRegion(
+                box: anchor.box,
+                modelWidth: Double(modelSize.width),
+                modelHeight: Double(modelSize.height)
+            )
+            visual = beforeImage.flatMap { before in
+                afterImage.flatMap {
+                    VisualChangeAnalyzer.compare(before: before, after: $0, normalizedRegion: normalizedRegion)
+                }
+            }
+        } else {
+            visual = nil
+        }
+        let postOCR = afterImage.map {
+            OCRRecognitionService.recognize(
+                cgImage: $0,
+                interactionToken: outcome.postCapture?.envelope.response.interactionToken ?? liveInteractionToken
+            )
+        }
+        let anchorDisappeared = postOCR.flatMap { summary -> Bool? in
+            guard summary.status == .success || summary.status == .noText else { return nil }
+            return OCRClickTargetResolver.isAnchorPresent(anchor, in: summary.anchors) == false
+        }
+        let verification = ocrVerification(
+            base: outcome.verification,
+            before: capture,
+            after: outcome.postCapture,
+            relocated: relocated,
+            anchorDisappeared: anchorDisappeared,
+            visual: visual
+        )
+        let dispatched = outcome.transports.contains { $0.didDispatch && $0.transportSuccess }
+        let verified = dispatched && effectVerified(verification)
+        var routeSteps = outcome.routeSteps
+        if let lastIndex = routeSteps.indices.last {
+            let prior = routeSteps[lastIndex]
+            routeSteps[lastIndex] = ClickRouteStepDTO(
+                route: prior.route,
+                dispatchSuccess: prior.dispatchSuccess,
+                verificationSuccess: verified,
+                intentSuccess: verified,
+                note: verified
+                    ? "OCR click produced a target-local, anchor, or structural post-state effect."
+                    : "OCR click dispatched, but target-local and structural verification found no effect."
+            )
+        }
+
+        var responseWarnings = outcome.warnings
+        if verified {
+            responseWarnings.removeAll {
+                $0.hasPrefix("coordinate_dispatch_effect_unconfirmed:") ||
+                    $0.hasPrefix("opaque_renderer_focus_unconfirmed:")
+            }
+        }
+
+        return response(
+            classification: verified ? .success : .effectNotVerified,
+            failureDomain: verified ? nil : (dispatched ? .verification : (outcome.failureDomain ?? .transport)),
+            summary: verified
+                ? "The OCR anchor click produced a verified target-local or structural effect."
+                : "The OCR anchor click dispatched, but its requested effect was not verified.",
+            window: outcome.postCapture?.envelope.response.window ?? window,
+            requestedTarget: requestedTargetDTO(request),
+            target: nil,
+            clickCount: clickCount,
+            mouseButton: mouseButton,
+            finalRoute: .ocrAnchorXY,
+            fallbackReason: outcome.fallbackReason,
+            axAttempt: nil,
+            coordinate: outcome.coordinate,
+            transports: outcome.transports,
+            routeSteps: routeSteps,
+            preStateToken: capture.envelope.response.stateToken,
+            postStateToken: outcome.postCapture?.envelope.response.stateToken,
+            cursor: outcome.cursor,
+            frontmostBundleBefore: frontmostBefore,
+            frontmostBundleBeforeDispatch: outcome.frontmostBundleBeforeDispatch,
+            frontmostBundleAfter: outcome.frontmostBundleAfter,
+            warnings: responseWarnings,
+            notes: outcome.notes,
+            verification: verification,
+            postScreenshot: postScreenshot(from: outcome.postCapture)
+        )
+    }
+
+    private func ocrFailureResponse(
+        request: ClickRequest,
+        capture: AXActionStateCapture,
+        requestedTarget: ActionTargetRequestDTO,
+        clickCount: Int,
+        mouseButton: MouseButtonDTO,
+        frontmostBefore: String?,
+        warnings: [String],
+        notes: [String],
+        summary: String,
+        fallbackReason: ClickFallbackReasonDTO,
+        failureDomain: ActionFailureDomainDTO = .targeting
+    ) -> ClickResponse {
+        response(
+            classification: .verifierAmbiguous,
+            failureDomain: failureDomain,
+            summary: summary,
+            window: capture.envelope.response.window,
+            requestedTarget: ClickRequestedTargetDTO(
+                kind: .ocrAnchor,
+                target: requestedTarget,
+                x: nil,
+                y: nil,
+                coordinateSpace: nil
+            ),
+            target: nil,
+            clickCount: clickCount,
+            mouseButton: mouseButton,
+            finalRoute: .rejected,
+            fallbackReason: fallbackReason,
+            axAttempt: nil,
+            coordinate: nil,
+            transports: [],
+            routeSteps: [rejectedStep(summary)],
+            preStateToken: capture.envelope.response.stateToken,
+            postStateToken: nil,
+            cursor: AXCursorTargeting.notAttempted(
+                requested: request.cursor,
+                reason: summary,
+                options: executionOptions
+            ),
+            frontmostBundleBefore: frontmostBefore,
+            frontmostBundleBeforeDispatch: nil,
+            frontmostBundleAfter: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            warnings: warnings,
+            notes: notes,
+            verification: nil
+        )
+    }
+
+    private func ocrVerification(
+        base: ClickVerificationEvidenceDTO?,
+        before: AXActionStateCapture,
+        after: AXActionStateCapture?,
+        relocated: Bool,
+        anchorDisappeared: Bool?,
+        visual: VisualChangeAnalyzer.Result?
+    ) -> ClickVerificationEvidenceDTO {
+        ClickVerificationEvidenceDTO(
+            preStateToken: before.envelope.response.stateToken,
+            postStateToken: after?.envelope.response.stateToken,
+            targetRelocated: relocated,
+            refreshedTargetMatchStrategy: relocated ? "ocr_text_occurrence_bounded_geometry" : "ocr_anchor_id",
+            beforeTargetSelected: base?.beforeTargetSelected,
+            afterTargetSelected: base?.afterTargetSelected,
+            beforeTargetFocused: base?.beforeTargetFocused,
+            afterTargetFocused: base?.afterTargetFocused,
+            beforeTargetValuePreview: base?.beforeTargetValuePreview,
+            afterTargetValuePreview: base?.afterTargetValuePreview,
+            beforeFocusedNodeID: base?.beforeFocusedNodeID,
+            afterFocusedNodeID: base?.afterFocusedNodeID,
+            renderedTextChanged: base?.renderedTextChanged,
+            selectionSummaryChanged: base?.selectionSummaryChanged,
+            focusedElementChanged: base?.focusedElementChanged,
+            windowTitleChanged: base?.windowTitleChanged,
+            modalDialogOpened: base?.modalDialogOpened,
+            targetStateChanged: base?.targetStateChanged,
+            ocrAnchorMatched: true,
+            ocrAnchorRelocated: relocated,
+            ocrAnchorDisappeared: anchorDisappeared,
+            targetRegionChangeRatio: visual?.targetRegionRatio,
+            fullImageChangeRatio: visual?.fullImageRatio,
+            foregroundPreserved: base?.foregroundPreserved,
+            verificationNotes: (base?.verificationNotes ?? []) + [
+                "OCR verification requires anchor disappearance, target-local pixels, or structural AX evidence; unrelated full-window changes are ignored."
+            ]
         )
     }
 
@@ -697,7 +1037,8 @@ struct ClickRouteService {
         inheritedTransports: [ClickTransportAttemptDTO],
         inheritedSteps: [ClickRouteStepDTO],
         warnings: [String],
-        notes: [String]
+        notes: [String],
+        postImageMode: ImageMode? = nil
     ) -> ClickCoordinateOutcome {
         let modelSize = modelPixelSize(for: capture.envelope.response)
         guard let plan = coordinatePlan(
@@ -743,7 +1084,8 @@ struct ClickRouteService {
             inheritedTransports: inheritedTransports,
             inheritedSteps: inheritedSteps,
             warnings: warnings,
-            notes: notes
+            notes: notes,
+            postImageMode: postImageMode
         )
     }
 
@@ -760,7 +1102,8 @@ struct ClickRouteService {
         inheritedTransports: [ClickTransportAttemptDTO],
         inheritedSteps: [ClickRouteStepDTO],
         warnings: [String],
-        notes: [String]
+        notes: [String],
+        postImageMode: ImageMode? = nil
     ) -> ClickCoordinateOutcome {
         var warnings = warnings + plan.mapping.warnings
         var notes = notes
@@ -837,7 +1180,7 @@ struct ClickRouteService {
         sleepRunLoop(settleDelay)
         let postCapture: AXActionStateCapture?
         do {
-            postCapture = try targetResolver.reread(after: capture, imageMode: request.imageMode ?? .omit)
+            postCapture = try targetResolver.reread(after: capture, imageMode: postImageMode ?? request.imageMode ?? .omit)
         } catch {
             postCapture = nil
             warnings.append("Post-click reread failed after coordinate dispatch: \(error).")
@@ -861,6 +1204,14 @@ struct ClickRouteService {
         let verified = transportResult.dispatchSuccess && effectVerified(verification)
         let classification: ActionClassificationDTO = verified ? .success : .effectNotVerified
         let failureDomain: ActionFailureDomainDTO? = verified ? nil : (transportResult.dispatchSuccess ? .verification : .transport)
+        if transportResult.dispatchSuccess && verified == false {
+            let diagnostic = target == nil && capture.envelope.response.tree.profile == AXProjectionProfile.richWeb.rawValue
+                ? "opaque_renderer_focus_unconfirmed"
+                : "coordinate_dispatch_effect_unconfirmed"
+            warnings.append(
+                "\(diagnostic): native coordinate events were posted, but no target-local or structural post-state effect was observed."
+            )
+        }
         let transport = ClickTransportAttemptDTO(
             route: .nativeBackgroundCoordinate,
             axAttempt: nil,
@@ -1347,6 +1698,11 @@ struct ClickRouteService {
             windowTitleChanged: windowTitleChanged,
             modalDialogOpened: modalDialogOpened,
             targetStateChanged: targetStateChanged,
+            ocrAnchorMatched: nil,
+            ocrAnchorRelocated: nil,
+            ocrAnchorDisappeared: nil,
+            targetRegionChangeRatio: nil,
+            fullImageChangeRatio: nil,
             foregroundPreserved: foregroundBeforeDispatch == nil || foregroundAfter == nil
                 ? nil
                 : foregroundBeforeDispatch == foregroundAfter,
@@ -1377,6 +1733,15 @@ struct ClickRouteService {
     private func effectVerified(_ verification: ClickVerificationEvidenceDTO?) -> Bool {
         guard let verification else {
             return false
+        }
+        if verification.ocrAnchorMatched != nil {
+            return verification.selectionSummaryChanged == true ||
+                verification.focusedElementChanged == true ||
+                verification.windowTitleChanged == true ||
+                verification.modalDialogOpened == true ||
+                verification.targetStateChanged == true ||
+                verification.ocrAnchorDisappeared == true ||
+                (verification.targetRegionChangeRatio ?? 0) >= 0.018
         }
         return verification.renderedTextChanged == true ||
             verification.selectionSummaryChanged == true ||
@@ -1483,6 +1848,15 @@ struct ClickRouteService {
         return AXCursorTargeting.targetPoint(for: target, window: window).point != nil
     }
 
+
+    private func modelFacingImage(from capture: AXActionStateCapture) -> CGImage? {
+        guard let path = capture.envelope.response.screenshot.image?.imagePath,
+              let image = NSImage(contentsOfFile: path) else {
+            return nil
+        }
+        return image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+    }
+
     private func modelPixelSize(for response: AXPipelineV2Response) -> PixelSize {
         if let size = response.screenshot.coordinateContract?.modelFacingScreenshot.pixelSize {
             return size
@@ -1578,7 +1952,7 @@ struct ClickRouteService {
     private func requestedTargetDTO(_ request: ClickRequest) -> ClickRequestedTargetDTO {
         if let target = request.target {
             return ClickRequestedTargetDTO(
-                kind: .semanticTarget,
+                kind: target.kind == .ocrAnchor ? .ocrAnchor : .semanticTarget,
                 target: target,
                 x: nil,
                 y: nil,
@@ -1784,6 +2158,23 @@ struct ClickRouteService {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+
+    static func ocrCaptureImageMode(requested: ImageMode) -> ImageMode {
+        requested == .omit ? .path : requested
+    }
+
+    static func normalizedOCRVerificationRegion(
+        box: OCRBoxDTO,
+        modelWidth: Double,
+        modelHeight: Double
+    ) -> CGRect {
+        CGRect(
+            x: box.x / modelWidth,
+            y: 1 - (box.y + box.height) / modelHeight,
+            width: box.width / modelWidth,
+            height: box.height / modelHeight
+        )
     }
 
     private func rect(from dto: RectDTO) -> CGRect {
