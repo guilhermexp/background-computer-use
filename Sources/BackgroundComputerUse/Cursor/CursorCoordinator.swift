@@ -14,6 +14,9 @@ private final class CursorSessionState {
     var lastActivityAt: TimeInterval
     var attachedWindowNumber: Int?
     var attachedWindowLevelRawValue = NSWindow.Level.normal.rawValue
+    var attachedWindowFrame: CGRect?
+    var attachmentIsLive = false
+    var attachmentCheckedAt: TimeInterval = 0
     var labelText: String
     var colorHex: String
 
@@ -40,9 +43,6 @@ private final class CursorSessionState {
     var actionInProgress = false
     var followers: [CursorFollowerPoint] = []
     var effects: [CursorVisualEffect] = []
-    var idleSeed = CGFloat.random(in: 0..<1000)
-    var idleBreathOffsetX: CGFloat = 0
-    var idleBreathOffsetY: CGFloat = 0
     var scrollStreakEnabledUntil: TimeInterval = 0
     var scrollStreakAxis: CursorScrollAxis = .vertical
     var scrollStreakDirection: CursorScrollDirection = .positive
@@ -107,6 +107,8 @@ private struct CursorOverlayKey: Hashable {
 final class CursorCoordinator {
     static let shared = CursorCoordinator()
     private static let maxTypeTextPuffs = 6
+    /// How often a pinned session re-reads its window geometry from the window server.
+    private static let attachmentRefreshInterval: TimeInterval = 0.25
 
     private let defaultAppearance = CursorProfile.defaultAppearance
     private let tuning = CursorMotionTuning.swoopy
@@ -552,7 +554,7 @@ final class CursorCoordinator {
         }
 
         let resolvedAnchor = anchorPoint ?? update.target ?? sessionCurrentOrFallbackPoint(session)
-        let clamped = clampToVisibleScreen(resolvedAnchor)
+        let clamped = clampToVisibleScreen(resolvedAnchor, session: session)
         if session.hasPosition == false || session.visible == false || session.visibilityAlpha <= 0.01 {
             snapState(session, to: clamped.point)
         }
@@ -633,10 +635,24 @@ final class CursorCoordinator {
         let now = CACurrentMediaTime()
         let dt = CGFloat(min(max(now - (lastTimestamp ?? now), 1.0 / 240.0), 1.0 / 24.0))
         lastTimestamp = now
+        tick(now: now, dt: dt)
+    }
 
+    /// Test seam: runs one animation frame for a single session against an
+    /// injected clock, so presence and motion can be asserted without waiting on
+    /// the display link and without disturbing other sessions.
+    func tickForTesting(cursorID: String, now: TimeInterval, dt: CGFloat = 1.0 / 60.0) {
+        guard let session = sessionsByID[cursorID] else { return }
+        refreshAttachmentIfStale(session, now: now)
+        advance(session, now: now, dt: dt)
+        refreshPresentation()
+    }
+
+    private func tick(now: TimeInterval, dt: CGFloat) {
         purgeExpiredSessions(now: now)
 
         for session in sessionsByID.values {
+            refreshAttachmentIfStale(session, now: now)
             advance(session, now: now, dt: dt)
         }
 
@@ -675,9 +691,60 @@ final class CursorCoordinator {
         return "cur_\(suffix)"
     }
 
-    private func updateAttachment(for session: CursorSessionState, windowNumber: Int) {
+    private func updateAttachment(
+        for session: CursorSessionState,
+        windowNumber: Int,
+        now: TimeInterval = CACurrentMediaTime()
+    ) {
+        let sameWindow = session.attachedWindowNumber == windowNumber
         session.attachedWindowNumber = windowNumber
-        session.attachedWindowLevelRawValue = windowLevelRawValue(for: windowNumber)
+        session.attachmentCheckedAt = now
+
+        guard let anchor = CursorWindowAnchorResolver.anchor(forWindowNumber: windowNumber) else {
+            session.attachedWindowFrame = nil
+            session.attachmentIsLive = false
+            session.attachedWindowLevelRawValue = NSWindow.Level.normal.rawValue
+            return
+        }
+
+        session.attachedWindowLevelRawValue = anchor.levelRawValue
+        session.attachmentIsLive = anchor.isOnScreen
+        if sameWindow,
+           let previous = session.attachedWindowFrame,
+           previous != anchor.frameAppKit {
+            reanchorPosition(session, from: previous, to: anchor.frameAppKit)
+        }
+        session.attachedWindowFrame = anchor.frameAppKit
+    }
+
+    private func refreshAttachmentIfStale(_ session: CursorSessionState, now: TimeInterval) {
+        guard let windowNumber = session.attachedWindowNumber,
+              now - session.attachmentCheckedAt >= Self.attachmentRefreshInterval else {
+            return
+        }
+        updateAttachment(for: session, windowNumber: windowNumber, now: now)
+    }
+
+    /// Keeps the cursor at the same relative spot inside a window that moved or
+    /// resized, so a pinned cursor never stays behind at a stale screen point.
+    private func reanchorPosition(
+        _ session: CursorSessionState,
+        from previous: CGRect,
+        to current: CGRect
+    ) {
+        guard session.hasPosition, session.currentMotion == nil else { return }
+        let moved = CursorWindowPinning.reanchor(session.position, from: previous, to: current)
+        let delta = CGPoint(x: moved.x - session.position.x, y: moved.y - session.position.y)
+        guard delta.x != 0 || delta.y != 0 else { return }
+
+        session.position = moved
+        for index in session.followers.indices {
+            session.followers[index].position.x += delta.x
+            session.followers[index].position.y += delta.y
+            session.followers[index].history = session.followers[index].history.map {
+                CGPoint(x: $0.x + delta.x, y: $0.y + delta.y)
+            }
+        }
     }
 
     private func prepareActionSession(
@@ -850,7 +917,7 @@ final class CursorCoordinator {
 
     private func ensurePosition(for session: CursorSessionState, near point: CGPoint) {
         guard session.hasPosition == false || session.visible == false || session.visibilityAlpha <= 0.01 else { return }
-        snapState(session, to: initialPoint(for: point))
+        snapState(session, to: initialPoint(for: point, session: session))
         session.nextMotionEntersFromEdge = true
     }
 
@@ -954,9 +1021,9 @@ final class CursorCoordinator {
         return CGPoint(x: tipTarget.x - offset.x, y: tipTarget.y - offset.y)
     }
 
-    private func initialPoint(for targetPoint: CGPoint) -> CGPoint {
-        let screen = DesktopGeometry.screenContaining(point: targetPoint) ?? NSScreen.main ?? NSScreen.screens.first
-        let frame = screen?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
+    private func initialPoint(for targetPoint: CGPoint, session: CursorSessionState) -> CGPoint {
+        let frame = anchorScreen(for: session, near: targetPoint)?.frame
+            ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
         return CursorMotionPlanner.edgeEntrancePoint(for: frame)
     }
 
@@ -964,18 +1031,47 @@ final class CursorCoordinator {
         if session.hasPosition {
             return session.position
         }
+        if let windowFrame = session.attachedWindowFrame {
+            return CGPoint(x: windowFrame.midX, y: windowFrame.midY)
+        }
         let frame = (NSScreen.main ?? NSScreen.screens.first)?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
         return CGPoint(x: frame.midX, y: frame.midY)
     }
 
-    private func clampToVisibleScreen(_ point: CGPoint) -> (point: CGPoint, clamped: Bool) {
-        let screen = DesktopGeometry.screenContaining(point: point) ?? NSScreen.main ?? NSScreen.screens.first
-        let frame = screen?.visibleFrame ?? screen?.frame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
-        let clampedPoint = CGPoint(
-            x: max(frame.minX + 12, min(point.x, frame.maxX - 12)),
-            y: max(frame.minY + 12, min(point.y, frame.maxY - 12))
-        )
-        return (clampedPoint, clampedPoint.distance(to: point) > 0.01)
+    /// Display a cursor session is allowed to occupy: the one holding its
+    /// attached window, never `NSScreen.main` while an attachment exists.
+    private func anchorScreen(for session: CursorSessionState, near point: CGPoint) -> NSScreen? {
+        if let windowFrame = session.attachedWindowFrame,
+           let screen = CursorWindowPinning.screen(forWindowFrame: windowFrame) {
+            return screen
+        }
+        return DesktopGeometry.screenContaining(point: point) ?? NSScreen.main ?? NSScreen.screens.first
+    }
+
+    /// Keeps a feedback/pointing anchor inside the window the session is pinned
+    /// to, then inside that window's display. Sessions with no attachment keep
+    /// the previous screen-only behavior.
+    private func clampToVisibleScreen(
+        _ point: CGPoint,
+        session: CursorSessionState
+    ) -> (point: CGPoint, clamped: Bool) {
+        var pinned = point
+        let screen: NSScreen?
+        if let windowFrame = session.attachedWindowFrame, windowFrame.width > 0, windowFrame.height > 0 {
+            var ignoredWarnings: [String] = []
+            pinned = CursorWindowPinning.pin(pinned, toWindowFrame: windowFrame, warnings: &ignoredWarnings)
+            screen = CursorWindowPinning.screen(forWindowFrame: windowFrame)
+        } else {
+            screen = DesktopGeometry.screenContaining(point: pinned) ?? NSScreen.main ?? NSScreen.screens.first
+        }
+
+        if let frame = screen?.visibleFrame {
+            pinned = CGPoint(
+                x: max(frame.minX + 12, min(pinned.x, frame.maxX - 12)),
+                y: max(frame.minY + 12, min(pinned.y, frame.maxY - 12))
+            )
+        }
+        return (pinned, pinned.distance(to: point) > 0.01)
     }
 
     private func sleepFor(_ seconds: TimeInterval) {
@@ -1015,23 +1111,13 @@ final class CursorCoordinator {
                 session.acquireGlowEmitted = false
                 session.anticipationTilt = 0
             }
-        } else if CursorMotionConstants.idleBreathing, session.hasPosition {
-            session.idleSeed += dt * 0.6
-            let breathX = sin(session.idleSeed * 0.9) * 1.6
-            let breathY = cos(session.idleSeed * 0.7) * 1.2
-            session.position = CGPoint(
-                x: session.position.x + (breathX - session.idleBreathOffsetX) * 0.08,
-                y: session.position.y + (breathY - session.idleBreathOffsetY) * 0.08
-            )
-            session.idleBreathOffsetX = breathX
-            session.idleBreathOffsetY = breathY
-            let wobble = sin(session.idleSeed * 1.3) * 0.05
+        } else if session.hasPosition {
             var angle = session.angle
             var angleVelocity = session.angleVelocity
             cursorAngularSpring(
                 angle: &angle,
                 velocity: &angleVelocity,
-                target: wobble + CursorMotionConstants.arrowHomeAngle,
+                target: CursorMotionConstants.arrowHomeAngle,
                 stiffness: 8,
                 damping: 4,
                 dt: dt
@@ -1165,6 +1251,15 @@ final class CursorCoordinator {
     private func stepVisibility(_ session: CursorSessionState, now: TimeInterval) {
         if session.activity(at: now).isActive {
             touchVisibility(session, now: now)
+            return
+        }
+
+        // A cursor pinned to a live window stays on screen: the agent pointer must
+        // remain visible in the window it drives. Presence deliberately does not
+        // renew `lastActivityAt`, so `idleExpireDelay` still retires the session.
+        if session.attachmentIsLive {
+            session.visible = true
+            session.visibilityAlpha = 1
             return
         }
 
@@ -1367,15 +1462,14 @@ final class CursorCoordinator {
         displayLinkProxy = proxy
     }
 
-    private func windowLevelRawValue(for windowNumber: Int) -> Int {
-        guard let infoList = CGWindowListCopyWindowInfo(
-            [.optionIncludingWindow],
-            CGWindowID(windowNumber)
-        ) as? [[String: Any]],
-              let layer = infoList.first?[kCGWindowLayer as String] as? Int else {
-            return NSWindow.Level.normal.rawValue
+    /// Test seam: drops every cursor session and overlay so suites never inherit
+    /// cursor state from each other.
+    func resetState() {
+        for controller in overlaysByKey.values {
+            controller.teardown()
         }
-        return layer
+        overlaysByKey.removeAll()
+        sessionsByID.removeAll()
     }
 }
 
@@ -1402,6 +1496,29 @@ enum CursorRuntime {
         }
         DispatchQueue.main.sync { @MainActor in
             CursorCoordinator.shared.startIfNeeded()
+        }
+    }
+
+    /// Test seam: clears every cursor session and overlay plus any injected window
+    /// geometry, so cursor suites start from a known runtime state.
+    static func resetForTesting(windowAnchors: [Int: CursorWindowAnchor]? = nil) {
+        runOnMain {
+            CursorWindowAnchorResolver.setOverrides(windowAnchors)
+            CursorCoordinator.shared.resetState()
+        }
+    }
+
+    /// Test seam: swaps the injected window geometry without dropping sessions.
+    static func setWindowAnchorsForTesting(_ anchors: [Int: CursorWindowAnchor]?) {
+        runOnMain {
+            CursorWindowAnchorResolver.setOverrides(anchors)
+        }
+    }
+
+    /// Test seam: advances one animation frame for one session against an injected clock.
+    static func tickForTesting(cursorID: String, now: TimeInterval, dt: CGFloat = 1.0 / 60.0) {
+        runOnMain {
+            CursorCoordinator.shared.tickForTesting(cursorID: cursorID, now: now, dt: dt)
         }
     }
 

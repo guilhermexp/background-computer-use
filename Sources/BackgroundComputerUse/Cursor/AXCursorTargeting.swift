@@ -87,7 +87,11 @@ enum AXCursorTargeting {
     ) -> ActionCursorTargetResponseDTO {
         let options = effectiveOptions(requested: requested, options: options)
         var warnings: [String] = []
-        let point = clampVisualPoint(pointAppKit, window: window, warnings: &warnings)
+        let point = CursorWindowPinning.pin(
+            pointAppKit,
+            toWindowFrame: rect(from: window.frameAppKit),
+            warnings: &warnings
+        )
         guard options.visualCursorEnabled else {
             return cursorResponse(
                 requested: requested,
@@ -308,11 +312,7 @@ enum AXCursorTargeting {
         }
 
         let session = CursorRuntime.resolve(requested: requested)
-        let resolvedPoint = visualTargetPoint(
-            for: target,
-            window: window,
-            previousPoint: CursorRuntime.currentPosition(cursorID: session.id)
-        )
+        let resolvedPoint = targetPoint(for: target, window: window)
 
         guard let point = resolvedPoint.point else {
             return ActionCursorTargetResponseDTO(
@@ -390,115 +390,13 @@ enum AXCursorTargeting {
             return (nil, rawCandidate.source, ["Target point was not finite."])
         }
 
-        let windowFrame = rect(from: window.frameAppKit).standardized
-        if windowFrame.isNull == false, windowFrame.width > 0, windowFrame.height > 0,
-           windowFrame.insetBy(dx: -2, dy: -2).contains(point) == false {
-            warnings.append("Cursor target point was outside the resolved window frame and was clamped to the window.")
-            point = clamp(point, to: windowFrame.insetBy(dx: 1, dy: 1))
-        }
-
-        if let screen = DesktopGeometry.screenContaining(point: point) ?? DesktopGeometry.screenMatching(frame: windowFrame) {
-            let screenFrame = screen.frame.standardized
-            if screenFrame.insetBy(dx: -1, dy: -1).contains(point) == false {
-                warnings.append("Cursor target point was outside visible screen geometry and was clamped to the nearest matching screen.")
-                point = clamp(point, to: screenFrame.insetBy(dx: 1, dy: 1))
-            }
-        } else {
-            warnings.append("No screen geometry was available for cursor target sanity-checking.")
-        }
+        point = CursorWindowPinning.pin(
+            point,
+            toWindowFrame: rect(from: window.frameAppKit),
+            warnings: &warnings
+        )
 
         return (point, rawCandidate.source, warnings)
-    }
-
-    private static func visualTargetPoint(
-        for target: AXActionTargetSnapshot,
-        window: ResolvedWindowDTO,
-        previousPoint: CGPoint?
-    ) -> (point: CGPoint?, source: String?, warnings: [String]) {
-        var resolved = targetPoint(for: target, window: window)
-        guard let previousPoint,
-              let frameDTO = target.frameAppKit,
-              let basePoint = resolved.point else {
-            return resolved
-        }
-
-        let frame = rect(from: frameDTO).standardized
-        guard frame.width >= 72 || frame.height >= 72 else {
-            return resolved
-        }
-
-        let insetX = min(max(frame.width * 0.08, 18), max(frame.width / 2 - 1, 1))
-        let insetY = min(max(frame.height * 0.08, 18), max(frame.height / 2 - 1, 1))
-        let inner = frame.insetBy(dx: insetX, dy: insetY).standardized
-        guard inner.width > 8, inner.height > 8 else {
-            return resolved
-        }
-
-        var candidates: [CGPoint] = [
-            CGPoint(x: inner.minX, y: inner.minY),
-            CGPoint(x: inner.midX, y: inner.minY),
-            CGPoint(x: inner.maxX, y: inner.minY),
-            CGPoint(x: inner.minX, y: inner.midY),
-            CGPoint(x: inner.midX, y: inner.midY),
-            CGPoint(x: inner.maxX, y: inner.midY),
-            CGPoint(x: inner.minX, y: inner.maxY),
-            CGPoint(x: inner.midX, y: inner.maxY),
-            CGPoint(x: inner.maxX, y: inner.maxY),
-        ]
-        for _ in 0..<6 {
-            candidates.append(
-                CGPoint(
-                    x: CGFloat.random(in: inner.minX...inner.maxX),
-                    y: CGFloat.random(in: inner.minY...inner.maxY)
-                )
-            )
-        }
-
-        let scoredCandidates = candidates.map { point in
-            (point: point, score: point.distance(to: previousPoint) + CGFloat.random(in: 0...16))
-        }
-        guard let chosen = scoredCandidates.max(by: { $0.score < $1.score })?.point else {
-            return resolved
-        }
-
-        if chosen.distance(to: basePoint) >= 8 {
-            resolved.point = clampVisualPoint(chosen, window: window, warnings: &resolved.warnings)
-            resolved.source = [resolved.source, "visual_interest_offset"]
-                .compactMap { $0 }
-                .joined(separator: "+")
-        }
-        return resolved
-    }
-
-    private static func clampVisualPoint(
-        _ point: CGPoint,
-        window: ResolvedWindowDTO,
-        warnings: inout [String]
-    ) -> CGPoint {
-        var point = point
-        let windowFrame = rect(from: window.frameAppKit).standardized
-        if windowFrame.isNull == false, windowFrame.width > 0, windowFrame.height > 0,
-           windowFrame.insetBy(dx: -2, dy: -2).contains(point) == false {
-            warnings.append("Visual cursor offset was outside the resolved window frame and was clamped to the window.")
-            point = clamp(point, to: windowFrame.insetBy(dx: 1, dy: 1))
-        }
-
-        if let screen = DesktopGeometry.screenContaining(point: point) ?? DesktopGeometry.screenMatching(frame: windowFrame) {
-            let screenFrame = screen.frame.standardized
-            if screenFrame.insetBy(dx: -1, dy: -1).contains(point) == false {
-                warnings.append("Visual cursor offset was outside visible screen geometry and was clamped to the nearest matching screen.")
-                point = clamp(point, to: screenFrame.insetBy(dx: 1, dy: 1))
-            }
-        }
-        return point
-    }
-
-    private static func clamp(_ point: CGPoint, to rect: CGRect) -> CGPoint {
-        let standardized = rect.standardized
-        return CGPoint(
-            x: min(max(point.x, standardized.minX), standardized.maxX),
-            y: min(max(point.y, standardized.minY), standardized.maxY)
-        )
     }
 
     private static func rect(from dto: RectDTO) -> CGRect {
