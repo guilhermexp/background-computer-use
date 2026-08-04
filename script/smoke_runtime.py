@@ -269,7 +269,8 @@ class Smoke:
 
     def reload_fixture(self, window_id: str) -> None:
         """Reload the fixture document so the next lane starts from a pristine page."""
-        status, _ = self.client.request(
+        status, _ = self.call(
+            "chrome-fixture-reload",
             "POST",
             "/v1/press_key",
             {"window": window_id, "key": "command+r", "maxNodes": 200},
@@ -281,7 +282,8 @@ class Smoke:
 
     def scroll_fixture_to_top(self, window_id: str, state: dict) -> Optional[dict]:
         """Scroll the fixture document back to the top and return the fresh state."""
-        status, _ = self.client.request(
+        status, _ = self.call(
+            "chrome-ocr-scroll-top",
             "POST",
             "/v1/scroll",
             {
@@ -386,11 +388,17 @@ class Smoke:
         self.check_verification_honesty("chrome-ocr-click-honesty", click)
 
         state = self.get_state(window_id, "chrome-post-ocr-click-state", include_ocr=True)
+        # Exact match for the oracle: "Button clicked" and "Button not clicked" differ by
+        # 4 edit operations, and the locator's fuzzy budget must not decide whether the
+        # click worked.
         page_changed = (
             state is not None
             and clicked_before is False
-            and self.find_ocr_anchor(state, ["Button clicked"]) is not None
+            and self.find_ocr_anchor(state, ["Button clicked"], budget=0) is not None
         )
+        escalated = str(click.get("finalRoute")) == "coordinate_then_ax_hit_test" or str(
+            click.get("fallbackReason")
+        ) == "coordinate_unverified_using_ax_hit_test"
         if page_changed:
             self.pass_("chrome-ocr-click", evidence)
         elif classification == "success":
@@ -398,15 +406,22 @@ class Smoke:
                 "chrome-ocr-click",
                 f"click reported success but the page never showed 'Button clicked' ({evidence})",
             )
-        else:
-            # Residual limitation, not a masked pass: Chromium discards the pid-directed
-            # synthetic mouse events, so the lane depends on the accessibility escalation
-            # finding a pressable element under the OCR point. Surfaces with no AX node
-            # (canvas, custom renderers) still have no background pointer path.
-            self.skip(
+        elif escalated:
+            # The accessibility escalation ran and still proved nothing: that is a
+            # regression of the lane under test, not a documented limitation.
+            self.fail(
                 "chrome-ocr-click",
-                "residual limitation: coordinate injection is discarded by the renderer and no "
-                f"accessibility element under the point accepted a press ({evidence})",
+                f"the accessibility escalation ran and the page still did not change ({evidence})",
+            )
+        else:
+            # Residual limitation, declared: Chromium discards the pid-directed synthetic
+            # mouse events, and no accessibility element under the OCR point was eligible
+            # to be pressed. Surfaces with no AX node (canvas, custom renderers) have no
+            # background pointer path at all.
+            self.fail(
+                "chrome-ocr-click",
+                "the OCR lane proved no effect and no accessibility element under the point "
+                f"was pressed; on this fixture that is a regression ({evidence})",
             )
 
     def check_verification_honesty(self, name: str, click: dict) -> None:
@@ -423,7 +438,7 @@ class Smoke:
         if classification == "success" and not intent:
             self.fail(name, f"classification=success with no intent signal: {verification}")
             return
-        if classification != "success" and intent:
+        if classification != "success" and intent and self.action_dispatched(click):
             self.fail(name, f"intent signals {intent} present but classification={classification}")
             return
         if (
@@ -591,7 +606,7 @@ class Smoke:
             for transport in response.get("transports", [])
         )
 
-    def find_ocr_anchor(self, state: dict, needles: list[str]) -> Optional[dict]:
+    def find_ocr_anchor(self, state: dict, needles: list[str], budget: int = 2) -> Optional[dict]:
         """Resolve an anchor by text, tolerating Apple Vision misreads.
 
         Vision returns 'BCU Smcke Button' often enough that an exact substring
@@ -618,7 +633,6 @@ class Smoke:
             return previous[-1]
 
         wanted = [normalize(needle) for needle in needles]
-        budget = 2
         best: Optional[tuple[int, dict]] = None
         for anchor in state.get("ocr", {}).get("anchors", []):
             text = normalize(str(anchor.get("text", "")))

@@ -127,3 +127,17 @@ The cursor overlay SHALL clear stale feedback and remove inactive overlay window
 
 - **WHEN** cursor activity is evaluated for fade-out and session expiration
 - **THEN** both paths use the same definition of active cursor state, including motion, action, press/release, visual effects, feedback dwell, streaming feedback, and pointing feedback
+
+### Requirement: The window screenshot composites the cursor only around real activity
+
+The pinned on-screen overlay SHALL NOT keep the cursor composited into the window's model-facing screenshot indefinitely. Compositing SHALL follow real cursor activity, because the screenshot is the evidence action verification reads and a parked cursor would occlude the very anchor a click uses as proof.
+
+#### Scenario: Idle cursor leaves the screenshot but stays on screen
+
+- **WHEN** a cursor session stays attached and idle beyond the idle hide delay
+- **THEN** the window screenshot no longer composites it, while the on-screen overlay remains drawn
+
+#### Scenario: Cursor around an action is composited
+
+- **WHEN** a cursor session has just acted in its attached window
+- **THEN** the window screenshot composites it, including while another app covers that window on screen

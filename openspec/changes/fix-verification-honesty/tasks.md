@@ -33,3 +33,10 @@
 - [x] 6.1 `swift build -c release` e `swift test`.
 - [x] 6.2 `python3 -m py_compile script/smoke_runtime.py skills/background-computer-use/scripts/bcu-request.py` e `python3 script/smoke_runtime.py` contra o runtime instalado.
 - [x] 6.3 `openspec validate fix-verification-honesty --strict`.
+
+## 6. Estreitamento exigido pelo gate pré-push (2026-08-04)
+
+- [x] 6.1 `focusedElementChanged` deriva de `selectionSummary.focusedNodeID` + rótulos, não do índice posicional projetado.
+- [x] 6.2 `window_title_changed` é ambiente em superfície de renderer web e intent apenas fora dela.
+- [x] 6.3 Texto do conceito `verification` em `/v1/routes` escopado às rotas de clique (as outras rotas mantêm verificação própria).
+- [x] 6.4 Smoke: implicação de intent signal só é exigida quando a ação despachou; reload e scroll passam pelo helper à prova de crash.

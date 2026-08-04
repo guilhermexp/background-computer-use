@@ -53,3 +53,32 @@ When a coordinate click dispatches on a web renderer surface and neither the inj
 
 - **WHEN** the target window is not a web renderer surface and the coordinate click proves no effect
 - **THEN** the warnings carry `coordinate_dispatch_effect_unconfirmed` without claiming a renderer limitation
+
+### Requirement: The escalation obeys the same limits as the semantic route
+
+The accessibility escalation performs the same primitive as a semantic click, so it SHALL be held to the same rules: it SHALL act only inside the process the caller named, it SHALL NOT press destructive wording without explicit confirmation, and it SHALL NOT run while the window still shows signs of an effect in flight.
+
+#### Scenario: Element resolved outside the target process is refused
+
+- **WHEN** the hit-test resolves an element whose process is not the process of the window the caller named
+- **THEN** nothing is pressed
+
+#### Scenario: Destructive wording still requires confirmation
+
+- **WHEN** the eligible element under the point carries destructive wording and the request did not set `confirm=true`
+- **THEN** nothing is pressed and the response warns that the element requires explicit confirmation
+
+#### Scenario: A window that is still settling is not pressed again
+
+- **WHEN** the coordinate click proved no intent signal but the window reports ambient change or any full-window visual change
+- **THEN** the escalation does not run, so a slow but real effect is never actuated twice
+
+#### Scenario: Post-state follows the press that was performed
+
+- **WHEN** the escalation pressed an element and re-verification still proved no effect
+- **THEN** the response reports the state read after that press, never a snapshot that predates it
+
+#### Scenario: The coordinate step keeps its own verdict
+
+- **WHEN** the escalation is what produced the verified effect
+- **THEN** the coordinate route step still reports its own unverified verdict and is not relabelled as the escalation route

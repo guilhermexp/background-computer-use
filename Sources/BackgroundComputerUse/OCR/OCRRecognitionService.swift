@@ -148,21 +148,34 @@ enum OCRRecognitionService {
         }
     }
 
+    /// Bitmap fed to Vision at boot so the first real read does not pay the cold start.
+    ///
+    /// Drawn with CoreGraphics on purpose: prewarm runs off the main thread, and
+    /// `NSImage.lockFocus` plus AppKit text drawing there is outside AppKit's
+    /// contract. Every other offscreen bitmap in this project uses `CGContext` too.
     private static func warmupImage() -> CGImage? {
-        let size = CGSize(width: 160, height: 48)
-        let image = NSImage(size: size)
-        image.lockFocus()
-        NSColor.white.setFill()
-        NSBezierPath(rect: CGRect(origin: .zero, size: size)).fill()
-        ("warmup" as NSString).draw(
-            at: CGPoint(x: 8, y: 10),
-            withAttributes: [
-                .font: NSFont.systemFont(ofSize: 24),
-                .foregroundColor: NSColor.black,
-            ]
-        )
-        image.unlockFocus()
-        return image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        let width = 160
+        let height = 48
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceGray(),
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else {
+            return nil
+        }
+
+        context.setFillColor(gray: 1, alpha: 1)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.setFillColor(gray: 0, alpha: 1)
+        // Bars shaped like text give Vision something to segment without AppKit.
+        for index in 0..<5 {
+            context.fill(CGRect(x: 12 + index * 28, y: 14, width: 18, height: 22))
+        }
+        return context.makeImage()
     }
 
     private static func elapsedMilliseconds(since start: UInt64) -> Double {

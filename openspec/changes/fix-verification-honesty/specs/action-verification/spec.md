@@ -63,3 +63,22 @@ The runtime SHALL prewarm Apple Vision text recognition during bootstrap without
 
 - **WHEN** Apple Vision text recognition exceeds the runtime's recognition deadline
 - **THEN** the OCR summary returns `status: recognition_failed` with a diagnostic naming the deadline, the anchor list is empty, and the request returns instead of hanging
+
+### Requirement: Intent signals must be stable under ambient window churn
+
+A signal only counts as intent when a live window cannot produce it on its own. Focus change SHALL be derived from the focused element's identity and labels, never from its positional index in the projection. A window-title change SHALL count as intent only outside web renderer surfaces, where the title is the page title the page itself rewrites.
+
+#### Scenario: Projected index shift is not a focus change
+
+- **WHEN** nodes are inserted or removed before the focused element so its projected display index shifts while focus never moved
+- **THEN** `focusedElementChanged` is false and the click earns no intent signal from it
+
+#### Scenario: Page title change on a web surface is ambient
+
+- **WHEN** the target window projects a web renderer profile and only the window title changed after the click
+- **THEN** the title change is reported in `ambientOnlySignals` and the click is `effect_not_verified`
+
+#### Scenario: Window title change on a native surface is structural
+
+- **WHEN** the target window is not a web renderer surface and the window title changed after the click
+- **THEN** the title change counts as an intent signal

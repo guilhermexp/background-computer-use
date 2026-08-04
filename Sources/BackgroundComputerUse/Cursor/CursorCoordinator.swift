@@ -602,12 +602,22 @@ final class CursorCoordinator {
         )
     }
 
+    /// Cursor snapshots composited into a window's own screenshot.
+    ///
+    /// The on-screen overlay stays pinned for the life of the attachment, but the
+    /// screenshot is evidence: a cursor parked on the last click point would occlude
+    /// the very anchor the click verifier reads, and an occluded anchor counts as
+    /// `ocrAnchorDisappeared` — the runtime would manufacture its own proof. So the
+    /// composite follows real activity instead of the pinned presence.
     func snapshots(forWindowNumber windowNumber: Int) -> [CursorSnapshot] {
         startIfNeeded()
+        let now = CACurrentMediaTime()
 
         return sessionsByID.values
             .filter { session in
-                session.attachedWindowNumber == windowNumber && session.visibilityAlpha > 0.01
+                session.attachedWindowNumber == windowNumber
+                    && session.visibilityAlpha > 0.01
+                    && now - session.lastActivityAt <= CursorPresenceTiming.idleHideDelay
             }
             .sorted { $0.id < $1.id }
             .map(snapshot(for:))
@@ -760,9 +770,12 @@ final class CursorCoordinator {
             return
         }
         session.exposureCheckedAt = now
+        // While a move is in flight the cursor travels from a screen edge across
+        // whatever lies between, so asking about the current position would blink the
+        // overlay off for most of the trajectory. Answer for where it is going.
         session.attachmentIsExposed = CursorWindowExposure.isExposed(
             windowNumber: windowNumber,
-            at: session.position
+            at: session.currentMotion?.end ?? session.position
         )
     }
 

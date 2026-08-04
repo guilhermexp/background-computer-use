@@ -16,7 +16,8 @@ struct AXPointPressEligibilityTests {
             AXPointPressEligibility.isEligible(
                 actions: press,
                 frame: CGRect(x: 32, y: 380, width: 177, height: 41),
-                pointTopLeft: point
+                pointTopLeft: point,
+                enabled: true
             )
         )
     }
@@ -27,7 +28,8 @@ struct AXPointPressEligibilityTests {
             AXPointPressEligibility.isEligible(
                 actions: ["AXShowMenu", "AXScrollToVisible"],
                 frame: CGRect(x: 32, y: 380, width: 177, height: 41),
-                pointTopLeft: point
+                pointTopLeft: point,
+                enabled: true
             ) == false
         )
     }
@@ -40,7 +42,8 @@ struct AXPointPressEligibilityTests {
             AXPointPressEligibility.isEligible(
                 actions: press,
                 frame: CGRect(x: 32, y: 400, width: 177, height: 1),
-                pointTopLeft: point
+                pointTopLeft: point,
+                enabled: true
             ) == false
         )
     }
@@ -51,14 +54,15 @@ struct AXPointPressEligibilityTests {
             AXPointPressEligibility.isEligible(
                 actions: press,
                 frame: CGRect(x: 32, y: 700, width: 177, height: 41),
-                pointTopLeft: point
+                pointTopLeft: point,
+                enabled: true
             ) == false
         )
     }
 
     @Test
     func missingFrameIsRejected() {
-        #expect(AXPointPressEligibility.isEligible(actions: press, frame: nil, pointTopLeft: point) == false)
+        #expect(AXPointPressEligibility.isEligible(actions: press, frame: nil, pointTopLeft: point, enabled: true) == false)
     }
 
     @Test
@@ -67,8 +71,48 @@ struct AXPointPressEligibilityTests {
             AXPointPressEligibility.isEligible(
                 actions: press,
                 frame: CGRect(x: 120, y: 400, width: 60, height: 20),
-                pointTopLeft: point
+                pointTopLeft: point,
+                enabled: true
             )
+        )
+    }
+
+    @Test
+    func disabledControlIsRejected() {
+        #expect(
+            AXPointPressEligibility.isEligible(
+                actions: press,
+                frame: CGRect(x: 32, y: 380, width: 177, height: 41),
+                pointTopLeft: point,
+                enabled: false
+            ) == false
+        )
+    }
+
+    @Test
+    func unknownEnabledStateStaysEligible() {
+        // Web surfaces often omit the attribute; absence must not block the press.
+        #expect(
+            AXPointPressEligibility.isEligible(
+                actions: press,
+                frame: CGRect(x: 32, y: 380, width: 177, height: 41),
+                pointTopLeft: point,
+                enabled: nil
+            )
+        )
+    }
+
+    @Test
+    func oversizedAncestorContainerIsRejected() {
+        // Ancestors always cover the point; without a ceiling the walk would press a
+        // group spanning half the window instead of the control.
+        #expect(
+            AXPointPressEligibility.isEligible(
+                actions: press,
+                frame: CGRect(x: 0, y: 0, width: 1_600, height: 900),
+                pointTopLeft: point,
+                enabled: true
+            ) == false
         )
     }
 }

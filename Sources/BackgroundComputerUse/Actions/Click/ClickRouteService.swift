@@ -467,14 +467,17 @@ struct ClickRouteService {
         let dispatched = outcome.transports.contains { $0.didDispatch && $0.transportSuccess }
         let verified = dispatched && effectVerified(verification)
         var routeSteps = outcome.routeSteps
-        if let lastIndex = routeSteps.indices.last {
-            let prior = routeSteps[lastIndex]
-            routeSteps[lastIndex] = ClickRouteStepDTO(
+        // Rewrite the OCR pointer step, not the last one: after an accessibility
+        // escalation the last step is the AXPress and its note must survive.
+        if let ocrIndex = routeSteps.lastIndex(where: { $0.route == .ocrAnchorXY || $0.route == .coordinateXY }) {
+            let prior = routeSteps[ocrIndex]
+            let pointerVerified = verified && outcome.finalRoute != .coordinateThenAXHitTest
+            routeSteps[ocrIndex] = ClickRouteStepDTO(
                 route: prior.route,
                 dispatchSuccess: prior.dispatchSuccess,
-                verificationSuccess: verified,
-                intentSuccess: verified,
-                note: verified
+                verificationSuccess: pointerVerified,
+                intentSuccess: pointerVerified,
+                note: pointerVerified
                     ? "OCR click produced a target-local, anchor, or structural post-state effect."
                     : "OCR click dispatched, but target-local and structural verification found no effect."
             )
@@ -484,13 +487,15 @@ struct ClickRouteService {
         if verified {
             responseWarnings.removeAll {
                 $0.hasPrefix("coordinate_dispatch_effect_unconfirmed:") ||
-                    $0.hasPrefix("opaque_renderer_focus_unconfirmed:")
+                    $0.hasPrefix("renderer_ignores_coordinate_injection:") ||
+                    $0.hasPrefix("opaque_renderer_focus_unconfirmed:") ||
+                    $0.hasPrefix("This window is a web renderer surface.")
             }
         }
 
         return response(
             classification: verified ? .success : .effectNotVerified,
-            failureDomain: verified ? nil : (dispatched ? .verification : (outcome.failureDomain ?? .transport)),
+            failureDomain: verified ? nil : (dispatched ? (outcome.failureDomain ?? .verification) : (outcome.failureDomain ?? .transport)),
             summary: verified
                 ? "The OCR anchor click produced a verified target-local or structural effect."
                 : "The OCR anchor click dispatched, but its requested effect was not verified.",
@@ -499,7 +504,7 @@ struct ClickRouteService {
             target: nil,
             clickCount: clickCount,
             mouseButton: mouseButton,
-            finalRoute: .ocrAnchorXY,
+            finalRoute: outcome.finalRoute == .coordinateThenAXHitTest ? .coordinateThenAXHitTest : .ocrAnchorXY,
             fallbackReason: outcome.fallbackReason,
             axAttempt: nil,
             coordinate: outcome.coordinate,
@@ -1270,12 +1275,26 @@ struct ClickRouteService {
         var escalationTransport: ClickTransportAttemptDTO?
         var escalationStep: ClickRouteStepDTO?
 
-        if transportResult.dispatchSuccess,
-           verified == false,
-           let press = pressAXElement(
-               underPointTopLeft: plan.eventTapPointTopLeft,
-               pid: Int32(capture.envelope.response.window.pid)
-           ) {
+        // Escalate only when the click provably did nothing. A slow but real effect
+        // (form submit, navigation, network round trip) is not visible inside the
+        // settle delay, and pressing again there would actuate a second time.
+        let windowStillSettling = verification.ambientOnlySignals.isEmpty == false
+            || (regionEvidence.fullImageChangeRatio ?? 0) > 0
+        let escalation = transportResult.dispatchSuccess && verified == false && windowStillSettling == false
+            ? pressAXElement(
+                underPointTopLeft: plan.eventTapPointTopLeft,
+                pid: Int32(capture.envelope.response.window.pid),
+                confirmed: request.confirm == true
+            )
+            : .none
+
+        if case let .requiresConfirmation(reason) = escalation {
+            warnings.append(
+                "The coordinate dispatch proved no effect and the accessibility element under the point was not pressed: \(reason)"
+            )
+        }
+
+        if case let .pressed(press) = escalation {
             sleepRunLoop(settleDelay)
             let escalatedCapture = try? targetResolver.reread(
                 after: capture,
@@ -1339,10 +1358,14 @@ struct ClickRouteService {
                     ? "Accessibility press at the click point produced a verified effect after the coordinate dispatch proved none."
                     : "Accessibility press at the click point also failed to prove an effect."
             )
+            // The press already mutated the app, so the caller must receive the state
+            // that followed it — never a snapshot that predates an action this
+            // runtime performed. Escalation only runs on an unverified click, so
+            // adopting the escalated verification can never downgrade a verdict.
+            verification = escalatedVerification
+            postCapture = escalatedCapture ?? postCapture
             if escalationVerified {
-                verification = escalatedVerification
                 verified = true
-                postCapture = escalatedCapture ?? postCapture
                 finalRoute = .coordinateThenAXHitTest
                 fallbackReason = .coordinateUnverifiedUsingAXHitTest
             }
@@ -1382,12 +1405,16 @@ struct ClickRouteService {
             liveElementResolution: nil,
             notes: transportResult.notes
         )
+        // The coordinate step records what the coordinate injection itself achieved.
+        // Labelling it with the post-escalation verdict would claim the injection
+        // worked on renderers where it provably does not.
+        let coordinateVerified = verified && finalRoute != .coordinateThenAXHitTest
         let step = ClickRouteStepDTO(
-            route: finalRoute,
+            route: finalRoute == .coordinateThenAXHitTest ? .coordinateXY : finalRoute,
             dispatchSuccess: transportResult.dispatchSuccess,
-            verificationSuccess: verified,
-            intentSuccess: verified,
-            note: verified
+            verificationSuccess: coordinateVerified,
+            intentSuccess: coordinateVerified,
+            note: coordinateVerified
                 ? "Coordinate click produced a verified post-state effect."
                 : "Coordinate click dispatched, but post-state verification did not prove an effect."
         )
@@ -1756,6 +1783,14 @@ struct ClickRouteService {
         var succeeded: Bool { status == .success }
     }
 
+    /// What the escalation did, or why it refused to act.
+    private enum AXPointPressOutcome {
+        case pressed(AXPointPressResult)
+        /// A pressable element under the point carries destructive wording.
+        case requiresConfirmation(String)
+        case none
+    }
+
     /// Presses the accessibility element under `pointTopLeft`.
     ///
     /// Measured on 2026-08-04: Chromium ignores the pid-directed synthetic mouse
@@ -1764,33 +1799,58 @@ struct ClickRouteService {
     /// when a coordinate or OCR-anchor click dispatches without proving an effect,
     /// the point itself is still the best description of intent: hit-test it and use
     /// the accessibility action, instead of leaving the caller with a silent no-op.
+    ///
+    /// The escalation performs the same primitive as the semantic route, so it is
+    /// held to the same rules: it never leaves the process the caller named, and it
+    /// never presses destructive wording without `confirm=true`.
     private func pressAXElement(
         underPointTopLeft pointTopLeft: CGPoint,
-        pid: Int32
-    ) -> AXPointPressResult? {
-        let appElement = AXUIElementCreateApplication(pid)
+        pid: Int32,
+        confirmed: Bool
+    ) -> AXPointPressOutcome {
+        let appElement = AXHelpers.applicationElement(pid: pid)
         guard let hit = AXActionRuntimeSupport.hitTest(appElement, point: pointTopLeft)
             ?? AXActionRuntimeSupport.hitTest(AXUIElementCreateSystemWide(), point: pointTopLeft) else {
-            return nil
+            return .none
         }
+
+        // The system-wide fallback hit-tests every on-screen window, so it can return
+        // an element of another process (an open menu, a notification banner, another
+        // app's window over the same point). Acting on it would silently break the
+        // "act on the window I named" contract.
+        var hitPID: pid_t = 0
+        guard AXUIElementGetPid(hit, &hitPID) == .success, hitPID == pid else {
+            return .none
+        }
+        AXHelpers.setMessagingTimeout(hit, seconds: 1.0)
 
         for candidate in AXActionRuntimeSupport.walkAncestors(startingAt: hit, maxDepth: 4) {
             let frame = AXActionRuntimeSupport.rectAttribute(candidate, attribute: "AXFrame" as CFString)
             guard AXPointPressEligibility.isEligible(
                 actions: AXActionRuntimeSupport.actionNames(candidate),
                 frame: frame,
-                pointTopLeft: pointTopLeft
+                pointTopLeft: pointTopLeft,
+                enabled: AXActionRuntimeSupport.boolAttribute(candidate, attribute: kAXEnabledAttribute as CFString)
             ), let frame else {
                 continue
             }
-            return AXPointPressResult(
-                role: AXActionRuntimeSupport.stringAttribute(candidate, attribute: kAXRoleAttribute as CFString),
-                label: label(for: candidate),
-                frameTopLeft: frame,
-                status: AXActionRuntimeSupport.performAction(kAXPressAction as String, on: candidate)
+            let candidateLabel = label(for: candidate)
+            let safety = RuntimeSafetyPolicy.evaluateLabel(candidateLabel, confirmed: confirmed)
+            if safety.blocked {
+                return .requiresConfirmation(
+                    safety.reason ?? "The element under the click point requires explicit confirmation."
+                )
+            }
+            return .pressed(
+                AXPointPressResult(
+                    role: AXActionRuntimeSupport.stringAttribute(candidate, attribute: kAXRoleAttribute as CFString),
+                    label: candidateLabel,
+                    frameTopLeft: frame,
+                    status: AXActionRuntimeSupport.performAction(kAXPressAction as String, on: candidate)
+                )
             )
         }
-        return nil
+        return .none
     }
 
     private func isSafeDescendantRetargetContainer(_ element: AXUIElement) -> Bool {
@@ -1893,7 +1953,8 @@ struct ClickRouteService {
             ocrAnchorDisappeared: nil,
             targetRegionChangeRatio: region.targetRegionChangeRatio,
             renderedTextChanged: renderedTextChanged,
-            selectionSummaryChanged: selectionSummaryChanged
+            selectionSummaryChanged: selectionSummaryChanged,
+            webRendererSurface: before.envelope.response.tree.profile == AXProjectionProfile.richWeb.rawValue
         )
         verificationNotes.append(contentsOf: assessment.notes)
 
@@ -2348,9 +2409,20 @@ struct ClickRouteService {
             before.envelope.response.selectionSummary?.selectedNodeIDs != after.envelope.response.selectionSummary?.selectedNodeIDs
     }
 
+    /// Whether focus really moved between two captures.
+    ///
+    /// `focusedElement.index` is a POSITIONAL index in the projection: on a live page
+    /// any node inserted or removed before the focused element shifts it while focus
+    /// never moved. Treating that as a focus change would hand full intent credit to
+    /// a click that never landed, which is the ambient-noise problem this gate exists
+    /// to remove. Identity and labels are stable, so only those count.
     private func focusedElementChanged(before: AXActionStateCapture, after: AXActionStateCapture) -> Bool {
-        before.envelope.response.focusedElement.index != after.envelope.response.focusedElement.index ||
-            before.envelope.response.focusedElement.title != after.envelope.response.focusedElement.title ||
+        let beforeNodeID = before.envelope.response.selectionSummary?.focusedNodeID
+        let afterNodeID = after.envelope.response.selectionSummary?.focusedNodeID
+        if beforeNodeID != nil || afterNodeID != nil, beforeNodeID != afterNodeID {
+            return true
+        }
+        return before.envelope.response.focusedElement.title != after.envelope.response.focusedElement.title ||
             before.envelope.response.focusedElement.description != after.envelope.response.focusedElement.description ||
             before.envelope.response.focusedElement.displayRole != after.envelope.response.focusedElement.displayRole
     }

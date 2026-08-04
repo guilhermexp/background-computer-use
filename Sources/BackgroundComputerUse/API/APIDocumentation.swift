@@ -53,7 +53,7 @@ enum APIDocumentation {
             ),
             APIConceptDTO(
                 name: "verification",
-                description: "Action routes never treat dispatch as proof. A click is classification=success only when the transport dispatched AND verification.intentSignals is non-empty. Intent signals are target-local or structural: target_region_changed (targetRegionChangeRatio at or above targetRegionChangeThreshold), ocr_anchor_disappeared, focused_element_changed, modal_dialog_opened, window_title_changed, target_state_changed. Rendered-text and selection-summary changes are ambient noise from a live window: they are reported in ambientOnlySignals and never sustain success alone. Every click route uses this same gate.",
+                description: "Click routes never treat dispatch as proof. A click is classification=success only when the transport dispatched AND verification.intentSignals is non-empty. Intent signals are target-local or structural: target_region_changed (targetRegionChangeRatio at or above targetRegionChangeThreshold), ocr_anchor_disappeared, focused_element_changed, modal_dialog_opened, window_title_changed (native surfaces only), target_state_changed. Rendered-text and selection-summary changes are ambient noise from a live window: they are reported in ambientOnlySignals and never sustain success alone; on a web renderer surface a window-title change is ambient too. Every click route uses this same gate. Other mutating routes still carry their own per-route verification blocks.",
                 fields: nil
             ),
             APIConceptDTO(
@@ -180,7 +180,8 @@ enum APIDocumentation {
                 ],
                 nextSteps: [
                     "Read get_window_state again when the UI may have changed.",
-                    "Do not retry the same coordinate blindly. In Chromium web content, coordinate and ocr_anchor clicks do not activate the control today; use an AX target (display_index/node_id) from the projected tree instead.",
+                    "A coordinate or ocr_anchor click that dispatches without proving an effect escalates once: the runtime hit-tests the accessibility element at that same point, in the same process, and presses it. Success through that path reports finalRoute=coordinate_then_ax_hit_test or fallbackReason=coordinate_unverified_using_ax_hit_test plus an ax_perform_action transport with liveElementResolution=ax_hit_test_at_click_point. Destructive wording on that element still requires confirm=true.",
+                    "Do not retry the same coordinate blindly. Chromium discards pid-directed synthetic mouse events, so a point with no accessibility element under it (canvas, custom renderers) has no background pointer path; use an AX target (display_index/node_id) from the projected tree instead.",
                 ],
                 exampleRequest: #"{"window":"WINDOW_ID","stateToken":"STATE_TOKEN","target":{"kind":"display_index","value":12},"clickCount":1,"imageMode":"path"}"#
             )

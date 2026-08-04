@@ -117,10 +117,35 @@ struct CursorPinningTests {
 
         sleepRunLoop(Self.presenceObservationDelay)
 
-        let snapshot = CursorRuntime.snapshots(forWindowNumber: Self.windowNumber)
-            .first { $0.cursorID == cursorID }
-        #expect(snapshot != nil)
-        #expect(snapshot?.alpha == 1)
+        // On-screen presence is what the pinning requirement is about.
+        #expect(CursorRuntime.drawsOverlayForTesting(cursorID: cursorID))
+    }
+
+    @Test
+    func idleCursorStopsBeingCompositedIntoTheWindowScreenshot() {
+        let cursorID = "pinning-presence-screenshot"
+        CursorRuntime.resetForTesting(windowAnchors: [Self.windowNumber: liveAnchor()])
+        defer { CursorRuntime.resetForTesting() }
+
+        CursorRuntime.snap(
+            to: CGPoint(x: Self.windowFrame.midX, y: Self.windowFrame.midY),
+            attachedWindowNumber: Self.windowNumber,
+            cursorID: cursorID
+        )
+        #expect(
+            CursorRuntime.snapshots(forWindowNumber: Self.windowNumber)
+                .contains { $0.cursorID == cursorID }
+        )
+
+        sleepRunLoop(Self.presenceObservationDelay)
+
+        // The screenshot is evidence the click verifier reads: a cursor parked on the
+        // last click point would occlude the anchor and manufacture its own proof.
+        #expect(
+            CursorRuntime.snapshots(forWindowNumber: Self.windowNumber)
+                .contains { $0.cursorID == cursorID } == false
+        )
+        #expect(CursorRuntime.drawsOverlayForTesting(cursorID: cursorID))
     }
 
     @Test

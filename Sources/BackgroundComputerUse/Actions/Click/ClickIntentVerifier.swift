@@ -21,6 +21,7 @@ enum ClickIntentVerifier {
     enum AmbientSignal: String {
         case renderedTextChanged = "rendered_text_changed"
         case selectionSummaryChanged = "selection_summary_changed"
+        case windowTitleChanged = "window_title_changed"
     }
 
     static let ambientOnlyNote = "Ambient window changes only (rendered text and/or selection summary). A live window changes those without the click landing, so they do not prove the requested effect."
@@ -63,7 +64,8 @@ enum ClickIntentVerifier {
         ocrAnchorDisappeared: Bool?,
         targetRegionChangeRatio: Double?,
         renderedTextChanged: Bool?,
-        selectionSummaryChanged: Bool?
+        selectionSummaryChanged: Bool?,
+        webRendererSurface: Bool = false
     ) -> Assessment {
         var intent: [String] = []
         if let ratio = targetRegionChangeRatio, ratio >= targetRegionChangeThreshold {
@@ -78,7 +80,9 @@ enum ClickIntentVerifier {
         if modalDialogOpened == true {
             intent.append(IntentSignal.modalDialogOpened.rawValue)
         }
-        if windowTitleChanged == true {
+        // A browser window title is the page title, which a live page rewrites on its
+        // own (unread counters, SPA routes, "Loading…"). Structural only off the web.
+        if windowTitleChanged == true, webRendererSurface == false {
             intent.append(IntentSignal.windowTitleChanged.rawValue)
         }
         if targetStateChanged == true {
@@ -92,6 +96,9 @@ enum ClickIntentVerifier {
             }
             if selectionSummaryChanged == true {
                 ambient.append(AmbientSignal.selectionSummaryChanged.rawValue)
+            }
+            if windowTitleChanged == true, webRendererSurface {
+                ambient.append(AmbientSignal.windowTitleChanged.rawValue)
             }
         }
 

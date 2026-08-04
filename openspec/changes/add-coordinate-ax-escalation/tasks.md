@@ -33,3 +33,16 @@
 - [x] 5.3 `python3 -m py_compile script/smoke_runtime.py`
 - [x] 5.4 `python3 script/smoke_runtime.py` com o caminho OCR provando efeito na página
 - [x] 5.5 `openspec validate add-coordinate-ax-escalation --strict`
+
+## 6. Hardening exigido pelo gate pré-push (2026-08-04)
+
+- [x] 6.1 Escopo de processo: exigir que o elemento do hit-test pertença ao pid da janela nomeada (fallback systemWide não pode cruzar processo).
+- [x] 6.2 Aplicar `RuntimeSafetyPolicy.evaluateLabel` ao rótulo do elemento antes do `AXPress`, com recusa reportada em `warnings`.
+- [x] 6.3 Elegibilidade: exigir `AXEnabled != false` e teto de dimensão, além de `AXPress` e frame cobrindo o ponto.
+- [x] 6.4 Não escalar quando há mudança ambiente ou visual de janela (evita dupla atuação em efeito lento).
+- [x] 6.5 Adotar `postCapture`/`verification` da releitura pós-press mesmo quando o press não é creditado.
+- [x] 6.6 Rotular o step da coordenada com o veredito dela mesma; preservar o step da escalada no caminho OCR.
+- [x] 6.7 `finalRoute` e `failureDomain` do caminho OCR coerentes com a escalada; filtro de warnings casando o diagnóstico renomeado.
+- [x] 6.8 Timeout de mensageria AX no elemento de aplicação e no elemento do hit-test.
+- [x] 6.9 Publicar `coordinate_then_ax_hit_test` e `coordinate_unverified_using_ax_hit_test` em `/v1/routes` e documentar a escalada em `nextSteps`.
+- [x] 6.10 Smoke: lane OCR passa a poder ficar vermelha (regressão da escalada) e o oráculo de sucesso exige match exato.
