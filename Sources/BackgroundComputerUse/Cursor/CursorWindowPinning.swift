@@ -67,6 +67,53 @@ enum CursorWindowAnchorResolver {
     }
 }
 
+/// Decides whether the window a cursor session is pinned to is the window a
+/// human actually sees at a point.
+///
+/// The overlay is a borderless window in this process, so it cannot be stacked
+/// against another application's window: `NSWindow.order(_:relativeTo:)` is only
+/// defined for windows of the same app. Ordering the overlay front unconditionally
+/// is what painted the agent cursor over unrelated apps — including on a display
+/// the driven window was not even on. Exposure is therefore resolved explicitly
+/// against the window server's front-to-back list.
+@MainActor
+enum CursorWindowExposure {
+    private static var overrides: [Int: Bool]?
+    private static var recordProvider: (() -> [CGWindowRecord])?
+
+    /// Installs deterministic exposure answers. `nil` restores the window server.
+    static func setOverrides(_ values: [Int: Bool]?) {
+        overrides = values
+    }
+
+    /// Installs a deterministic front-to-back window list. `nil` restores the window server.
+    static func setRecordProviderForTesting(_ provider: (() -> [CGWindowRecord])?) {
+        recordProvider = provider
+    }
+
+    /// `true` when `windowNumber` is the frontmost normal window covering `point`.
+    ///
+    /// Windows owned by this process are skipped: the cursor overlay itself sits
+    /// on top of the point it draws, and must not be mistaken for the app's window.
+    static func isExposed(windowNumber: Int, at point: CGPoint) -> Bool {
+        if let overrides {
+            return overrides[windowNumber] ?? true
+        }
+
+        let records = (recordProvider ?? { CGWindowInventory.current(onScreenOnly: true) })()
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        for record in records.sorted(by: { $0.orderIndex < $1.orderIndex }) {
+            guard record.ownerPID != ownPID,
+                  record.isOnScreen,
+                  record.frameAppKit.standardized.contains(point) else {
+                continue
+            }
+            return record.windowNumber == windowNumber
+        }
+        return false
+    }
+}
+
 /// Geometry that keeps the visual cursor pinned to the window it acts on.
 ///
 /// Every clamp goes window first, then the display that holds that window —

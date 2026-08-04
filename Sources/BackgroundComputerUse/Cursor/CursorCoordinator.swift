@@ -16,6 +16,8 @@ private final class CursorSessionState {
     var attachedWindowLevelRawValue = NSWindow.Level.normal.rawValue
     var attachedWindowFrame: CGRect?
     var attachmentIsLive = false
+    var attachmentIsExposed = true
+    var exposureCheckedAt: TimeInterval = 0
     var attachmentCheckedAt: TimeInterval = 0
     var labelText: String
     var colorHex: String
@@ -109,6 +111,8 @@ final class CursorCoordinator {
     private static let maxTypeTextPuffs = 6
     /// How often a pinned session re-reads its window geometry from the window server.
     private static let attachmentRefreshInterval: TimeInterval = 0.25
+    /// How often a pinned session re-reads which window is visible under the cursor.
+    private static let exposureRefreshInterval: TimeInterval = 0.1
 
     private let defaultAppearance = CursorProfile.defaultAppearance
     private let tuning = CursorMotionTuning.swoopy
@@ -609,6 +613,22 @@ final class CursorCoordinator {
             .map(snapshot(for:))
     }
 
+    /// Whether the on-screen overlay is drawn for this session right now.
+    ///
+    /// Mirrors the gate in `refreshPresentation`: a cursor is drawn only while it
+    /// is visible, attached to a live window, and that window is the one exposed
+    /// under the cursor.
+    func drawsOverlay(cursorID: String) -> Bool {
+        guard let session = sessionsByID[cursorID] else { return false }
+        session.exposureCheckedAt = 0
+        refreshExposureIfStale(session, now: CACurrentMediaTime())
+        return session.visible
+            && session.visibilityAlpha > 0.01
+            && session.attachedWindowNumber != nil
+            && session.attachmentIsLive
+            && session.attachmentIsExposed
+    }
+
     func isMotionSettled(cursorID: String) -> Bool {
         startIfNeeded()
         return session(for: cursorID).currentMotion == nil
@@ -703,6 +723,7 @@ final class CursorCoordinator {
         guard let anchor = CursorWindowAnchorResolver.anchor(forWindowNumber: windowNumber) else {
             session.attachedWindowFrame = nil
             session.attachmentIsLive = false
+            session.attachmentIsExposed = false
             session.attachedWindowLevelRawValue = NSWindow.Level.normal.rawValue
             return
         }
@@ -723,6 +744,26 @@ final class CursorCoordinator {
             return
         }
         updateAttachment(for: session, windowNumber: windowNumber, now: now)
+    }
+
+    /// Re-reads whether the driven window is the window visible under the cursor.
+    ///
+    /// Evaluated at presentation time against the cursor's current position: the
+    /// answer depends on where the cursor actually is, so resolving it while the
+    /// cursor is still travelling to the target would answer for the old point.
+    private func refreshExposureIfStale(_ session: CursorSessionState, now: TimeInterval) {
+        guard let windowNumber = session.attachedWindowNumber else {
+            session.attachmentIsExposed = false
+            return
+        }
+        guard now - session.exposureCheckedAt >= Self.exposureRefreshInterval else {
+            return
+        }
+        session.exposureCheckedAt = now
+        session.attachmentIsExposed = CursorWindowExposure.isExposed(
+            windowNumber: windowNumber,
+            at: session.position
+        )
     }
 
     /// Keeps the cursor at the same relative spot inside a window that moved or
@@ -1341,7 +1382,13 @@ final class CursorCoordinator {
             guard session.visible else {
                 continue
             }
-            guard session.attachedWindowNumber != nil else {
+            refreshExposureIfStale(session, now: CACurrentMediaTime())
+            // The cursor belongs to the window it drives: it is drawn only while
+            // that window is on screen and is the window actually visible under
+            // the cursor. Otherwise the overlay would paint over an unrelated app.
+            guard session.attachedWindowNumber != nil,
+                  session.attachmentIsLive,
+                  session.attachmentIsExposed else {
                 continue
             }
 
@@ -1504,6 +1551,9 @@ enum CursorRuntime {
     static func resetForTesting(windowAnchors: [Int: CursorWindowAnchor]? = nil) {
         runOnMain {
             CursorWindowAnchorResolver.setOverrides(windowAnchors)
+            CursorWindowExposure.setOverrides(windowAnchors.map { anchors in
+                anchors.keys.reduce(into: [Int: Bool]()) { $0[$1] = true }
+            })
             CursorCoordinator.shared.resetState()
         }
     }
@@ -1512,7 +1562,26 @@ enum CursorRuntime {
     static func setWindowAnchorsForTesting(_ anchors: [Int: CursorWindowAnchor]?) {
         runOnMain {
             CursorWindowAnchorResolver.setOverrides(anchors)
+            CursorWindowExposure.setOverrides(anchors.map { anchors in
+                anchors.keys.reduce(into: [Int: Bool]()) { $0[$1] = true }
+            })
         }
+    }
+
+    /// Test seam: declares which attached windows are visible under the cursor.
+    static func setWindowExposureForTesting(_ values: [Int: Bool]?) {
+        runOnMain {
+            CursorWindowExposure.setOverrides(values)
+        }
+    }
+
+    /// Test seam: `true` when the overlay would be drawn for this session.
+    static func drawsOverlayForTesting(cursorID: String) -> Bool {
+        var result = false
+        runOnMain {
+            result = CursorCoordinator.shared.drawsOverlay(cursorID: cursorID)
+        }
+        return result
     }
 
     /// Test seam: advances one animation frame for one session against an injected clock.

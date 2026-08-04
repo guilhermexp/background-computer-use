@@ -32,3 +32,10 @@
 - [x] 6.2 `swift test` (suite completa, 3 execuções consecutivas, sem `--filter`) verde nas 3.
 - [x] 6.3 `openspec validate fix-cursor-pinning --strict` válido.
 - [ ] 6.4 Validação visual ao vivo (runtime instalado) é feita pelo orquestrador — cursor preso e visível na janela alvo.
+
+## 7. Overlay exposure (orchestrator, 2026-08-04)
+
+- [x] 7.1 Resolve whether the attached window is the window visible under the cursor (`CursorWindowExposure`), ignoring the runtime's own overlay windows.
+- [x] 7.2 Present the overlay only for a live, exposed attachment; keep compositing the cursor into the driven window's own screenshot.
+- [x] 7.3 Stop ordering the overlay against another application's window number; use a floating overlay gated by exposure.
+- [x] 7.4 Cover exposure with tests (`CursorExposureTests`) and validate live: cursor drawn at the action point while the driven window is visible, nothing drawn while another app covers it.

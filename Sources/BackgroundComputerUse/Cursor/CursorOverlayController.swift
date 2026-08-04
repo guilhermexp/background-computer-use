@@ -47,13 +47,21 @@ final class CursorOverlayController {
             return
         }
 
-        guard let attachedWindowNumber = presentation.attachedWindowNumber else {
+        guard presentation.attachedWindowNumber != nil else {
             window.orderOut(nil)
             return
         }
 
-        window.level = NSWindow.Level(rawValue: presentation.attachedWindowLevelRawValue)
-        window.order(.above, relativeTo: attachedWindowNumber)
+        // `order(.above, relativeTo:)` only orders against windows of this app, so
+        // pointing it at another application's window number silently promoted the
+        // overlay above everything — that is how the agent cursor ended up painted
+        // over apps it was not driving, on displays the driven window was not on.
+        // The overlay is a floating layer so a background runtime can still show it
+        // above the active app; *whether* it is shown is decided by
+        // CursorWindowExposure, which only presents while the driven window is the
+        // window visible under the cursor.
+        window.level = .floating
+        window.orderFront(nil)
     }
 
     func teardown() {

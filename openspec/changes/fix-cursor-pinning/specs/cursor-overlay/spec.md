@@ -73,6 +73,30 @@ When no action is in progress and no motion plan is running, the visual cursor p
 - **WHEN** an action starts for that cursor session (approach, click, scroll streak)
 - **THEN** the cursor animates through the action choreography as before
 
+### Requirement: Visual cursor is only drawn over the window it drives
+
+The overlay SHALL be presented only while the attached window is the window visible under the cursor. The runtime SHALL NOT order the overlay relative to another application's window number, and SHALL NOT present the overlay when another application's window covers the cursor point. The window's own model-facing screenshot SHALL keep compositing the cursor even while the window is covered on screen.
+
+#### Scenario: Covered window hides the on-screen cursor
+
+- **WHEN** another application's window covers the point where the visual cursor sits for its attached window
+- **THEN** no cursor overlay is drawn on screen for that session
+
+#### Scenario: Exposed window shows the cursor at the action point
+
+- **WHEN** the attached window is the frontmost window under the cursor point
+- **THEN** the cursor overlay is drawn at the dispatched action point, above the driven window
+
+#### Scenario: Overlay windows of the runtime never count as occluders
+
+- **WHEN** exposure is resolved for an attached window
+- **THEN** windows owned by the runtime process itself are ignored, so the cursor overlay does not hide itself
+
+#### Scenario: Covered window still shows the cursor in its own screenshot
+
+- **WHEN** the attached window is covered on screen and a model-facing screenshot of that window is captured with the cursor overlay enabled
+- **THEN** the cursor is composited into that screenshot, because the screenshot is the agent's view of that window
+
 ## MODIFIED Requirements
 
 ### Requirement: Feedback lifecycle does not leave stuck overlays
