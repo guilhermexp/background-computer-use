@@ -41,6 +41,61 @@ Use this skill to start or connect to the local macOS `BackgroundComputerUse` ru
 
 7. When the visible cursor should explain work in real time, call `POST /v1/cursor_feedback` with public agent-facing text. Stream useful observations or visible response text; do not show route labels like "reading screen", tool names, product branding, or hidden chain-of-thought.
 
+## Clicking what the AX tree cannot see (OCR anchors)
+
+Some surfaces — Chromium/Electron web content above all — expose little or nothing useful in the
+Accessibility tree. `get_window_state` can return local OCR anchors that double as click targets.
+
+Loop:
+
+1. `POST /v1/get_window_state` with `{"includeOCR": true, "imageMode": "path"}`.
+   Read `ocr.anchors[]`: each anchor carries `text`, model-facing `x`/`y`, `box`, and a ready-made
+   `target` of `{"kind":"ocr_anchor","value":"ocr_..."}`. Also keep `interactionToken` from the *same*
+   response.
+2. `POST /v1/click` with that `target` **and** the `interactionToken` you just read.
+3. Read state again (`get_window_state`) and confirm the change you expected actually happened.
+
+`interactionToken` is fail-closed on purpose. It hashes window identity, geometry, and projected
+topology while ignoring volatile text, so it survives a live-updating page but dies when the layout
+moves. A missing or stale token returns HTTP 200 with `classification: "verifier_ambiguous"`,
+`fallbackReason: "stale_coordinate_guard"`, an explanatory `summary`, `failureDomain: "targeting"`,
+and a rejected entry in `routeSteps`. The recovery is always the same: re-read state, take the fresh
+anchor and fresh token, and click again. Never reuse an anchor id across reads.
+
+Right after a page load, a navigation, or a scroll, the very first read can already be superseded by
+the time your click reaches the runtime, so a token that looks fresh still comes back stale. When that
+happens, read state twice and only click once two consecutive reads report the same
+`interactionToken`. That is re-establishing identity, not retrying a failed action.
+
+### Reading the click verdict
+
+`classification: "success"` requires dispatch **plus** at least one entry in
+`verification.intentSignals`: `target_region_changed` (target-local pixels moved past
+`verification.targetRegionChangeThreshold`), `ocr_anchor_disappeared`, `focused_element_changed`,
+`modal_dialog_opened`, `window_title_changed`, or `target_state_changed`. Rendered-text and
+selection-summary changes are ambient noise on a live window; they appear in
+`verification.ambientOnlySignals` and never prove anything by themselves. When
+`targetRegionChangeRatio` or `ocrAnchorDisappeared` is `null`, `targetRegionDiagnostic` /
+`ocrAnchorDiagnostic` says why — a null field is never counted as evidence.
+
+### Cost of the first OCR read
+
+Apple Vision pays a one-off cold start. The runtime prewarms it in the background at boot, but if you
+call `includeOCR` within the first seconds after launch you may still wait several seconds. Warm reads
+are around one second. `performance.ocrMs` reports the recognition time on every read that ran OCR —
+use it instead of guessing. Recognition is bounded by a deadline; if it is exceeded you get
+`ocr.status: "recognition_failed"` with a diagnostic rather than a hung request.
+
+### Known limitation: Chromium web content
+
+Measured 2026-08-04: coordinate and `ocr_anchor` clicks **do not activate controls inside Chromium web
+content**. The events dispatch, the verifier honestly reports `effect_not_verified`, and the page does
+not change — in background and in foreground, with offsets of ±10/20/30 px. Use an AX target
+(`display_index` or `node_id`) from the projected tree for those controls; that path works. Do **not**
+retry the same coordinate hoping for a different result, and do not treat a dispatched-but-unverified
+click as done. OCR anchors remain the right tool for reading the screen and for surfaces where
+coordinate dispatch does land.
+
 ## Helpers
 
 - `scripts/ensure-runtime.sh`: find, install, launch, and bootstrap the runtime.

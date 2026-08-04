@@ -72,13 +72,23 @@ public struct ReadPerformanceDTO: Codable, Sendable {
     public let captureMs: Double
     public let projectionMs: Double
     public let screenshotMs: Double
+    /// Apple Vision recognition time. Present only on reads that actually ran OCR.
+    public let ocrMs: Double?
     public let totalMs: Double
 
-    public init(resolveMs: Double, captureMs: Double, projectionMs: Double, screenshotMs: Double, totalMs: Double) {
+    public init(
+        resolveMs: Double,
+        captureMs: Double,
+        projectionMs: Double,
+        screenshotMs: Double,
+        totalMs: Double,
+        ocrMs: Double? = nil
+    ) {
         self.resolveMs = sanitizedJSONDouble(resolveMs)
         self.captureMs = sanitizedJSONDouble(captureMs)
         self.projectionMs = sanitizedJSONDouble(projectionMs)
         self.screenshotMs = sanitizedJSONDouble(screenshotMs)
+        self.ocrMs = ocrMs.map(sanitizedJSONDouble)
         self.totalMs = sanitizedJSONDouble(totalMs)
     }
 }

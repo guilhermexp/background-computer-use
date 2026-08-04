@@ -122,6 +122,16 @@ public struct ClickVerificationEvidenceDTO: Encodable, Sendable {
     public let targetRegionChangeRatio: Double?
     public let fullImageChangeRatio: Double?
     public let foregroundPreserved: Bool?
+    /// Ratio at or above which `targetRegionChangeRatio` counts as a target-local effect.
+    public let targetRegionChangeThreshold: Double?
+    /// Why `targetRegionChangeRatio` is null. Absent when the ratio was computed.
+    public let targetRegionDiagnostic: String?
+    /// Why `ocrAnchorDisappeared` is null on an OCR-anchor click. Absent when it was computed.
+    public let ocrAnchorDiagnostic: String?
+    /// Target-local or structural signals that justified a success verdict. Empty means not verified.
+    public let intentSignals: [String]
+    /// Observed signals that are ambient window noise and never justify success on their own.
+    public let ambientOnlySignals: [String]
     public let verificationNotes: [String]
 }
 

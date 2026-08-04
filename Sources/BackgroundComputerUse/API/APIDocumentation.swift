@@ -52,6 +52,11 @@ enum APIDocumentation {
                 fields: nil
             ),
             APIConceptDTO(
+                name: "verification",
+                description: "Action routes never treat dispatch as proof. A click is classification=success only when the transport dispatched AND verification.intentSignals is non-empty. Intent signals are target-local or structural: target_region_changed (targetRegionChangeRatio at or above targetRegionChangeThreshold), ocr_anchor_disappeared, focused_element_changed, modal_dialog_opened, window_title_changed, target_state_changed. Rendered-text and selection-summary changes are ambient noise from a live window: they are reported in ambientOnlySignals and never sustain success alone. Every click route uses this same gate.",
+                fields: nil
+            ),
+            APIConceptDTO(
                 name: "imageMode",
                 description: "Use path for local agents, base64 for remote-only consumers, and omit only when visual verification is not needed.",
                 fields: [
@@ -169,8 +174,14 @@ enum APIDocumentation {
             return usage(
                 whenToUse: "Activate a UI target by semantic target, or click a point in model-facing screenshot coordinates.",
                 useAfter: ["Call get_window_state and identify a target or x/y coordinate."],
-                successSignals: ["ok=true and classification=success, or inspect summary/failureDomain when ok=false."],
-                nextSteps: ["Read get_window_state again when the UI may have changed."],
+                successSignals: [
+                    "ok=true and classification=success, which requires dispatch plus at least one verification.intentSignals entry.",
+                    "classification=effect_not_verified with empty intentSignals means the events were posted but nothing target-local or structural changed; inspect ambientOnlySignals, targetRegionChangeRatio, targetRegionDiagnostic, and summary before retrying.",
+                ],
+                nextSteps: [
+                    "Read get_window_state again when the UI may have changed.",
+                    "Do not retry the same coordinate blindly. In Chromium web content, coordinate and ocr_anchor clicks do not activate the control today; use an AX target (display_index/node_id) from the projected tree instead.",
+                ],
                 exampleRequest: #"{"window":"WINDOW_ID","stateToken":"STATE_TOKEN","target":{"kind":"display_index","value":12},"clickCount":1,"imageMode":"path"}"#
             )
         case .scroll:

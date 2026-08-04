@@ -679,7 +679,7 @@ enum RouteRegistry {
                 field("focusedElement", "FocusedElement", required: true),
                 field("selectionSummary", "AXFocusSelectionSnapshot | null"),
                 field("backgroundSafety", "BackgroundSafety", required: true),
-                field("performance", "ReadPerformance", required: true),
+                field("performance", "ReadPerformance", required: true, "resolveMs, captureMs, projectionMs, screenshotMs, totalMs, plus ocrMs when includeOCR ran Apple Vision."),
                 field("debug", "GetWindowStateDebug | null"),
                 field("ocr", "OCRAnchorSummary | null"),
                 field("notes", "string[]", required: true)
@@ -827,7 +827,7 @@ enum RouteRegistry {
             field("frontmostBundleAfter", "string | null"),
             field("warnings", "string[]", required: true),
             debugNotesField(),
-            field("verification", "ClickVerification | null"),
+            field("verification", "ClickVerification | null", "Effect evidence. intentSignals lists the target-local or structural signals that justified success (target_region_changed, ocr_anchor_disappeared, focused_element_changed, modal_dialog_opened, window_title_changed, target_state_changed); an empty list means effect_not_verified. ambientOnlySignals names observed rendered-text/selection-summary noise that never proves an effect on its own. targetRegionChangeThreshold reports the applied ratio threshold, and targetRegionDiagnostic/ocrAnchorDiagnostic explain any null evidence field."),
             field("postScreenshot", "Screenshot | null", "Returned when imageMode is path or base64 and the post-action reread captures an image.")
         ])
     }

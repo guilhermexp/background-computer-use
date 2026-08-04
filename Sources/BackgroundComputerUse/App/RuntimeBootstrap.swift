@@ -20,11 +20,20 @@ final class RuntimeBootstrap: @unchecked Sendable {
         let baseURL = try await server.start()
         let startedAt = server.startedAt ?? Date()
         let manifestURL = try writeManifest(baseURL: baseURL, startedAt: startedAt)
+        prewarmOCR()
         return RuntimeBootState(
             baseURL: baseURL,
             startedAt: startedAt,
             manifestPath: manifestURL.path
         )
+    }
+
+    /// Apple Vision pays a multi-second first-recognition cost. Burn it on a background queue so the
+    /// first `includeOCR` read is warm without holding up `/health` or the manifest.
+    private func prewarmOCR() {
+        DispatchQueue.global(qos: .utility).async {
+            OCRRecognitionService.prewarm()
+        }
     }
 
     private func writeManifest(baseURL: URL, startedAt: Date) throws -> URL {
