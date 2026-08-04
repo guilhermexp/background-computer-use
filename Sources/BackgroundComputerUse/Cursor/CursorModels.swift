@@ -50,7 +50,6 @@ enum CursorMotionConstants {
     static let followerCount = 6
     static let trailHistoryLength = 14
     static let trailVisible = true
-    static let idleBreathing = true
     static let anticipationEnabled = true
     static let glowOnAcquire = true
 }

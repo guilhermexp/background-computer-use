@@ -199,8 +199,10 @@ struct PressKeyVerificationTests {
 
 // MARK: - Task 3.4 — default visible cursor reuse
 
-@Suite
+@Suite(.serialized)
 struct CursorDefaultVisibilityTests {
+    private let runtime = CursorRuntimeTestScope()
+
     @Test
     func actionWithoutCursorRequestKeepsDefaultVisibleCursorWhenGloballyEnabled() {
         #expect(

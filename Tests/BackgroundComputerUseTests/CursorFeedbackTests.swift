@@ -287,8 +287,11 @@ struct CursorFeedbackRenderingTests {
     }
 }
 
-@Suite
+@Suite(.serialized)
 struct CursorFeedbackRouteTests {
+    /// Serializes against every other cursor suite and clears runtime state.
+    private let runtime = CursorRuntimeTestScope()
+
     @Test
     func routeRegistryDocumentsCursorFeedbackRoute() throws {
         #expect(RouteID.allCases.contains(.cursorFeedback))
@@ -390,7 +393,7 @@ struct CursorFeedbackRouteTests {
     func cursorFeedbackPointWithoutWindowDefersVisualAnimation() throws {
         let response = try post(
             path: "/v1/cursor_feedback",
-            body: #"{"operation":"point","message":"Deploy logs","x":-99999,"y":-99999,"cursor":{"id":"route-feedback-point-test"}}"#
+            body: #"{"operation":"point","message":"Deploy logs","x":-99999,"y":-99999,"dwellMs":600000,"cursor":{"id":"route-feedback-point-test"}}"#
         )
 
         #expect(response.statusCode == 200)
@@ -440,8 +443,10 @@ struct CursorFeedbackRouteTests {
     }
 }
 
-@Suite
+@Suite(.serialized)
 struct CursorFeedbackActionIntegrationTests {
+    private let runtime = CursorRuntimeTestScope()
+
     @Test
     func pressKeyActionPreservesVisibleNarrationInsteadOfActionLabel() {
         let cursorID = "action-feedback-press-key-test"
@@ -522,6 +527,7 @@ struct CursorFeedbackActionIntegrationTests {
                 state: .pointing,
                 message: "Deploy logs",
                 now: CACurrentMediaTime(),
+                dwell: 600,
                 target: CGPoint(x: 120, y: 120)
             ),
             anchorPoint: CGPoint(x: 120, y: 120)
