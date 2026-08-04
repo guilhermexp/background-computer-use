@@ -86,15 +86,31 @@ are around one second. `performance.ocrMs` reports the recognition time on every
 use it instead of guessing. Recognition is bounded by a deadline; if it is exceeded you get
 `ocr.status: "recognition_failed"` with a diagnostic rather than a hung request.
 
-### Known limitation: Chromium web content
+### Chromium web content: the click escalates to accessibility
 
-Measured 2026-08-04: coordinate and `ocr_anchor` clicks **do not activate controls inside Chromium web
-content**. The events dispatch, the verifier honestly reports `effect_not_verified`, and the page does
-not change — in background and in foreground, with offsets of ±10/20/30 px. Use an AX target
-(`display_index` or `node_id`) from the projected tree for those controls; that path works. Do **not**
-retry the same coordinate hoping for a different result, and do not treat a dispatched-but-unverified
-click as done. OCR anchors remain the right tool for reading the screen and for surfaces where
-coordinate dispatch does land.
+Measured 2026-08-04: Chromium **discards the pid-directed synthetic mouse events** this runtime posts.
+Nine event variants were tried (NSEvent- and CGEventSource-backed, subtype 3/0/untouched, with and
+without the primer pair, full/minimal/no field stamps, HID and private sources), in background and with
+Chrome frontmost — none activated a plain HTML button. The identical event posted to the global HID tap
+does click it, and an AX target on the same button always worked, so the coordinate and the event are
+fine: only the per-process delivery is refused. The same is true of Chrome's own UI — an injected click
+on an inactive tab does not switch tabs.
+
+So the click route no longer stops there: when a coordinate or `ocr_anchor` click dispatches and the
+intent gate proves nothing, the runtime hit-tests the accessibility element **at that same screen
+point** and presses it, then re-verifies. On success you get `finalRoute: "coordinate_then_ax_hit_test"`
+(or the OCR route with `fallbackReason: "coordinate_unverified_using_ax_hit_test"`), plus a
+`transports[]` entry with `route: "ax_perform_action"` and `liveElementResolution:
+"ax_hit_test_at_click_point"`. This is what makes the OCR-anchor lane work on Chromium, in background.
+
+The escalation presses only an element that exposes a press action and whose frame really covers the
+point: a renderer reports a control scrolled out of the viewport with a collapsed frame (a 177x1 button
+was observed), and pressing that would act on something you never pointed at.
+
+Residual limit: a surface with no accessibility node under the point — canvas, WebGL, custom renderers
+— still has no background pointer path. You get `effect_not_verified`, `failureDomain:
+"app_specific_semantics"` and the warning `renderer_ignores_coordinate_injection`. Do not retry the same
+coordinate hoping for a different result, and never treat a dispatched-but-unverified click as done.
 
 ## Helpers
 

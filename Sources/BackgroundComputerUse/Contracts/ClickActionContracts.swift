@@ -12,6 +12,7 @@ public enum ClickFinalRouteDTO: String, Encodable, Sendable {
     case semanticAX = "semantic_ax"
     case axElementPointerXY = "ax_element_pointer_xy"
     case semanticAXThenRemainingXY = "semantic_ax_then_remaining_xy"
+    case coordinateThenAXHitTest = "coordinate_then_ax_hit_test"
     case rejected
 }
 
@@ -27,6 +28,7 @@ public enum ClickFallbackReasonDTO: String, Encodable, Sendable {
     case ocrUnavailable = "ocr_unavailable"
     case staleCoordinateGuard = "stale_coordinate_guard"
     case transportFailed = "transport_failed"
+    case coordinateUnverifiedUsingAXHitTest = "coordinate_unverified_using_ax_hit_test"
 }
 
 public enum ClickAXAttemptDTO: String, Encodable, Sendable {

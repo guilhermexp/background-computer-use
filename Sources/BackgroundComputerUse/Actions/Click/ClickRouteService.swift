@@ -1231,7 +1231,7 @@ struct ClickRouteService {
 
         AXCursorTargeting.finishClick(cursor: cursor)
         sleepRunLoop(settleDelay)
-        let postCapture: AXActionStateCapture?
+        var postCapture: AXActionStateCapture?
         do {
             postCapture = try targetResolver.reread(after: capture, imageMode: postImageMode ?? request.imageMode ?? .omit)
         } catch {
@@ -1253,7 +1253,7 @@ struct ClickRouteService {
             before: beforeWindowImage,
             after: afterWindowImage
         )
-        let verification = verifyClick(
+        var verification = verifyClick(
             before: capture,
             after: postCapture,
             target: target,
@@ -1264,16 +1264,106 @@ struct ClickRouteService {
             region: regionEvidence,
             extraNotes: transportResult.notes
         )
-        let verified = transportResult.dispatchSuccess && effectVerified(verification)
+        var verified = transportResult.dispatchSuccess && effectVerified(verification)
+        var finalRoute = finalRoute
+        var fallbackReason = fallbackReason
+        var escalationTransport: ClickTransportAttemptDTO?
+        var escalationStep: ClickRouteStepDTO?
+
+        if transportResult.dispatchSuccess,
+           verified == false,
+           let press = pressAXElement(
+               underPointTopLeft: plan.eventTapPointTopLeft,
+               pid: Int32(capture.envelope.response.window.pid)
+           ) {
+            sleepRunLoop(settleDelay)
+            let escalatedCapture = try? targetResolver.reread(
+                after: capture,
+                imageMode: postImageMode ?? request.imageMode ?? .omit
+            )
+            let escalatedWindow = escalatedCapture?.envelope.response.window ?? capture.envelope.response.window
+            let escalatedRegion = ClickTargetRegion.evidence(
+                region: region,
+                before: beforeWindowImage,
+                after: CGWindowCaptureService.captureImage(
+                    window: escalatedWindow,
+                    attachedSurfaces: escalatedCapture?.envelope.response.attachedSurfaces
+                        ?? capture.envelope.response.attachedSurfaces
+                )
+            )
+            let escalatedRefreshed = target.flatMap { prior in
+                escalatedCapture.flatMap {
+                    targetResolver.locateRefreshedTarget(in: $0, prior: prior, kind: .click)
+                }
+            }
+            let escalatedVerification = verifyClick(
+                before: capture,
+                after: escalatedCapture,
+                target: target,
+                refreshedTarget: escalatedRefreshed?.target,
+                refreshedTargetStrategy: escalatedRefreshed?.strategy,
+                foregroundBeforeDispatch: frontmostBeforeDispatch,
+                foregroundAfter: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+                region: escalatedRegion,
+                extraNotes: [
+                    "Coordinate dispatch proved no effect; pressed the accessibility element under the same point (role=\(press.role ?? "unknown"), label=\(press.label.isEmpty ? "none" : press.label), AXPress status=\(press.status.rawValue))."
+                ]
+            )
+            let escalationVerified = press.succeeded && effectVerified(escalatedVerification)
+            escalationTransport = ClickTransportAttemptDTO(
+                route: .axPerformAction,
+                axAttempt: .exactPrimaryAXAction,
+                dispatchPrimitive: "AXUIElementCopyElementAtPosition + AXPress",
+                rawStatus: press.succeeded ? "performed" : "ax_error_\(press.status.rawValue)",
+                transportSuccess: press.succeeded,
+                didDispatch: press.succeeded,
+                clickCount: 1,
+                mouseButton: mouseButton,
+                targetPointAppKit: plan.mapping.targetPointAppKit,
+                eventTapPointTopLeft: plan.mapping.eventTapPointTopLeft,
+                eventsPrepared: nil,
+                targetPID: capture.envelope.response.window.pid,
+                targetWindowNumber: capture.envelope.response.window.windowNumber,
+                liveElementResolution: "ax_hit_test_at_click_point",
+                notes: [
+                    "Hit-tested element role=\(press.role ?? "unknown") label=\(press.label.isEmpty ? "none" : press.label) frame=\(press.frameTopLeft).",
+                    "Coordinate injection is not honored by every renderer; the accessibility action addresses the same point."
+                ]
+            )
+            escalationStep = ClickRouteStepDTO(
+                route: .coordinateThenAXHitTest,
+                dispatchSuccess: press.succeeded,
+                verificationSuccess: escalationVerified,
+                intentSuccess: escalationVerified,
+                note: escalationVerified
+                    ? "Accessibility press at the click point produced a verified effect after the coordinate dispatch proved none."
+                    : "Accessibility press at the click point also failed to prove an effect."
+            )
+            if escalationVerified {
+                verification = escalatedVerification
+                verified = true
+                postCapture = escalatedCapture ?? postCapture
+                finalRoute = .coordinateThenAXHitTest
+                fallbackReason = .coordinateUnverifiedUsingAXHitTest
+            }
+        }
+
         let classification: ActionClassificationDTO = verified ? .success : .effectNotVerified
-        let failureDomain: ActionFailureDomainDTO? = verified ? nil : (transportResult.dispatchSuccess ? .verification : .transport)
+        let failureDomain: ActionFailureDomainDTO? = verified
+            ? nil
+            : (transportResult.dispatchSuccess ? .appSpecificSemantics : .transport)
         if transportResult.dispatchSuccess && verified == false {
-            let diagnostic = target == nil && capture.envelope.response.tree.profile == AXProjectionProfile.richWeb.rawValue
-                ? "opaque_renderer_focus_unconfirmed"
+            let diagnostic = capture.envelope.response.tree.profile == AXProjectionProfile.richWeb.rawValue
+                ? "renderer_ignores_coordinate_injection"
                 : "coordinate_dispatch_effect_unconfirmed"
             warnings.append(
                 "\(diagnostic): native coordinate events were posted, but no target-local or structural post-state effect was observed."
             )
+            if diagnostic == "renderer_ignores_coordinate_injection" {
+                warnings.append(
+                    "This window is a web renderer surface. Measured 2026-08-04: Chromium discards the pid-directed synthetic mouse events this route posts, and no accessibility element under the point accepted a press either. Use target.kind=display_index or node_id for a control the accessibility tree exposes."
+                )
+            }
         }
         let transport = ClickTransportAttemptDTO(
             route: .nativeBackgroundCoordinate,
@@ -1306,13 +1396,15 @@ struct ClickRouteService {
             classification: classification,
             failureDomain: failureDomain,
             summary: verified
-                ? "The coordinate click produced a verified post-state effect."
+                ? (finalRoute == .coordinateThenAXHitTest
+                    ? "The coordinate dispatch proved no effect, so the accessibility element under the same point was pressed and that produced a verified effect."
+                    : "The coordinate click produced a verified post-state effect.")
                 : "The coordinate click dispatched through the native background click transport, but the requested effect was not verified.",
             finalRoute: finalRoute,
             fallbackReason: fallbackReason,
             coordinate: plan.mapping,
-            transports: inheritedTransports + [transport],
-            routeSteps: inheritedSteps + [step],
+            transports: inheritedTransports + [transport] + (escalationTransport.map { [$0] } ?? []),
+            routeSteps: inheritedSteps + [step] + (escalationStep.map { [$0] } ?? []),
             postCapture: postCapture,
             cursor: cursor,
             frontmostBundleBeforeDispatch: frontmostBeforeDispatch,
@@ -1652,6 +1744,53 @@ struct ClickRouteService {
             }
         }
         return results
+    }
+
+    /// Result of pressing the accessibility element that sits under a screen point.
+    private struct AXPointPressResult {
+        let role: String?
+        let label: String
+        let frameTopLeft: CGRect
+        let status: AXError
+
+        var succeeded: Bool { status == .success }
+    }
+
+    /// Presses the accessibility element under `pointTopLeft`.
+    ///
+    /// Measured on 2026-08-04: Chromium ignores the pid-directed synthetic mouse
+    /// events this transport posts (`SLEventPostToPid`) — the same events posted to
+    /// the global HID tap do click, and AX targeting on the same control works. So
+    /// when a coordinate or OCR-anchor click dispatches without proving an effect,
+    /// the point itself is still the best description of intent: hit-test it and use
+    /// the accessibility action, instead of leaving the caller with a silent no-op.
+    private func pressAXElement(
+        underPointTopLeft pointTopLeft: CGPoint,
+        pid: Int32
+    ) -> AXPointPressResult? {
+        let appElement = AXUIElementCreateApplication(pid)
+        guard let hit = AXActionRuntimeSupport.hitTest(appElement, point: pointTopLeft)
+            ?? AXActionRuntimeSupport.hitTest(AXUIElementCreateSystemWide(), point: pointTopLeft) else {
+            return nil
+        }
+
+        for candidate in AXActionRuntimeSupport.walkAncestors(startingAt: hit, maxDepth: 4) {
+            let frame = AXActionRuntimeSupport.rectAttribute(candidate, attribute: "AXFrame" as CFString)
+            guard AXPointPressEligibility.isEligible(
+                actions: AXActionRuntimeSupport.actionNames(candidate),
+                frame: frame,
+                pointTopLeft: pointTopLeft
+            ), let frame else {
+                continue
+            }
+            return AXPointPressResult(
+                role: AXActionRuntimeSupport.stringAttribute(candidate, attribute: kAXRoleAttribute as CFString),
+                label: label(for: candidate),
+                frameTopLeft: frame,
+                status: AXActionRuntimeSupport.performAction(kAXPressAction as String, on: candidate)
+            )
+        }
+        return nil
     }
 
     private func isSafeDescendantRetargetContainer(_ element: AXUIElement) -> Bool {

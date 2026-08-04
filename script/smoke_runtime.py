@@ -156,6 +156,9 @@ class Smoke:
         # opaque. It goes first, while the fixture is still pristine and its effect would be observable.
         self.exercise_visual_chrome_fixture(window_id)
 
+        # The OCR lane leaves the button already clicked, and the fixture button is
+        # idempotent, so the AX lane needs a pristine document to observe an effect.
+        self.reload_fixture(window_id)
         state = self.get_state(window_id, "chrome-pre-ax-state", include_ocr=True) or state
         input_target = self.find_target(
             state,
@@ -264,6 +267,37 @@ class Smoke:
             return
         self.pass_(name, detail)
 
+    def reload_fixture(self, window_id: str) -> None:
+        """Reload the fixture document so the next lane starts from a pristine page."""
+        status, _ = self.client.request(
+            "POST",
+            "/v1/press_key",
+            {"window": window_id, "key": "command+r", "maxNodes": 200},
+        )
+        if status != 200:
+            self.skip("chrome-fixture-reload", f"could not reload the fixture document (HTTP {status})")
+            return
+        time.sleep(2.0)
+
+    def scroll_fixture_to_top(self, window_id: str, state: dict) -> Optional[dict]:
+        """Scroll the fixture document back to the top and return the fresh state."""
+        status, _ = self.client.request(
+            "POST",
+            "/v1/scroll",
+            {
+                "window": window_id,
+                "stateToken": state.get("stateToken"),
+                "target": {"kind": "display_index", "value": 0},
+                "direction": "up",
+                "pages": 6,
+                "maxNodes": 6500,
+            },
+        )
+        if status != 200:
+            return None
+        time.sleep(0.6)
+        return self.get_state(window_id, "chrome-ocr-scroll-top", include_ocr=True)
+
     def exercise_visual_chrome_fixture(self, window_id: str) -> None:
         """Exercise the OCR-anchor click lane on every run and record the classification it really returns."""
         state = self.get_state(window_id, "chrome-ocr-state", include_ocr=True)
@@ -271,6 +305,13 @@ class Smoke:
             return
 
         button_anchor = self.find_ocr_anchor(state, ["BCU Smoke Button"])
+        if button_anchor is None:
+            # A tab reused across runs can be left scrolled, which puts the control
+            # outside the viewport: the AX node still exists with a degenerate frame
+            # while OCR sees only the rows below it. Scroll back to the top once
+            # before deciding the lane cannot be exercised.
+            state = self.scroll_fixture_to_top(window_id, state) or state
+            button_anchor = self.find_ocr_anchor(state, ["BCU Smoke Button"])
         if button_anchor is None:
             self.fail(
                 "chrome-ocr-find-button",
@@ -358,12 +399,14 @@ class Smoke:
                 f"click reported success but the page never showed 'Button clicked' ({evidence})",
             )
         else:
-            # Documented limitation, not a masked pass: coordinate/OCR dispatch does not activate
-            # Chromium web content today. Fixing the native transport is a separate phase.
+            # Residual limitation, not a masked pass: Chromium discards the pid-directed
+            # synthetic mouse events, so the lane depends on the accessibility escalation
+            # finding a pressable element under the OCR point. Surfaces with no AX node
+            # (canvas, custom renderers) still have no background pointer path.
             self.skip(
                 "chrome-ocr-click",
-                "known limitation: coordinate/OCR clicks do not activate Chromium web content; "
-                f"use an AX target instead ({evidence})",
+                "residual limitation: coordinate injection is discarded by the renderer and no "
+                f"accessibility element under the point accepted a press ({evidence})",
             )
 
     def check_verification_honesty(self, name: str, click: dict) -> None:
@@ -549,22 +592,56 @@ class Smoke:
         )
 
     def find_ocr_anchor(self, state: dict, needles: list[str]) -> Optional[dict]:
-        lowered = [needle.lower() for needle in needles]
+        """Resolve an anchor by text, tolerating Apple Vision misreads.
+
+        Vision returns 'BCU Smcke Button' often enough that an exact substring
+        match turns a working lane into a red check, so anchors are matched on a
+        normalized string with a small edit-distance budget.
+        """
+
+        def normalize(value: str) -> str:
+            return "".join(char for char in value.lower() if char.isalnum() or char == " ").strip()
+
+        def distance(left: str, right: str) -> int:
+            previous = list(range(len(right) + 1))
+            for i, left_char in enumerate(left, start=1):
+                current = [i]
+                for j, right_char in enumerate(right, start=1):
+                    current.append(
+                        min(
+                            previous[j] + 1,
+                            current[j - 1] + 1,
+                            previous[j - 1] + (0 if left_char == right_char else 1),
+                        )
+                    )
+                previous = current
+            return previous[-1]
+
+        wanted = [normalize(needle) for needle in needles]
+        budget = 2
+        best: Optional[tuple[int, dict]] = None
         for anchor in state.get("ocr", {}).get("anchors", []):
-            text = str(anchor.get("text", "")).lower()
-            if any(needle in text for needle in lowered):
-                x = anchor.get("x")
-                y = anchor.get("y")
-                if all(
-                    isinstance(value, (int, float))
-                    and not isinstance(value, bool)
-                    and math.isfinite(value)
-                    for value in (x, y)
-                ):
-                    target = anchor.get("target")
-                    if isinstance(target, dict) and target.get("kind") == "ocr_anchor":
-                        return {"x": x, "y": y, "target": target}
-        return None
+            text = normalize(str(anchor.get("text", "")))
+            if not text:
+                continue
+            score = min((0 if needle in text else distance(text, needle)) for needle in wanted)
+            if score > budget:
+                continue
+            x = anchor.get("x")
+            y = anchor.get("y")
+            if not all(
+                isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                and math.isfinite(value)
+                for value in (x, y)
+            ):
+                continue
+            target = anchor.get("target")
+            if not (isinstance(target, dict) and target.get("kind") == "ocr_anchor"):
+                continue
+            if best is None or score < best[0]:
+                best = (score, {"x": x, "y": y, "target": target})
+        return best[1] if best else None
 
     def summary(self) -> dict:
         passes = sum(1 for result in self.results if result["status"] == "pass")
