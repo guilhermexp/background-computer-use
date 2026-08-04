@@ -409,7 +409,14 @@ struct ClickRouteService {
         }
 
         let window = capture.envelope.response.window
-        let beforeImage = modelFacingImage(from: capture)
+        let modelSize = modelPixelSize(for: capture.envelope.response)
+        let anchorRegion = modelSize.width > 0 && modelSize.height > 0
+            ? Self.normalizedOCRVerificationRegion(
+                box: anchor.box,
+                modelWidth: Double(modelSize.width),
+                modelHeight: Double(modelSize.height)
+            )
+            : nil
         let outcome = executeCoordinateClick(
             request: request,
             capture: capture,
@@ -425,34 +432,29 @@ struct ClickRouteService {
             inheritedSteps: [],
             warnings: warnings,
             notes: notes + (relocated ? ["OCR anchor was safely relocated by text, occurrence, and bounded geometry."] : []),
+            verificationRegion: anchorRegion,
             postImageMode: Self.ocrCaptureImageMode(requested: request.imageMode ?? .omit)
         )
         let afterImage = outcome.postCapture.flatMap(modelFacingImage)
-        let modelSize = modelPixelSize(for: capture.envelope.response)
-        let visual: VisualChangeAnalyzer.Result?
-        if modelSize.width > 0, modelSize.height > 0 {
-            let normalizedRegion = Self.normalizedOCRVerificationRegion(
-                box: anchor.box,
-                modelWidth: Double(modelSize.width),
-                modelHeight: Double(modelSize.height)
-            )
-            visual = beforeImage.flatMap { before in
-                afterImage.flatMap {
-                    VisualChangeAnalyzer.compare(before: before, after: $0, normalizedRegion: normalizedRegion)
-                }
-            }
-        } else {
-            visual = nil
-        }
         let postOCR = afterImage.map {
             OCRRecognitionService.recognize(
                 cgImage: $0,
                 interactionToken: outcome.postCapture?.envelope.response.interactionToken ?? liveInteractionToken
             )
         }
-        let anchorDisappeared = postOCR.flatMap { summary -> Bool? in
-            guard summary.status == .success || summary.status == .noText else { return nil }
-            return OCRClickTargetResolver.isAnchorPresent(anchor, in: summary.anchors) == false
+        let anchorDisappeared: Bool?
+        let anchorDiagnostic: String?
+        if let postOCR {
+            if postOCR.status == .success || postOCR.status == .noText {
+                anchorDisappeared = OCRClickTargetResolver.isAnchorPresent(anchor, in: postOCR.anchors) == false
+                anchorDiagnostic = nil
+            } else {
+                anchorDisappeared = nil
+                anchorDiagnostic = "Anchor disappearance was not computed because post-click OCR returned status \(postOCR.status.rawValue): \(postOCR.diagnostic ?? "no diagnostic")."
+            }
+        } else {
+            anchorDisappeared = nil
+            anchorDiagnostic = "Anchor disappearance was not computed because the post-click screenshot was unavailable for OCR."
         }
         let verification = ocrVerification(
             base: outcome.verification,
@@ -460,7 +462,7 @@ struct ClickRouteService {
             after: outcome.postCapture,
             relocated: relocated,
             anchorDisappeared: anchorDisappeared,
-            visual: visual
+            anchorDiagnostic: anchorDiagnostic
         )
         let dispatched = outcome.transports.contains { $0.didDispatch && $0.transportSuccess }
         let verified = dispatched && effectVerified(verification)
@@ -572,9 +574,26 @@ struct ClickRouteService {
         after: AXActionStateCapture?,
         relocated: Bool,
         anchorDisappeared: Bool?,
-        visual: VisualChangeAnalyzer.Result?
+        anchorDiagnostic: String?
     ) -> ClickVerificationEvidenceDTO {
-        ClickVerificationEvidenceDTO(
+        let assessment = ClickIntentVerifier.assess(
+            focusedElementChanged: base?.focusedElementChanged,
+            modalDialogOpened: base?.modalDialogOpened,
+            windowTitleChanged: base?.windowTitleChanged,
+            targetStateChanged: base?.targetStateChanged,
+            ocrAnchorDisappeared: anchorDisappeared,
+            targetRegionChangeRatio: base?.targetRegionChangeRatio,
+            renderedTextChanged: base?.renderedTextChanged,
+            selectionSummaryChanged: base?.selectionSummaryChanged
+        )
+        var notes = (base?.verificationNotes ?? []).filter { ClickIntentVerifier.isAssessmentNote($0) == false }
+        notes.append("OCR verification requires anchor disappearance, target-local pixels, or structural AX evidence; unrelated full-window changes are ignored.")
+        if let anchorDiagnostic {
+            notes.append(anchorDiagnostic)
+        }
+        notes.append(contentsOf: assessment.notes)
+
+        return ClickVerificationEvidenceDTO(
             preStateToken: before.envelope.response.stateToken,
             postStateToken: after?.envelope.response.stateToken,
             targetRelocated: relocated,
@@ -596,12 +615,15 @@ struct ClickRouteService {
             ocrAnchorMatched: true,
             ocrAnchorRelocated: relocated,
             ocrAnchorDisappeared: anchorDisappeared,
-            targetRegionChangeRatio: visual?.targetRegionRatio,
-            fullImageChangeRatio: visual?.fullImageRatio,
+            targetRegionChangeRatio: base?.targetRegionChangeRatio,
+            fullImageChangeRatio: base?.fullImageChangeRatio,
             foregroundPreserved: base?.foregroundPreserved,
-            verificationNotes: (base?.verificationNotes ?? []) + [
-                "OCR verification requires anchor disappearance, target-local pixels, or structural AX evidence; unrelated full-window changes are ignored."
-            ]
+            targetRegionChangeThreshold: ClickIntentVerifier.targetRegionChangeThreshold,
+            targetRegionDiagnostic: base?.targetRegionDiagnostic,
+            ocrAnchorDiagnostic: anchorDiagnostic,
+            intentSignals: assessment.intentSignals,
+            ambientOnlySignals: assessment.ambientOnlySignals,
+            verificationNotes: notes
         )
     }
 
@@ -896,6 +918,15 @@ struct ClickRouteService {
             options: executionOptions
         )
         warnings.append(contentsOf: cursor.warnings)
+        let region = ClickTargetRegion.normalizedRegion(
+            targetFrameAppKit: target.frameAppKit,
+            pointAppKit: AXCursorTargeting.targetPoint(for: target, window: capture.envelope.response.window).point,
+            windowFrameAppKit: capture.envelope.response.window.frameAppKit
+        )
+        let beforeWindowImage = CGWindowCaptureService.captureImage(
+            window: capture.envelope.response.window,
+            attachedSurfaces: capture.envelope.response.attachedSurfaces
+        )
         let frontmostBeforeDispatch = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let dispatch = dispatchSemanticPlan(plan)
         let rawStatus = dispatch.rawStatus
@@ -912,6 +943,10 @@ struct ClickRouteService {
         let refreshed = postCapture.flatMap {
             targetResolver.locateRefreshedTarget(in: $0, prior: target, kind: .click)
         }
+        let afterWindowImage = CGWindowCaptureService.captureImage(
+            window: postCapture?.envelope.response.window ?? capture.envelope.response.window,
+            attachedSurfaces: postCapture?.envelope.response.attachedSurfaces ?? capture.envelope.response.attachedSurfaces
+        )
         let verification = verifyClick(
             before: capture,
             after: postCapture,
@@ -920,6 +955,11 @@ struct ClickRouteService {
             refreshedTargetStrategy: refreshed?.strategy,
             foregroundBeforeDispatch: frontmostBeforeDispatch,
             foregroundAfter: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            region: ClickTargetRegion.evidence(
+                region: region,
+                before: beforeWindowImage,
+                after: afterWindowImage
+            ),
             extraNotes: dispatch.notes + plan.notes
         )
         let verified = semanticVerified(plan: plan, dispatchSuccess: dispatch.success, verification: verification)
@@ -1038,6 +1078,7 @@ struct ClickRouteService {
         inheritedSteps: [ClickRouteStepDTO],
         warnings: [String],
         notes: [String],
+        verificationRegion: CGRect? = nil,
         postImageMode: ImageMode? = nil
     ) -> ClickCoordinateOutcome {
         let modelSize = modelPixelSize(for: capture.envelope.response)
@@ -1085,6 +1126,7 @@ struct ClickRouteService {
             inheritedSteps: inheritedSteps,
             warnings: warnings,
             notes: notes,
+            verificationRegion: verificationRegion,
             postImageMode: postImageMode
         )
     }
@@ -1103,6 +1145,7 @@ struct ClickRouteService {
         inheritedSteps: [ClickRouteStepDTO],
         warnings: [String],
         notes: [String],
+        verificationRegion: CGRect? = nil,
         postImageMode: ImageMode? = nil
     ) -> ClickCoordinateOutcome {
         var warnings = warnings + plan.mapping.warnings
@@ -1115,6 +1158,16 @@ struct ClickRouteService {
             options: executionOptions
         )
         warnings.append(contentsOf: cursor.warnings)
+
+        let region = verificationRegion ?? ClickTargetRegion.normalizedRegion(
+            targetFrameAppKit: target?.frameAppKit,
+            pointAppKit: plan.appKitPoint,
+            windowFrameAppKit: capture.envelope.response.window.frameAppKit
+        )
+        let beforeWindowImage = CGWindowCaptureService.captureImage(
+            window: capture.envelope.response.window,
+            attachedSurfaces: capture.envelope.response.attachedSurfaces
+        )
 
         let frontmostBeforeDispatch = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let transportResult: NativeBackgroundClickTransportResult
@@ -1191,6 +1244,15 @@ struct ClickRouteService {
             }
         }
         let frontmostAfter = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let afterWindowImage = CGWindowCaptureService.captureImage(
+            window: postCapture?.envelope.response.window ?? capture.envelope.response.window,
+            attachedSurfaces: postCapture?.envelope.response.attachedSurfaces ?? capture.envelope.response.attachedSurfaces
+        )
+        let regionEvidence = ClickTargetRegion.evidence(
+            region: region,
+            before: beforeWindowImage,
+            after: afterWindowImage
+        )
         let verification = verifyClick(
             before: capture,
             after: postCapture,
@@ -1199,6 +1261,7 @@ struct ClickRouteService {
             refreshedTargetStrategy: refreshed?.strategy,
             foregroundBeforeDispatch: frontmostBeforeDispatch,
             foregroundAfter: frontmostAfter,
+            region: regionEvidence,
             extraNotes: transportResult.notes
         )
         let verified = transportResult.dispatchSuccess && effectVerified(verification)
@@ -1622,6 +1685,7 @@ struct ClickRouteService {
         refreshedTargetStrategy: String?,
         foregroundBeforeDispatch: String?,
         foregroundAfter: String?,
+        region: ClickTargetRegion.Evidence,
         extraNotes: [String]
     ) -> ClickVerificationEvidenceDTO {
         let renderedTextChanged: Bool?
@@ -1678,6 +1742,21 @@ struct ClickRouteService {
         if foregroundBeforeDispatch != foregroundAfter {
             verificationNotes.append("Foreground changed from \(foregroundBeforeDispatch ?? "nil") to \(foregroundAfter ?? "nil").")
         }
+        if let diagnostic = region.diagnostic {
+            verificationNotes.append(diagnostic)
+        }
+
+        let assessment = ClickIntentVerifier.assess(
+            focusedElementChanged: focusedElementChanged,
+            modalDialogOpened: modalDialogOpened,
+            windowTitleChanged: windowTitleChanged,
+            targetStateChanged: targetStateChanged,
+            ocrAnchorDisappeared: nil,
+            targetRegionChangeRatio: region.targetRegionChangeRatio,
+            renderedTextChanged: renderedTextChanged,
+            selectionSummaryChanged: selectionSummaryChanged
+        )
+        verificationNotes.append(contentsOf: assessment.notes)
 
         return ClickVerificationEvidenceDTO(
             preStateToken: before.envelope.response.stateToken,
@@ -1701,11 +1780,16 @@ struct ClickRouteService {
             ocrAnchorMatched: nil,
             ocrAnchorRelocated: nil,
             ocrAnchorDisappeared: nil,
-            targetRegionChangeRatio: nil,
-            fullImageChangeRatio: nil,
+            targetRegionChangeRatio: region.targetRegionChangeRatio,
+            fullImageChangeRatio: region.fullImageChangeRatio,
             foregroundPreserved: foregroundBeforeDispatch == nil || foregroundAfter == nil
                 ? nil
                 : foregroundBeforeDispatch == foregroundAfter,
+            targetRegionChangeThreshold: ClickIntentVerifier.targetRegionChangeThreshold,
+            targetRegionDiagnostic: region.diagnostic,
+            ocrAnchorDiagnostic: nil,
+            intentSignals: assessment.intentSignals,
+            ambientOnlySignals: assessment.ambientOnlySignals,
             verificationNotes: verificationNotes
         )
     }
@@ -1719,11 +1803,7 @@ struct ClickRouteService {
             return false
         }
         switch plan.attempt {
-        case .setContainerSelectedRows, .setRowSelectedTrue:
-            return verification.afterTargetSelected == true ||
-                verification.selectionSummaryChanged == true ||
-                verification.targetStateChanged == true
-        case .exactPrimaryAXAction, .safeUniqueDescendantRetarget:
+        case .setContainerSelectedRows, .setRowSelectedTrue, .exactPrimaryAXAction, .safeUniqueDescendantRetarget:
             return effectVerified(verification)
         case .ambiguousDescendantClick, .coordinateRequired, .unsupportedPrimaryClick, .none:
             return false
@@ -1731,24 +1811,7 @@ struct ClickRouteService {
     }
 
     private func effectVerified(_ verification: ClickVerificationEvidenceDTO?) -> Bool {
-        guard let verification else {
-            return false
-        }
-        if verification.ocrAnchorMatched != nil {
-            return verification.selectionSummaryChanged == true ||
-                verification.focusedElementChanged == true ||
-                verification.windowTitleChanged == true ||
-                verification.modalDialogOpened == true ||
-                verification.targetStateChanged == true ||
-                verification.ocrAnchorDisappeared == true ||
-                (verification.targetRegionChangeRatio ?? 0) >= 0.018
-        }
-        return verification.renderedTextChanged == true ||
-            verification.selectionSummaryChanged == true ||
-            verification.focusedElementChanged == true ||
-            verification.windowTitleChanged == true ||
-            verification.modalDialogOpened == true ||
-            verification.targetStateChanged == true
+        ClickIntentVerifier.verified(verification)
     }
 
     private func coordinatePlan(

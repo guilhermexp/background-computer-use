@@ -70,23 +70,28 @@ struct WindowStateService {
             }
         }
         let ocr: OCRAnchorSummaryDTO?
+        let ocrMs: Double?
         if request.includeOCR == true {
             if let imagePath = screenshot.image?.imagePath {
-                ocr = OCRRecognitionService.recognize(
+                let outcome = OCRRecognitionService.measure(
                     imagePath: imagePath,
                     interactionToken: capture.envelope.response.interactionToken
                 )
+                ocr = outcome.summary
+                ocrMs = outcome.durationMs
             } else {
                 ocr = OCRAnchorSummaryBuilder.failure(
                     status: .imageUnavailable,
                     diagnostic: "OCR requires a path-backed screenshot image."
                 )
+                ocrMs = 0
             }
             if let diagnostic = ocr?.diagnostic {
                 notes.append(diagnostic)
             }
         } else {
             ocr = nil
+            ocrMs = nil
         }
 
         return GetWindowStateResponse(
@@ -111,7 +116,8 @@ struct WindowStateService {
                 captureMs: elapsedMilliseconds(since: captureStarted, to: captureFinished),
                 projectionMs: 0,
                 screenshotMs: elapsedMilliseconds(since: screenshotStarted, to: screenshotFinished),
-                totalMs: elapsedMilliseconds(since: totalStarted)
+                totalMs: elapsedMilliseconds(since: totalStarted),
+                ocrMs: ocrMs
             ),
             debug: debugInclusion.makeDebugDTO(from: capture.envelope),
             ocr: ocr,

@@ -5,3 +5,4 @@ dist/
 *.log
 runtime-manifest.json
 .claude/
+__pycache__/
