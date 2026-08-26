@@ -107,6 +107,16 @@ struct Router {
                 }
             )
 
+        case (.post, "/v1/find_elements"):
+            return decodeAndExecute(
+                FindElementsRequest.self,
+                routeID: .findElements,
+                from: request,
+                work: { payload in
+                    try services.findElements(payload)
+                }
+            )
+
         case (.post, "/v1/annotate_window"):
             return decodeAndExecute(
                 AnnotateWindowRequest.self,
@@ -589,6 +599,21 @@ struct Router {
                 ),
                 statusCode: 404,
                 reasonPhrase: "Not Found"
+            )
+
+        case FindElementsRouteError.invalidRequest(let message):
+            return .json(
+                ErrorResponse(
+                    error: "invalid_request",
+                    message: message,
+                    requestID: requestID,
+                    recovery: [
+                        "Supply a non-empty role, text, or both.",
+                        "Call GET /v1/routes and inspect find_elements request.fields."
+                    ]
+                ),
+                statusCode: 400,
+                reasonPhrase: "Bad Request"
             )
 
         case WaitForRouteError.invalidRequest(let message):

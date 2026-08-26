@@ -285,6 +285,7 @@ public struct AXRawNodeDTO: Codable, Sendable {
     public let description: String?
     public let help: String?
     public let identifier: String?
+    public let domIdentifier: String?
     public let url: String?
     public let valueDescription: String?
     public let valueType: String?
@@ -458,6 +459,7 @@ public struct AXPipelineV2SurfaceNodeDTO: Codable, Sendable {
     public let description: String?
     public let help: String?
     public let identifier: String?
+    public let domIdentifier: String?
     public let url: String?
     public let nodeID: String?
     public let identity: AXNodeIdentityDTO?
@@ -482,6 +484,89 @@ public struct AXPipelineV2SurfaceNodeDTO: Codable, Sendable {
     public let interactionTraits: AXInteractionTraitsDTO?
     public let profileHint: String?
     public let transformNotes: [String]
+
+    private enum EncodingKeys: String, CodingKey {
+        case index
+        case displayIndex
+        case projectedIndex
+        case parentIndex
+        case depth
+        case primaryCanonicalIndex
+        case canonicalIndices
+        case childIndices
+        case displayRole
+        case rawRole
+        case rawSubrole
+        case title
+        case description
+        case help
+        case identifier
+        case domIdentifier
+        case url
+        case nodeID
+        case refetchFingerprint
+        case value
+        case valueKind
+        case isValueSettable
+        case flags
+        case secondaryActions
+        case secondaryActionBindings
+        case affordances
+        case availableActions
+        case curatedSecondaryActions
+        case curatedAvailableActions
+        case parameterizedAttributes
+        case frameAppKit
+        case activationPointAppKit
+        case suggestedInteractionPointAppKit
+        case childCount
+        case collectionInfo
+        case interactionTraits
+        case profileHint
+        case transformNotes
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: EncodingKeys.self)
+        try container.encode(index, forKey: .index)
+        try container.encodeIfPresent(displayIndex, forKey: .displayIndex)
+        try container.encode(projectedIndex, forKey: .projectedIndex)
+        try container.encodeIfPresent(parentIndex, forKey: .parentIndex)
+        try container.encode(depth, forKey: .depth)
+        try container.encode(primaryCanonicalIndex, forKey: .primaryCanonicalIndex)
+        try container.encode(canonicalIndices, forKey: .canonicalIndices)
+        try container.encode(childIndices, forKey: .childIndices)
+        try container.encode(displayRole, forKey: .displayRole)
+        try container.encodeIfPresent(rawRole, forKey: .rawRole)
+        try container.encodeIfPresent(rawSubrole, forKey: .rawSubrole)
+        try container.encodeIfPresent(title, forKey: .title)
+        try container.encodeIfPresent(description, forKey: .description)
+        try container.encodeIfPresent(help, forKey: .help)
+        try container.encodeIfPresent(identifier, forKey: .identifier)
+        try container.encodeIfPresent(domIdentifier, forKey: .domIdentifier)
+        try container.encodeIfPresent(url, forKey: .url)
+        try container.encodeIfPresent(nodeID, forKey: .nodeID)
+        try container.encodeIfPresent(refetchFingerprint, forKey: .refetchFingerprint)
+        try container.encodeIfPresent(value, forKey: .value)
+        try container.encodeIfPresent(valueKind, forKey: .valueKind)
+        try container.encodeIfPresent(isValueSettable, forKey: .isValueSettable)
+        try container.encode(flags, forKey: .flags)
+        try container.encode(secondaryActions, forKey: .secondaryActions)
+        try container.encodeIfPresent(secondaryActionBindings, forKey: .secondaryActionBindings)
+        try container.encodeIfPresent(affordances, forKey: .affordances)
+        try container.encodeIfPresent(availableActions, forKey: .availableActions)
+        try container.encodeIfPresent(curatedSecondaryActions, forKey: .curatedSecondaryActions)
+        try container.encodeIfPresent(curatedAvailableActions, forKey: .curatedAvailableActions)
+        try container.encodeIfPresent(parameterizedAttributes, forKey: .parameterizedAttributes)
+        try container.encodeIfPresent(frameAppKit, forKey: .frameAppKit)
+        try container.encodeIfPresent(activationPointAppKit, forKey: .activationPointAppKit)
+        try container.encodeIfPresent(suggestedInteractionPointAppKit, forKey: .suggestedInteractionPointAppKit)
+        try container.encode(childCount, forKey: .childCount)
+        try container.encodeIfPresent(collectionInfo, forKey: .collectionInfo)
+        try container.encodeIfPresent(interactionTraits, forKey: .interactionTraits)
+        try container.encodeIfPresent(profileHint, forKey: .profileHint)
+        try container.encode(transformNotes, forKey: .transformNotes)
+    }
 }
 
 public struct AXPipelineV2TreeDTO: Codable, Sendable {

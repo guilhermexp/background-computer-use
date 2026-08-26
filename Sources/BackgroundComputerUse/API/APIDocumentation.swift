@@ -9,6 +9,7 @@ enum APIDocumentation {
             "Call GET /v1/routes for the complete route catalog, request fields, response fields, execution policy, examples, and error codes.",
             "Call POST /v1/list_apps to find a target app, then POST /v1/list_windows with an app name or bundle ID.",
             "Call POST /v1/get_window_state with a window ID and imageMode path or base64. Use the screenshot as visual ground truth and the projected tree for semantic targets.",
+            "Use POST /v1/find_elements when role or text can identify a target without returning the full tree; its matches and interactionToken come from one capture.",
             "Call one action route. Reuse stateToken when available; actions without cursor reuse the visible Agent cursor, and cursor.id creates a separate lane. Read state again before planning the next meaningful action.",
             "When showing cursor feedback, stream public agent-facing text or observations. Do not use hidden chain-of-thought, route labels, tool names, or product branding as bubble copy."
         ],
@@ -40,7 +41,7 @@ enum APIDocumentation {
             ),
             APIConceptDTO(
                 name: "target",
-                description: "Action target from get_window_state. Use {\"kind\":\"display_index\",\"value\":N} for a rendered line, {\"kind\":\"node_id\",\"value\":\"...\"} for a stable node, or {\"kind\":\"refetch_fingerprint\",\"value\":\"...\"} when node_id is unavailable. Click additionally accepts {\"kind\":\"ocr_anchor\",\"value\":\"...\"} from get_window_state.ocr together with interactionToken. Refresh state after actions because target identity or geometry can change.",
+                description: "Action target from get_window_state or find_elements. Use {\"kind\":\"display_index\",\"value\":N} for a rendered line, {\"kind\":\"node_id\",\"value\":\"...\"} for a stable node, or {\"kind\":\"refetch_fingerprint\",\"value\":\"...\"} when node_id is unavailable. Web nodes may also expose domIdentifier from AXDOMIdentifier for page-authored identity. Click additionally accepts {\"kind\":\"ocr_anchor\",\"value\":\"...\"} from get_window_state.ocr together with interactionToken. Refresh state after actions because target identity or geometry can change.",
                 fields: [
                     RouteFieldDTO(name: "kind", type: "display_index | node_id | refetch_fingerprint | ocr_anchor (click only)", required: true, description: "How the route should resolve the target.", defaultValue: nil),
                     RouteFieldDTO(name: "value", type: "integer | string", required: true, description: "Integer for display_index; string for node_id, refetch_fingerprint, and ocr_anchor.", defaultValue: nil),
@@ -153,6 +154,14 @@ enum APIDocumentation {
                 successSignals: ["stateToken, screenshot, tree, focusedElement, backgroundSafety, and notes are returned."],
                 nextSteps: ["Pick a semantic target or screenshot coordinate, then call an action route."],
                 exampleRequest: #"{"window":"WINDOW_ID","imageMode":"path","maxNodes":6500}"#
+            )
+        case .findElements:
+            return usage(
+                whenToUse: "Find projected nodes by exact role and/or accessible-text substring without reading the full tree payload.",
+                useAfter: ["Call list_windows and choose a live windowID."],
+                successSignals: ["matches contains only matching nodes; matchCount=0 with an explicit summary is a successful empty query result."],
+                nextSteps: ["Use a returned nodeID, refetchFingerprint, or displayIndex with stateToken/interactionToken from this same response."],
+                exampleRequest: #"{"window":"WINDOW_ID","role":"button","text":"Click me"}"#
             )
         case .annotateWindow:
             return usage(
@@ -365,7 +374,7 @@ enum APIDocumentation {
 
     private static func routeNeedsWindow(_ id: RouteID) -> Bool {
         switch id {
-        case .getWindowState, .annotateWindow, .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .pressKey, .setValue, .waitFor, .readText, .selectText:
+        case .getWindowState, .findElements, .annotateWindow, .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .pressKey, .setValue, .waitFor, .readText, .selectText:
             return true
         case .health, .bootstrap, .routes, .listApps, .listWindows, .cursorFeedback:
             return false

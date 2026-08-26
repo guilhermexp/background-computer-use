@@ -65,6 +65,7 @@ struct WebAreaTextSnapshotTests {
             description: description,
             help: nil,
             identifier: nil,
+            domIdentifier: nil,
             url: nil,
             nodeID: "node-\(index)",
             identity: nil,

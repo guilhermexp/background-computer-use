@@ -39,6 +39,10 @@ public final class BackgroundComputerUseRuntime {
         try services.getWindowState(request)
     }
 
+    public func findElements(_ request: FindElementsRequest) throws -> FindElementsResponse {
+        try services.findElements(request)
+    }
+
     public func click(_ request: ClickRequest) throws -> ClickResponse {
         try services.click(request)
     }

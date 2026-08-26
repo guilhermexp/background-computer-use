@@ -5,6 +5,7 @@ struct RuntimeServices {
     private let runningAppService = RunningAppService()
     private let windowListService = WindowListService()
     private let windowStateService: WindowStateService
+    private let findElementsRouteService: FindElementsRouteService
     private let windowDragRouteService: WindowDragRouteService
     private let windowResizeRouteService: WindowResizeRouteService
     private let setWindowFrameRouteService: SetWindowFrameRouteService
@@ -21,6 +22,7 @@ struct RuntimeServices {
 
     init(executionOptions: ActionExecutionOptions = .visualCursorEnabled) {
         windowStateService = WindowStateService(executionOptions: executionOptions)
+        findElementsRouteService = FindElementsRouteService(executionOptions: executionOptions)
         windowDragRouteService = WindowDragRouteService(executionOptions: executionOptions)
         windowResizeRouteService = WindowResizeRouteService(executionOptions: executionOptions)
         setWindowFrameRouteService = SetWindowFrameRouteService(executionOptions: executionOptions)
@@ -64,6 +66,12 @@ struct RuntimeServices {
     func getWindowState(_ request: GetWindowStateRequest) throws -> GetWindowStateResponse {
         try execute(routeID: .getWindowState, target: windowTarget(request.window)) {
             try windowStateService.getWindowState(request: request)
+        }
+    }
+
+    func findElements(_ request: FindElementsRequest) throws -> FindElementsResponse {
+        try execute(routeID: .findElements, target: windowTarget(request.window)) {
+            try findElementsRouteService.findElements(request: request)
         }
     }
 

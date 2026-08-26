@@ -22,6 +22,7 @@ private enum AXAttributeNames {
     static var description: CFString { kAXDescriptionAttribute as CFString }
     static var help: CFString { kAXHelpAttribute as CFString }
     static var identifier: CFString { kAXIdentifierAttribute as CFString }
+    static var domIdentifier: CFString { "AXDOMIdentifier" as CFString }
     static var url: CFString { kAXURLAttribute as CFString }
     static var enabled: CFString { kAXEnabledAttribute as CFString }
     static var selected: CFString { kAXSelectedAttribute as CFString }
@@ -199,6 +200,7 @@ struct AXRawCaptureService {
                 description: cleaned(session.string(from: values, attribute: AXAttributeNames.description)),
                 help: cleaned(session.string(from: values, attribute: AXAttributeNames.help)),
                 identifier: cleaned(session.string(from: values, attribute: AXAttributeNames.identifier)),
+                domIdentifier: cleaned(session.string(from: values, attribute: AXAttributeNames.domIdentifier)),
                 url: urlString(from: session.cfValue(from: values, attribute: AXAttributeNames.url)),
                 valueDescription: cleaned(session.string(from: values, attribute: AXAttributeNames.valueDescription)),
                 valueType: valueTypeName(from: session.cfValue(from: values, attribute: AXAttributeNames.value)),
@@ -301,6 +303,7 @@ struct AXRawCaptureService {
             AXAttributeNames.description,
             AXAttributeNames.help,
             AXAttributeNames.identifier,
+            AXAttributeNames.domIdentifier,
             AXAttributeNames.url,
             AXAttributeNames.enabled,
             AXAttributeNames.selected,
@@ -333,6 +336,7 @@ struct AXRawCaptureService {
             AXAttributeNames.roleDescription,
             AXAttributeNames.title,
             AXAttributeNames.description,
+            AXAttributeNames.domIdentifier,
             AXAttributeNames.enabled,
             AXAttributeNames.position,
             AXAttributeNames.size,
@@ -867,6 +871,7 @@ private struct WorkingRawNode {
     let description: String?
     let help: String?
     let identifier: String?
+    let domIdentifier: String?
     let url: String?
     let valueDescription: String?
     let valueType: String?
@@ -975,6 +980,7 @@ private struct WorkingRawNode {
             description: description,
             help: help,
             identifier: identifier,
+            domIdentifier: domIdentifier,
             url: url,
             valueDescription: valueDescription,
             valueType: valueType,

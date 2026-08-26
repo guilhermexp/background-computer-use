@@ -701,6 +701,7 @@ struct StatePipelineExperiment {
             description: projectedNode.metadata.first,
             help: primaryRawNode?.help,
             identifier: identifier,
+            domIdentifier: primaryRawNode?.domIdentifier,
             url: url,
             nodeID: primaryRawNode?.identity?.nodeID,
             identity: primaryRawNode?.identity,

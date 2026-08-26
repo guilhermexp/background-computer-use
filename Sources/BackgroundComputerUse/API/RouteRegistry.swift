@@ -8,6 +8,7 @@ enum RouteID: String, CaseIterable {
     case listWindows = "list_windows"
     case cursorFeedback = "cursor_feedback"
     case getWindowState = "get_window_state"
+    case findElements = "find_elements"
     case annotateWindow = "annotate_window"
     case click
     case scroll
@@ -174,6 +175,27 @@ enum RouteRegistry {
             notes: [
                 "Default response is model-facing: resolved window, normalized screenshot, projected tree, menu/focus/selection, safety, performance, and notes.",
                 "Pipeline internals stay opt-in under debug via debugMode summary/full or specific includeRawCapture/includeSemanticTree/includeProjectedTree/includePlatformProfile/includeDiagnostics flags."
+            ]
+        ),
+        RouteDescriptorDTO(
+            id: RouteID.findElements.rawValue,
+            method: "POST",
+            path: "/v1/find_elements",
+            category: "state",
+            summary: "Find matching projected nodes without returning the full window tree.",
+            execution: RouteExecutionPolicyDTO(
+                lane: .windowRead,
+                backgroundBehavior: .backgroundRequired,
+                focusStealPolicy: .forbidden,
+                mainThreadBehavior: .avoid,
+                readActRead: false,
+                allowsConcurrentClients: true,
+                notes: ["This read-only route filters one state capture and returns its stateToken and interactionToken unchanged."]
+            ),
+            implementationStatus: .implemented,
+            notes: [
+                "Use role and/or text to return only matching projected nodes.",
+                "Returned targets and interactionToken come from the same capture and are directly actionable."
             ]
         ),
         RouteDescriptorDTO(
@@ -449,6 +471,15 @@ enum RouteRegistry {
                 field("includeOCR", "boolean", "When true, run local Apple Vision OCR on the returned screenshot and include text anchors.", defaultValue: "false"),
                 field("scopeTarget", #"{"kind":"display_index"|"node_id"|"refetch_fingerprint","value":integer|string}"#, "Optional target used to return only that node and its descendants in tree while keeping stable target indices.")
             ])
+        case RouteID.findElements.rawValue:
+            return json([
+                field("window", "string", required: true, "Stable window ID from list_windows."),
+                field("role", "string", "Exact projected displayRole or raw AX role, case-insensitive. At least role or text is required."),
+                field("text", "string", "Case-insensitive substring across node title, description, help, and value preview. At least role or text is required."),
+                field("includeMenuBar", "boolean", "Include macOS menu bar nodes in the capture.", defaultValue: "true"),
+                field("webTraversal", "visible | full", "Use full only when the required web element is outside visible traversal.", defaultValue: "visible"),
+                field("maxNodes", "integer", defaultValue: "6500")
+            ])
         case RouteID.annotateWindow.rawValue:
             return json([
                 field("window", "string", required: true, "Stable window ID from list_windows."),
@@ -674,7 +705,7 @@ enum RouteRegistry {
                 field("window", "ResolvedWindow", required: true),
                 field("attachedSurfaces", "AttachedSurface[]", required: true, "Live same-process sheets/dialogs attached to the root window."),
                 field("screenshot", "Screenshot", required: true),
-                field("tree", "AXTree", required: true),
+                field("tree", "AXTree", required: true, "Projected nodes expose displayIndex, nodeID, and refetchFingerprint as canonical action locators plus domIdentifier when the app publishes AXDOMIdentifier; nested identity/refetch locator objects are not serialized."),
                 field("menuPresentation", "AXMenuPresentation | null"),
                 field("focusedElement", "FocusedElement", required: true),
                 field("selectionSummary", "AXFocusSelectionSnapshot | null"),
@@ -682,6 +713,18 @@ enum RouteRegistry {
                 field("performance", "ReadPerformance", required: true, "resolveMs, captureMs, projectionMs, screenshotMs, totalMs, plus ocrMs when includeOCR ran Apple Vision."),
                 field("debug", "GetWindowStateDebug | null"),
                 field("ocr", "OCRAnchorSummary | null"),
+                field("notes", "string[]", required: true)
+            ])
+        case RouteID.findElements.rawValue:
+            return json([
+                field("contractVersion", "string", required: true),
+                field("stateToken", "string", required: true, "Token from the state capture that produced matches."),
+                field("interactionToken", "string", required: true, "Token from the same capture; pass it with directly actionable targets when required."),
+                field("window", "ResolvedWindow", required: true),
+                field("query", "FindElementsQuery", required: true),
+                field("matches", "AXNode[]", required: true, "Only nodes matching every supplied query field; never the full tree."),
+                field("matchCount", "integer", required: true),
+                field("summary", "string", required: true),
                 field("notes", "string[]", required: true)
             ])
         case RouteID.annotateWindow.rawValue:
