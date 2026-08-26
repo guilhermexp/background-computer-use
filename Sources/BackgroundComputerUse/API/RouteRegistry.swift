@@ -9,6 +9,7 @@ enum RouteID: String, CaseIterable {
     case cursorFeedback = "cursor_feedback"
     case getWindowState = "get_window_state"
     case findElements = "find_elements"
+    case runScript = "run_script"
     case annotateWindow = "annotate_window"
     case click
     case scroll
@@ -196,6 +197,31 @@ enum RouteRegistry {
             notes: [
                 "Use role and/or text to return only matching projected nodes.",
                 "Returned targets and interactionToken come from the same capture and are directly actionable."
+            ]
+        ),
+        RouteDescriptorDTO(
+            id: RouteID.runScript.rawValue,
+            method: "POST",
+            path: "/v1/run_script",
+            category: "action",
+            summary: "Execute arbitrary AppleScript or JavaScript for Automation with an enforced timeout and owner-only audit log.",
+            execution: RouteExecutionPolicyDTO(
+                lane: .windowWrite,
+                backgroundBehavior: .backgroundRequired,
+                focusStealPolicy: .forbidden,
+                mainThreadBehavior: .avoid,
+                readActRead: false,
+                allowsConcurrentClients: true,
+                notes: [
+                    "This mutating lane participates in action throttling and session exclusion.",
+                    "It dispatches arbitrary Apple Events source without effect verification."
+                ]
+            ),
+            implementationStatus: .implemented,
+            notes: [
+                "Process-level status and output do not prove any UI effect.",
+                "Confirm intended effects with get_window_state or find_elements after execution.",
+                "Audit log: $TMPDIR/background-computer-use/audit/script-executions.jsonl (0600 in a 0700 directory)."
             ]
         ),
         RouteDescriptorDTO(
@@ -480,6 +506,12 @@ enum RouteRegistry {
                 field("webTraversal", "visible | full", "Use full only when the required web element is outside visible traversal.", defaultValue: "visible"),
                 field("maxNodes", "integer", defaultValue: "6500")
             ])
+        case RouteID.runScript.rawValue:
+            return json([
+                field("language", "applescript | javascript", required: true),
+                field("source", "string", required: true, "Arbitrary AppleScript or JavaScript for Automation source. Audit-logged owner-only."),
+                field("timeoutMs", "integer", "Enforced execution timeout; values above 30000 are capped.", defaultValue: "10000")
+            ])
         case RouteID.annotateWindow.rawValue:
             return json([
                 field("window", "string", required: true, "Stable window ID from list_windows."),
@@ -726,6 +758,19 @@ enum RouteRegistry {
                 field("matchCount", "integer", required: true),
                 field("summary", "string", required: true),
                 field("notes", "string[]", required: true)
+            ])
+        case RouteID.runScript.rawValue:
+            return json([
+                field("contractVersion", "string", required: true),
+                field("language", "applescript | javascript", required: true),
+                field("status", "integer", required: true, "osascript process exit status; process-level only."),
+                field("stdout", "string", required: true),
+                field("stderr", "string", required: true, "Compilation/runtime script failures are returned here with non-zero status."),
+                field("stdoutTruncated", "boolean", required: true, "True when captured stdout exceeded 1048576 bytes; excess bytes were drained and discarded."),
+                field("stderrTruncated", "boolean", required: true, "True when captured stderr exceeded 1048576 bytes; excess bytes were drained and discarded."),
+                field("durationMs", "number", required: true),
+                field("timedOut", "boolean", required: true),
+                field("effectiveTimeoutMs", "integer", required: true, "Actual enforced timeout after applying the runtime cap.")
             ])
         case RouteID.annotateWindow.rawValue:
             return json([

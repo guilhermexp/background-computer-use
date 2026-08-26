@@ -10,6 +10,7 @@ enum APIDocumentation {
             "Call POST /v1/list_apps to find a target app, then POST /v1/list_windows with an app name or bundle ID.",
             "Call POST /v1/get_window_state with a window ID and imageMode path or base64. Use the screenshot as visual ground truth and the projected tree for semantic targets.",
             "Use POST /v1/find_elements when role or text can identify a target without returning the full tree; its matches and interactionToken come from one capture.",
+            "Use POST /v1/run_script only when an arbitrary Apple Events capability is required. It has no effect verification; always read state afterwards.",
             "Call one action route. Reuse stateToken when available; actions without cursor reuse the visible Agent cursor, and cursor.id creates a separate lane. Read state again before planning the next meaningful action.",
             "When showing cursor feedback, stream public agent-facing text or observations. Do not use hidden chain-of-thought, route labels, tool names, or product branding as bubble copy."
         ],
@@ -162,6 +163,14 @@ enum APIDocumentation {
                 successSignals: ["matches contains only matching nodes; matchCount=0 with an explicit summary is a successful empty query result."],
                 nextSteps: ["Use a returned nodeID, refetchFingerprint, or displayIndex with stateToken/interactionToken from this same response."],
                 exampleRequest: #"{"window":"WINDOW_ID","role":"button","text":"Click me"}"#
+            )
+        case .runScript:
+            return usage(
+                whenToUse: "Execute arbitrary AppleScript or JavaScript for Automation without effect verification when no verified UI action route covers the operation.",
+                useAfter: ["Use only after confirming the requested operation requires arbitrary Apple Events authority."],
+                successSignals: ["status=0 reports process-level script success only; it does not claim any UI effect."],
+                nextSteps: ["Call get_window_state or find_elements to confirm the intended effect after every execution."],
+                exampleRequest: #"{"language":"applescript","source":"tell application \"Finder\" to get name of front window","timeoutMs":10000}"#
             )
         case .annotateWindow:
             return usage(
@@ -365,7 +374,7 @@ enum APIDocumentation {
 
     private static func routeNeedsAccessibility(_ id: RouteID) -> Bool {
         switch id {
-        case .health, .bootstrap, .routes, .cursorFeedback:
+        case .health, .bootstrap, .routes, .cursorFeedback, .runScript:
             return false
         default:
             return true
@@ -376,7 +385,7 @@ enum APIDocumentation {
         switch id {
         case .getWindowState, .findElements, .annotateWindow, .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .pressKey, .setValue, .waitFor, .readText, .selectText:
             return true
-        case .health, .bootstrap, .routes, .listApps, .listWindows, .cursorFeedback:
+        case .health, .bootstrap, .routes, .listApps, .listWindows, .cursorFeedback, .runScript:
             return false
         }
     }

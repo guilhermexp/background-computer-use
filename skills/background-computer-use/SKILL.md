@@ -41,6 +41,18 @@ Use this skill to start or connect to the local macOS `BackgroundComputerUse` ru
 
 7. When the visible cursor should explain work in real time, call `POST /v1/cursor_feedback` with public agent-facing text. Stream useful observations or visible response text; do not show route labels like "reading screen", tool names, product branding, or hidden chain-of-thought.
 
+## Find targeted elements before reading the full tree
+
+Use `POST /v1/find_elements` when an exact role and/or accessible-text substring can identify the
+target. The response returns only matching nodes plus `stateToken` and `interactionToken` from the
+same capture. Reuse a match's `displayIndex`, `nodeID`, or `refetchFingerprint` directly in the next
+action. A successful query with no match returns an empty `matches` list; do not treat that as a
+transport error.
+
+For web content, read optional `domIdentifier` as the page author's HTML `id`. Prefer it for
+recognition and disambiguation, while still dispatching actions with one of the supported target
+kinds advertised by `/v1/routes`.
+
 ## Clicking what the AX tree cannot see (OCR anchors)
 
 Some surfaces — Chromium/Electron web content above all — expose little or nothing useful in the
@@ -72,8 +84,11 @@ happens, read state twice and only click once two consecutive reads report the s
 `classification: "success"` requires dispatch **plus** at least one entry in
 `verification.intentSignals`: `target_region_changed` (target-local pixels moved past
 `verification.targetRegionChangeThreshold`), `ocr_anchor_disappeared`, `focused_element_changed`,
-`modal_dialog_opened`, `window_title_changed`, or `target_state_changed`. Rendered-text and
-selection-summary changes are ambient noise on a live window; they appear in
+`modal_dialog_opened`, `window_title_changed` on native surfaces, `target_state_changed`, or
+`web_area_text_changed`. Credit `web_area_text_changed` only on a web renderer after two identical
+pre-dispatch web-area text samples and a differing post-settle sample. An unstable or unavailable
+baseline never proves intent and carries a diagnostic. Whole-window rendered-text and
+selection-summary changes remain ambient noise; they appear in
 `verification.ambientOnlySignals` and never prove anything by themselves. When
 `targetRegionChangeRatio` or `ocrAnchorDisappeared` is `null`, `targetRegionDiagnostic` /
 `ocrAnchorDiagnostic` says why — a null field is never counted as evidence.
@@ -111,6 +126,21 @@ Residual limit: a surface with no accessibility node under the point — canvas,
 — still has no background pointer path. You get `effect_not_verified`, `failureDomain:
 "app_specific_semantics"` and the warning `renderer_ignores_coordinate_injection`. Do not retry the same
 coordinate hoping for a different result, and never treat a dispatched-but-unverified click as done.
+
+## Run arbitrary Apple Events source
+
+Use `POST /v1/run_script` only when no verified UI route covers the required Apple Events
+capability. Send `language: "applescript"` or `"javascript"`, arbitrary `source`, and an optional
+`timeoutMs`. The runtime caps and enforces the timeout, terminates the process group on expiry, and
+returns process-level `status`, `stdout`, `stderr`, `durationMs`, `timedOut`, and
+`effectiveTimeoutMs`.
+
+Treat this lane as **unverified**: the response intentionally has no `classification` and never
+claims an observed UI effect. Always call `get_window_state` or `find_elements` afterwards to confirm
+what changed. The auth token now authorizes arbitrary control of scriptable apps through this lane.
+Every attempt is recorded at
+`$TMPDIR/background-computer-use/audit/script-executions.jsonl`, mode `0600`, inside a `0700`
+directory. Never copy the submitted source into ordinary debug artifacts or chat logs.
 
 ## Helpers
 

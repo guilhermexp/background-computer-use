@@ -28,21 +28,21 @@
 
 ## 4. Lane de script auditada (P4)
 
-- [ ] 4.1 Teste vermelho: script que retorna valor devolve `stdout` e `status`; script que falha devolve `stderr` com status não-zero, sem erro de transporte.
-- [ ] 4.2 Teste vermelho: script que estoura o timeout devolve `timedOut: true` sem processo sobrevivente; timeout acima do máximo é limitado e o valor efetivo é reportado.
-- [ ] 4.3 Teste vermelho: resposta de `run_script` não carrega `classification`.
-- [ ] 4.4 Implementar `Actions/Script/ScriptRouteService.swift` com execução limitada por deadline e terminação da árvore de processo.
-- [ ] 4.5 Log de auditoria `0600` em diretório `0700`, registrando também recusas e timeouts.
-- [ ] 4.6 Wiring da rota (5 pontos) e inclusão em `isActionRoute` para exclusão de sessão e throttling.
-- [ ] 4.7 Self-doc em `/v1/routes` declarando lane sem verificação de efeito e a instrução de confirmar efeito relendo estado.
+- [x] 4.1 Teste vermelho: script que retorna valor devolve `stdout` e `status`; script que falha devolve `stderr` com status não-zero, sem erro de transporte.
+- [x] 4.2 Teste vermelho: script que estoura o timeout devolve `timedOut: true` sem processo sobrevivente; timeout acima do máximo é limitado e o valor efetivo é reportado.
+- [x] 4.3 Teste vermelho: resposta de `run_script` não carrega `classification`.
+- [x] 4.4 Implementar `Actions/Script/ScriptRouteService.swift` com execução limitada por deadline e terminação da árvore de processo.
+- [x] 4.5 Log de auditoria `0600` em diretório `0700`, registrando também recusas e timeouts.
+- [x] 4.6 Wiring da rota (5 pontos) e inclusão em `isActionRoute` para exclusão de sessão e throttling.
+- [x] 4.7 Self-doc em `/v1/routes` declarando lane sem verificação de efeito e a instrução de confirmar efeito relendo estado.
 
 ## 5. Documentação
 
-- [ ] 5.1 `skills/background-computer-use/SKILL.md`: `find_elements` como atalho de leitura, `domIdentifier` como alvo em web content, o novo `web_area_text_changed` com sua regra de baseline, e a lane `run_script` marcada como não verificada.
-- [ ] 5.2 `openspec/project.md`: atualizar a seção de postura de segurança com a autoridade ampliada pelo lane de script.
+- [x] 5.1 `skills/background-computer-use/SKILL.md`: `find_elements` como atalho de leitura, `domIdentifier` como alvo em web content, o novo `web_area_text_changed` com sua regra de baseline, e a lane `run_script` marcada como não verificada.
+- [x] 5.2 `openspec/project.md`: atualizar a seção de postura de segurança com a autoridade ampliada pelo lane de script.
 
 ## 6. Gates
 
-- [ ] 6.1 `swift build -c release` e `swift test`.
+- [x] 6.1 `swift build -c release` e `swift test`.
 - [ ] 6.2 `python3 script/smoke_runtime.py` contra o runtime instalado, cobrindo o caso web de P1 e as duas rotas novas.
-- [ ] 6.3 `openspec validate enhance-agent-surface-parity --strict`.
+- [x] 6.3 `openspec validate enhance-agent-surface-parity --strict`.

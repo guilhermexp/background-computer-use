@@ -22,6 +22,7 @@ struct RuntimeFacadePublicAPITests {
         let listWindows = ListWindowsRequest(app: "Safari")
         let state = GetWindowStateRequest(window: "window-id", imageMode: .path)
         let findElements = FindElementsRequest(window: "window-id", role: "button", text: "Save")
+        let runScript = RunScriptRequest(language: "applescript", source: "return 1", timeoutMs: 1_000)
         let annotate = AnnotateWindowRequest(window: "window-id", maxMarks: 40, imageMode: .path)
         let click = ClickRequest(window: "window-id", target: target, clickCount: 1, cursor: cursor)
         let coordinateClick = ClickRequest(window: "window-id", x: 10, y: 20)
@@ -42,6 +43,7 @@ struct RuntimeFacadePublicAPITests {
         #expect(listWindows.app == "Safari")
         #expect(state.imageMode == .path)
         #expect(findElements.role == "button")
+        #expect(runScript.language == "applescript")
         #expect(annotate.maxMarks == 40)
         #expect(click.target?.displayIndex == 3)
         #expect(coordinateClick.x == 10)
@@ -57,6 +59,7 @@ struct RuntimeFacadePublicAPITests {
 
         let runtime = BackgroundComputerUseRuntime()
         let _: (FindElementsRequest) throws -> FindElementsResponse = runtime.findElements
+        let _: (RunScriptRequest) throws -> RunScriptResponse = runtime.runScript
     }
 
     @Test

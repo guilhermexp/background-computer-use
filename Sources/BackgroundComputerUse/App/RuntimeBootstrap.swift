@@ -12,6 +12,7 @@ final class RuntimeBootstrap: @unchecked Sendable {
 
     init(auth: RuntimeAuth? = nil) throws {
         let resolvedAuth = try auth ?? RuntimeAuth.generateRequired()
+        try ScriptAuditLogger().prepare()
         self.auth = resolvedAuth
         server = LoopbackServer(auth: resolvedAuth)
     }

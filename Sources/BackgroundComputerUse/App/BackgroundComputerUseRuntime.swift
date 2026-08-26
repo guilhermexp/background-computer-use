@@ -43,6 +43,10 @@ public final class BackgroundComputerUseRuntime {
         try services.findElements(request)
     }
 
+    public func runScript(_ request: RunScriptRequest) throws -> RunScriptResponse {
+        try services.runScript(request)
+    }
+
     public func click(_ request: ClickRequest) throws -> ClickResponse {
         try services.click(request)
     }

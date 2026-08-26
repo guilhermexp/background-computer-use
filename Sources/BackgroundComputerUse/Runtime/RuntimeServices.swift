@@ -6,6 +6,7 @@ struct RuntimeServices {
     private let windowListService = WindowListService()
     private let windowStateService: WindowStateService
     private let findElementsRouteService: FindElementsRouteService
+    private let scriptRouteService: ScriptRouteService
     private let windowDragRouteService: WindowDragRouteService
     private let windowResizeRouteService: WindowResizeRouteService
     private let setWindowFrameRouteService: SetWindowFrameRouteService
@@ -20,9 +21,13 @@ struct RuntimeServices {
     private let textRouteService: TextRouteService
     private let cursorFeedbackRouteService: CursorFeedbackRouteService
 
-    init(executionOptions: ActionExecutionOptions = .visualCursorEnabled) {
+    init(
+        executionOptions: ActionExecutionOptions = .visualCursorEnabled,
+        scriptAuditLogger: ScriptAuditLogger = ScriptAuditLogger()
+    ) {
         windowStateService = WindowStateService(executionOptions: executionOptions)
         findElementsRouteService = FindElementsRouteService(executionOptions: executionOptions)
+        scriptRouteService = ScriptRouteService(auditLogger: scriptAuditLogger)
         windowDragRouteService = WindowDragRouteService(executionOptions: executionOptions)
         windowResizeRouteService = WindowResizeRouteService(executionOptions: executionOptions)
         setWindowFrameRouteService = SetWindowFrameRouteService(executionOptions: executionOptions)
@@ -72,6 +77,12 @@ struct RuntimeServices {
     func findElements(_ request: FindElementsRequest) throws -> FindElementsResponse {
         try execute(routeID: .findElements, target: windowTarget(request.window)) {
             try findElementsRouteService.findElements(request: request)
+        }
+    }
+
+    func runScript(_ request: RunScriptRequest) throws -> RunScriptResponse {
+        try execute(routeID: .runScript, target: .shared) {
+            try scriptRouteService.runScript(request: request)
         }
     }
 

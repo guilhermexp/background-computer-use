@@ -7,18 +7,22 @@ struct RouterContext {
 
 struct Router {
     private let auth: RuntimeAuth
-    private let services = RuntimeServices()
+    private let services: RuntimeServices
     private let debugArtifactRecorder: DebugArtifactRecorder
     private let sessionLimiter: RuntimeSessionLimiter
+    private let scriptAuditLogger: ScriptAuditLogger
 
     init(
         auth: RuntimeAuth,
         debugArtifactRecorder: DebugArtifactRecorder = DebugArtifactRecorder(),
-        sessionLimiter: RuntimeSessionLimiter = RuntimeSessionLimiter()
+        sessionLimiter: RuntimeSessionLimiter = RuntimeSessionLimiter(),
+        scriptAuditLogger: ScriptAuditLogger = ScriptAuditLogger()
     ) {
         self.auth = auth
         self.debugArtifactRecorder = debugArtifactRecorder
         self.sessionLimiter = sessionLimiter
+        self.scriptAuditLogger = scriptAuditLogger
+        services = RuntimeServices(scriptAuditLogger: scriptAuditLogger)
         self.sessionLimiter.configure(
             maxActionsPerSecond: ProcessInfo.processInfo.environment["BACKGROUND_COMPUTER_USE_MAX_ACTIONS_PER_SECOND"]
                 .flatMap(Double.init)
@@ -114,6 +118,16 @@ struct Router {
                 from: request,
                 work: { payload in
                     try services.findElements(payload)
+                }
+            )
+
+        case (.post, "/v1/run_script"):
+            return decodeAndExecute(
+                RunScriptRequest.self,
+                routeID: .runScript,
+                from: request,
+                work: { payload in
+                    try services.runScript(payload)
                 }
             )
 
@@ -272,6 +286,15 @@ struct Router {
     ) -> HTTPResponse {
         let requestID = UUID().uuidString
         if let unknownFields = unknownTopLevelFields(routeID: routeID, body: request.body) {
+            if let auditFailure = rejectedScriptAuditFailureResponse(
+                routeID: routeID,
+                body: request.body,
+                outcome: "invalid_request",
+                requestID: requestID
+            ) {
+                recordArtifact(requestID: requestID, routeID: routeID, request: request, response: auditFailure)
+                return auditFailure
+            }
             let response = unknownFieldResponse(
                 unknownFields: unknownFields,
                 routeID: routeID,
@@ -284,6 +307,15 @@ struct Router {
         if isActionRoute(routeID) {
             let throttleDecision = sessionLimiter.beforeAction()
             guard throttleDecision.allowed else {
+                if let auditFailure = rejectedScriptAuditFailureResponse(
+                    routeID: routeID,
+                    body: request.body,
+                    outcome: "rate_limited",
+                    requestID: requestID
+                ) {
+                    recordArtifact(requestID: requestID, routeID: routeID, request: request, response: auditFailure)
+                    return auditFailure
+                }
                 let response = runtimeBusyResponse(
                     error: "rate_limited",
                     message: throttleDecision.reason ?? "Action rate limit exceeded.",
@@ -303,6 +335,15 @@ struct Router {
         if let sessionID, sessionID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
             let sessionDecision = sessionLimiter.acquire(sessionID: sessionID)
             guard sessionDecision.allowed else {
+                if let auditFailure = rejectedScriptAuditFailureResponse(
+                    routeID: routeID,
+                    body: request.body,
+                    outcome: "session_busy",
+                    requestID: requestID
+                ) {
+                    recordArtifact(requestID: requestID, routeID: routeID, request: request, response: auditFailure)
+                    return auditFailure
+                }
                 let response = runtimeBusyResponse(
                     error: "session_busy",
                     message: sessionDecision.reason ?? "Runtime is already in use by another session.",
@@ -331,6 +372,15 @@ struct Router {
             return response
         } catch {
             if error is DecodingError {
+                if let auditFailure = rejectedScriptAuditFailureResponse(
+                    routeID: routeID,
+                    body: request.body,
+                    outcome: "invalid_request",
+                    requestID: requestID
+                ) {
+                    recordArtifact(requestID: requestID, routeID: routeID, request: request, response: auditFailure)
+                    return auditFailure
+                }
                 let response = invalidRequestResponse(for: error, routeID: routeID, requestID: requestID)
                 recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
                 return response
@@ -370,12 +420,85 @@ struct Router {
         request: HTTPRequest,
         response: HTTPResponse
     ) {
+        let requestBody = routeID == .runScript
+            ? redactedScriptArtifactBody(request.body, label: "request")
+            : request.body
+        let responseBody = routeID == .runScript
+            ? redactedScriptArtifactBody(response.body, label: "response")
+            : response.body
         _ = try? debugArtifactRecorder.record(
             requestID: requestID,
             routeID: routeID.rawValue,
-            requestBody: request.body,
-            responseBody: response.body
+            requestBody: requestBody,
+            responseBody: responseBody
         )
+    }
+
+    private func rejectedScriptAuditFailureResponse(
+        routeID: RouteID,
+        body: Data,
+        outcome: String,
+        requestID: String
+    ) -> HTTPResponse? {
+        guard routeID == .runScript,
+              let request = decodedScriptAttempt(from: body) else {
+            return nil
+        }
+        let effectiveTimeoutMs = request.timeoutMs.flatMap { timeout in
+            timeout > 0 ? min(timeout, ScriptRouteService.maximumTimeoutMs) : nil
+        } ?? ScriptRouteService.defaultTimeoutMs
+        do {
+            try scriptAuditLogger.record(
+                request: request,
+                outcome: outcome,
+                durationMs: 0,
+                status: nil,
+                timedOut: false,
+                effectiveTimeoutMs: effectiveTimeoutMs
+            )
+            return nil
+        } catch {
+            return .json(
+                ErrorResponse(
+                    error: "audit_failed",
+                    message: "The owner-only run_script audit record could not be persisted, so the request was refused before dispatch.",
+                    requestID: requestID,
+                    recovery: [
+                        "Confirm $TMPDIR/background-computer-use/audit is writable by the runtime user.",
+                        "Restart the runtime after restoring owner-only directory and file permissions."
+                    ]
+                ),
+                statusCode: 500,
+                reasonPhrase: "Internal Server Error"
+            )
+        }
+    }
+
+    private func decodedScriptAttempt(from body: Data) -> RunScriptRequest? {
+        if let request = try? JSONSupport.decoder.decode(RunScriptRequest.self, from: body) {
+            return request
+        }
+        guard let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+              let source = object["source"] as? String else {
+            return nil
+        }
+        let language: String
+        if let suppliedLanguage = object["language"] as? String {
+            language = suppliedLanguage
+        } else if object.keys.contains("language") {
+            language = "<invalid>"
+        } else {
+            language = "<missing>"
+        }
+        let timeoutMs = (object["timeoutMs"] as? NSNumber)?.intValue
+        return RunScriptRequest(language: language, source: source, timeoutMs: timeoutMs)
+    }
+
+    private func redactedScriptArtifactBody(_ body: Data, label: String) -> Data {
+        let redacted = [
+            "body": "<redacted run_script \(label) len=\(body.count)>"
+        ]
+        return (try? JSONSerialization.data(withJSONObject: redacted)) ?? Data("{}".utf8)
     }
 
     private func unauthorizedResponse() -> HTTPResponse {
@@ -432,7 +555,7 @@ struct Router {
 
     private func isActionRoute(_ routeID: RouteID) -> Bool {
         switch routeID {
-        case .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .pressKey, .setValue, .selectText:
+        case .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .pressKey, .setValue, .selectText, .runScript:
             return true
         default:
             return false
@@ -599,6 +722,36 @@ struct Router {
                 ),
                 statusCode: 404,
                 reasonPhrase: "Not Found"
+            )
+
+        case ScriptRouteError.auditFailed(let message):
+            return .json(
+                ErrorResponse(
+                    error: "audit_failed",
+                    message: message,
+                    requestID: requestID,
+                    recovery: [
+                        "Confirm $TMPDIR/background-computer-use/audit is writable by the runtime user.",
+                        "Restart the runtime after restoring owner-only directory and file permissions."
+                    ]
+                ),
+                statusCode: 500,
+                reasonPhrase: "Internal Server Error"
+            )
+
+        case ScriptRouteError.invalidRequest(let message):
+            return .json(
+                ErrorResponse(
+                    error: "invalid_request",
+                    message: message,
+                    requestID: requestID,
+                    recovery: [
+                        "Use language applescript or javascript, a non-empty source, and timeoutMs greater than zero.",
+                        "Call GET /v1/routes and inspect run_script request.fields."
+                    ]
+                ),
+                statusCode: 400,
+                reasonPhrase: "Bad Request"
             )
 
         case FindElementsRouteError.invalidRequest(let message):

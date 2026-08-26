@@ -32,6 +32,8 @@ Servidor HTTP loopback (macOS) que controla e lê janelas nativas em background 
 
 Ferramenta local single-user. Bind restrito a 127.0.0.1 (porta efêmera), token de 256 bits (SecRandomCopyBytes) obrigatório em todo `/v1` (só `/health` é aberto), manifest em `$TMPDIR/background-computer-use/runtime-manifest.json`. Loopback **não** é boundary de usuário — outro usuário local alcança a porta, então token é a barreira. Nonce/replay é desnecessário (sem rede no meio).
 
+`POST /v1/run_script` amplia explicitamente a autoridade desse token: além das ações UI verificadas, ele autoriza fonte AppleScript/JXA arbitrária e, portanto, controle de qualquer aplicação scriptable acessível ao usuário. A lane não promete verificação de efeito; o chamador relê estado para confirmar o resultado. O controle compensatório é rastreabilidade: toda tentativa é gravada em `$TMPDIR/background-computer-use/audit/script-executions.jsonl`, arquivo `0600` dentro de diretório `0700`, enquanto a fonte é redigida dos artefatos de debug comuns.
+
 ## Build / run
 
 - `script/build_and_run.sh [build|run]` — build + `.app` assinada em `dist/` + `~/Applications`.
