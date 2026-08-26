@@ -84,6 +84,85 @@ struct VerificationHonestyTests {
         #expect(ClickIntentVerifier.classification(dispatchSuccess: true, verification: nil) == .effectNotVerified)
     }
 
+    @Test
+    func stableWebAreaTextChangeIsSuccess() {
+        let evidence = makeEvidence(
+            webRendererSurface: true,
+            dispatchSuccess: true,
+            webAreaBaselineStable: true,
+            webAreaTextBefore: "Submit\nNOT CLICKED",
+            webAreaTextAfter: "Submit\nCLICKED 1"
+        )
+
+        #expect(evidence.intentSignals == ["web_area_text_changed"])
+        #expect(evidence.ambientOnlySignals.isEmpty)
+        #expect(
+            ClickIntentVerifier.classification(dispatchSuccess: true, verification: evidence) == .success
+        )
+    }
+
+    @Test
+    func unstableWebAreaTextChangeIsAmbientOnly() {
+        let evidence = makeEvidence(
+            webRendererSurface: true,
+            dispatchSuccess: true,
+            webAreaBaselineStable: false,
+            webAreaTextBefore: "Submit\nCOUNT 2",
+            webAreaTextAfter: "Submit\nCOUNT 3"
+        )
+
+        #expect(evidence.intentSignals.isEmpty)
+        #expect(evidence.ambientOnlySignals == ["web_area_text_changed"])
+        #expect(
+            ClickIntentVerifier.classification(dispatchSuccess: true, verification: evidence)
+                == .effectNotVerified
+        )
+        #expect(evidence.verificationNotes.contains(ClickIntentVerifier.unstableWebAreaBaselineNote))
+    }
+
+    @Test
+    func missingWebAreaBaselineFailsClosedWithDiagnostic() {
+        let evidence = makeEvidence(
+            webRendererSurface: true,
+            dispatchSuccess: true,
+            webAreaBaselineStable: nil,
+            webAreaTextBefore: nil,
+            webAreaTextAfter: "CLICKED 1"
+        )
+
+        #expect(evidence.intentSignals.isEmpty)
+        #expect(evidence.verificationNotes.contains(ClickIntentVerifier.missingWebAreaBaselineNote))
+    }
+
+    @Test
+    func missingPostSettleWebAreaSampleFailsClosedWithDiagnostic() {
+        let evidence = makeEvidence(
+            webRendererSurface: true,
+            dispatchSuccess: true,
+            webAreaBaselineStable: true,
+            webAreaTextBefore: "NOT CLICKED",
+            webAreaTextAfter: nil
+        )
+
+        #expect(evidence.intentSignals.isEmpty)
+        #expect(evidence.verificationNotes.contains(ClickIntentVerifier.missingPostWebAreaSampleNote))
+    }
+
+    @Test
+    func nativeSurfaceNeverAwardsWebAreaTextChange() {
+        let evidence = makeEvidence(
+            renderedTextChanged: true,
+            webRendererSurface: false,
+            dispatchSuccess: true,
+            webAreaBaselineStable: true,
+            webAreaTextBefore: "Before",
+            webAreaTextAfter: "After"
+        )
+
+        #expect(evidence.intentSignals.isEmpty)
+        #expect(evidence.ambientOnlySignals == ["rendered_text_changed"])
+    }
+
     // MARK: - Target-local evidence is always computed or diagnosed
 
     @Test
@@ -217,7 +296,12 @@ struct VerificationHonestyTests {
         modalDialogOpened: Bool? = nil,
         targetStateChanged: Bool? = nil,
         ocrAnchorDisappeared: Bool? = nil,
-        targetRegionChangeRatio: Double? = nil
+        targetRegionChangeRatio: Double? = nil,
+        webRendererSurface: Bool = false,
+        dispatchSuccess: Bool = true,
+        webAreaBaselineStable: Bool? = nil,
+        webAreaTextBefore: String? = nil,
+        webAreaTextAfter: String? = nil
     ) -> ClickVerificationEvidenceDTO {
         let assessment = ClickIntentVerifier.assess(
             focusedElementChanged: focusedElementChanged,
@@ -227,7 +311,12 @@ struct VerificationHonestyTests {
             ocrAnchorDisappeared: ocrAnchorDisappeared,
             targetRegionChangeRatio: targetRegionChangeRatio,
             renderedTextChanged: renderedTextChanged,
-            selectionSummaryChanged: selectionSummaryChanged
+            selectionSummaryChanged: selectionSummaryChanged,
+            webRendererSurface: webRendererSurface,
+            dispatchSuccess: dispatchSuccess,
+            webAreaBaselineStable: webAreaBaselineStable,
+            webAreaTextBefore: webAreaTextBefore,
+            webAreaTextAfter: webAreaTextAfter
         )
         return ClickVerificationEvidenceDTO(
             preStateToken: "pre",
@@ -248,6 +337,13 @@ struct VerificationHonestyTests {
             windowTitleChanged: windowTitleChanged,
             modalDialogOpened: modalDialogOpened,
             targetStateChanged: targetStateChanged,
+            webAreaTextChanged: webAreaTextBefore.flatMap { before in
+                webAreaTextAfter.map { before != $0 }
+            },
+            webAreaBaselineStable: webAreaBaselineStable,
+            webAreaBaselineDiagnostic: webAreaBaselineStable == false
+                ? ClickIntentVerifier.unstableWebAreaBaselineNote
+                : nil,
             ocrAnchorMatched: ocrAnchorDisappeared == nil ? nil : true,
             ocrAnchorRelocated: nil,
             ocrAnchorDisappeared: ocrAnchorDisappeared,

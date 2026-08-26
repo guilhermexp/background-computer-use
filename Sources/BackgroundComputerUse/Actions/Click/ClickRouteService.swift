@@ -456,15 +456,16 @@ struct ClickRouteService {
             anchorDisappeared = nil
             anchorDiagnostic = "Anchor disappearance was not computed because the post-click screenshot was unavailable for OCR."
         }
+        let dispatched = outcome.transports.contains { $0.didDispatch && $0.transportSuccess }
         let verification = ocrVerification(
             base: outcome.verification,
             before: capture,
             after: outcome.postCapture,
+            dispatchSuccess: dispatched,
             relocated: relocated,
             anchorDisappeared: anchorDisappeared,
             anchorDiagnostic: anchorDiagnostic
         )
-        let dispatched = outcome.transports.contains { $0.didDispatch && $0.transportSuccess }
         let verified = dispatched && effectVerified(verification)
         var routeSteps = outcome.routeSteps
         // Rewrite the OCR pointer step, not the last one: after an accessibility
@@ -577,6 +578,7 @@ struct ClickRouteService {
         base: ClickVerificationEvidenceDTO?,
         before: AXActionStateCapture,
         after: AXActionStateCapture?,
+        dispatchSuccess: Bool,
         relocated: Bool,
         anchorDisappeared: Bool?,
         anchorDiagnostic: String?
@@ -589,7 +591,11 @@ struct ClickRouteService {
             ocrAnchorDisappeared: anchorDisappeared,
             targetRegionChangeRatio: base?.targetRegionChangeRatio,
             renderedTextChanged: base?.renderedTextChanged,
-            selectionSummaryChanged: base?.selectionSummaryChanged
+            selectionSummaryChanged: base?.selectionSummaryChanged,
+            webRendererSurface: before.envelope.response.tree.profile == AXProjectionProfile.richWeb.rawValue,
+            dispatchSuccess: dispatchSuccess,
+            webAreaBaselineStable: base?.webAreaBaselineStable,
+            webAreaTextChanged: base?.webAreaTextChanged
         )
         var notes = (base?.verificationNotes ?? []).filter { ClickIntentVerifier.isAssessmentNote($0) == false }
         notes.append("OCR verification requires anchor disappearance, target-local pixels, or structural AX evidence; unrelated full-window changes are ignored.")
@@ -617,6 +623,9 @@ struct ClickRouteService {
             windowTitleChanged: base?.windowTitleChanged,
             modalDialogOpened: base?.modalDialogOpened,
             targetStateChanged: base?.targetStateChanged,
+            webAreaTextChanged: base?.webAreaTextChanged,
+            webAreaBaselineStable: base?.webAreaBaselineStable,
+            webAreaBaselineDiagnostic: base?.webAreaBaselineDiagnostic,
             ocrAnchorMatched: true,
             ocrAnchorRelocated: relocated,
             ocrAnchorDisappeared: anchorDisappeared,
@@ -932,6 +941,7 @@ struct ClickRouteService {
             window: capture.envelope.response.window,
             attachedSurfaces: capture.envelope.response.attachedSurfaces
         )
+        let webAreaBaseline = sampleWebAreaTextBaseline(before: capture)
         let frontmostBeforeDispatch = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let dispatch = dispatchSemanticPlan(plan)
         let rawStatus = dispatch.rawStatus
@@ -960,6 +970,8 @@ struct ClickRouteService {
             refreshedTargetStrategy: refreshed?.strategy,
             foregroundBeforeDispatch: frontmostBeforeDispatch,
             foregroundAfter: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            dispatchSuccess: dispatch.success,
+            webAreaBaseline: webAreaBaseline,
             region: ClickTargetRegion.evidence(
                 region: region,
                 before: beforeWindowImage,
@@ -1173,6 +1185,7 @@ struct ClickRouteService {
             window: capture.envelope.response.window,
             attachedSurfaces: capture.envelope.response.attachedSurfaces
         )
+        let webAreaBaseline = sampleWebAreaTextBaseline(before: capture)
 
         let frontmostBeforeDispatch = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let transportResult: NativeBackgroundClickTransportResult
@@ -1266,6 +1279,8 @@ struct ClickRouteService {
             refreshedTargetStrategy: refreshed?.strategy,
             foregroundBeforeDispatch: frontmostBeforeDispatch,
             foregroundAfter: frontmostAfter,
+            dispatchSuccess: transportResult.dispatchSuccess,
+            webAreaBaseline: webAreaBaseline,
             region: regionEvidence,
             extraNotes: transportResult.notes
         )
@@ -1323,6 +1338,8 @@ struct ClickRouteService {
                 refreshedTargetStrategy: escalatedRefreshed?.strategy,
                 foregroundBeforeDispatch: frontmostBeforeDispatch,
                 foregroundAfter: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+                dispatchSuccess: press.succeeded,
+                webAreaBaseline: webAreaBaseline,
                 region: escalatedRegion,
                 extraNotes: [
                     "Coordinate dispatch proved no effect; pressed the accessibility element under the same point (role=\(press.role ?? "unknown"), label=\(press.label.isEmpty ? "none" : press.label), AXPress status=\(press.status.rawValue))."
@@ -1884,6 +1901,8 @@ struct ClickRouteService {
         refreshedTargetStrategy: String?,
         foregroundBeforeDispatch: String?,
         foregroundAfter: String?,
+        dispatchSuccess: Bool,
+        webAreaBaseline: WebAreaTextBaseline,
         region: ClickTargetRegion.Evidence,
         extraNotes: [String]
     ) -> ClickVerificationEvidenceDTO {
@@ -1944,6 +1963,15 @@ struct ClickRouteService {
         if let diagnostic = region.diagnostic {
             verificationNotes.append(diagnostic)
         }
+        if let diagnostic = webAreaBaseline.diagnostic {
+            verificationNotes.append(diagnostic)
+        }
+        let webAreaTextAfter = after.flatMap {
+            WebAreaTextSnapshot.canonicalText(in: $0.envelope.response.tree.nodes)
+        }
+        let webAreaTextChanged = webAreaBaseline.textBefore.flatMap { beforeText in
+            webAreaTextAfter.map { beforeText != $0 }
+        }
 
         let assessment = ClickIntentVerifier.assess(
             focusedElementChanged: focusedElementChanged,
@@ -1954,7 +1982,11 @@ struct ClickRouteService {
             targetRegionChangeRatio: region.targetRegionChangeRatio,
             renderedTextChanged: renderedTextChanged,
             selectionSummaryChanged: selectionSummaryChanged,
-            webRendererSurface: before.envelope.response.tree.profile == AXProjectionProfile.richWeb.rawValue
+            webRendererSurface: before.envelope.response.tree.profile == AXProjectionProfile.richWeb.rawValue,
+            dispatchSuccess: dispatchSuccess,
+            webAreaBaselineStable: webAreaBaseline.baselineStable,
+            webAreaTextBefore: webAreaBaseline.textBefore,
+            webAreaTextAfter: webAreaTextAfter
         )
         verificationNotes.append(contentsOf: assessment.notes)
 
@@ -1977,6 +2009,19 @@ struct ClickRouteService {
             windowTitleChanged: windowTitleChanged,
             modalDialogOpened: modalDialogOpened,
             targetStateChanged: targetStateChanged,
+            webAreaTextChanged: webAreaTextChanged,
+            webAreaBaselineStable: webAreaBaseline.baselineStable,
+            webAreaBaselineDiagnostic: webAreaBaseline.diagnostic ?? (
+                webAreaBaseline.baselineStable == false
+                    ? ClickIntentVerifier.unstableWebAreaBaselineNote
+                    : (
+                        before.envelope.response.tree.profile == AXProjectionProfile.richWeb.rawValue &&
+                            webAreaBaseline.baselineStable == true &&
+                            webAreaTextAfter == nil
+                            ? ClickIntentVerifier.missingPostWebAreaSampleNote
+                            : nil
+                    )
+            ),
             ocrAnchorMatched: nil,
             ocrAnchorRelocated: nil,
             ocrAnchorDisappeared: nil,
@@ -2399,6 +2444,22 @@ struct ClickRouteService {
 
     private func renderedTextChanged(before: AXActionStateCapture, after: AXActionStateCapture) -> Bool {
         normalizeText(before.envelope.response.tree.renderedText) != normalizeText(after.envelope.response.tree.renderedText)
+    }
+
+    private func sampleWebAreaTextBaseline(before capture: AXActionStateCapture) -> WebAreaTextBaseline {
+        guard capture.envelope.response.tree.profile == AXProjectionProfile.richWeb.rawValue else {
+            return .notApplicable
+        }
+        let firstSample = WebAreaTextSnapshot.canonicalText(in: capture.envelope.response.tree.nodes)
+        do {
+            let secondCapture = try targetResolver.reread(after: capture, imageMode: .omit)
+            let secondSample = WebAreaTextSnapshot.canonicalText(in: secondCapture.envelope.response.tree.nodes)
+            return WebAreaTextBaseline(firstSample: firstSample, secondSample: secondSample)
+        } catch {
+            return WebAreaTextBaseline(
+                unavailableDiagnostic: "The second pre-dispatch web-area text sample failed: \(error)."
+            )
+        }
     }
 
     private func selectionSummaryChanged(before: AXActionStateCapture, after: AXActionStateCapture) -> Bool {

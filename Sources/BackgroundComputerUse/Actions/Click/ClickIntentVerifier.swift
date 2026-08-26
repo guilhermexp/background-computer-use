@@ -16,17 +16,25 @@ enum ClickIntentVerifier {
         case modalDialogOpened = "modal_dialog_opened"
         case windowTitleChanged = "window_title_changed"
         case targetStateChanged = "target_state_changed"
+        case webAreaTextChanged = "web_area_text_changed"
     }
 
     enum AmbientSignal: String {
         case renderedTextChanged = "rendered_text_changed"
         case selectionSummaryChanged = "selection_summary_changed"
         case windowTitleChanged = "window_title_changed"
+        case webAreaTextChanged = "web_area_text_changed"
     }
 
     static let ambientOnlyNote = "Ambient window changes only (rendered text and/or selection summary). A live window changes those without the click landing, so they do not prove the requested effect."
 
     static let noSignalNote = "No target-local or structural post-click evidence was observed."
+
+    static let unstableWebAreaBaselineNote = "Web-area text changed after click, but the two pre-dispatch samples differed; the web-area baseline was unstable, so the change is ambient only."
+
+    static let missingWebAreaBaselineNote = "The web-area text baseline could not be established before dispatch, so web-area text cannot count as intent evidence."
+
+    static let missingPostWebAreaSampleNote = "The post-settle web-area text sample was unavailable, so web-area text change could not be computed as intent evidence."
 
     struct Assessment: Equatable {
         let intentSignals: [String]
@@ -65,7 +73,12 @@ enum ClickIntentVerifier {
         targetRegionChangeRatio: Double?,
         renderedTextChanged: Bool?,
         selectionSummaryChanged: Bool?,
-        webRendererSurface: Bool = false
+        webRendererSurface: Bool = false,
+        dispatchSuccess: Bool = true,
+        webAreaBaselineStable: Bool? = nil,
+        webAreaTextBefore: String? = nil,
+        webAreaTextAfter: String? = nil,
+        webAreaTextChanged: Bool? = nil
     ) -> Assessment {
         var intent: [String] = []
         if let ratio = targetRegionChangeRatio, ratio >= targetRegionChangeThreshold {
@@ -88,8 +101,22 @@ enum ClickIntentVerifier {
         if targetStateChanged == true {
             intent.append(IntentSignal.targetStateChanged.rawValue)
         }
+        let observedWebAreaTextChanged = webAreaTextChanged ?? webAreaTextBefore.flatMap { before in
+            webAreaTextAfter.map { before != $0 }
+        }
+        if webRendererSurface,
+           dispatchSuccess,
+           webAreaBaselineStable == true,
+           observedWebAreaTextChanged == true {
+            intent.append(IntentSignal.webAreaTextChanged.rawValue)
+        }
 
         var ambient: [String] = []
+        if webRendererSurface,
+           webAreaBaselineStable != true,
+           observedWebAreaTextChanged == true {
+            ambient.append(AmbientSignal.webAreaTextChanged.rawValue)
+        }
         if intent.isEmpty {
             if renderedTextChanged == true {
                 ambient.append(AmbientSignal.renderedTextChanged.rawValue)
@@ -103,6 +130,16 @@ enum ClickIntentVerifier {
         }
 
         var notes: [String] = []
+        if webRendererSurface, webAreaBaselineStable == false, observedWebAreaTextChanged == true {
+            notes.append(unstableWebAreaBaselineNote)
+        } else if webRendererSurface, webAreaBaselineStable == nil {
+            notes.append(missingWebAreaBaselineNote)
+        } else if webRendererSurface,
+                  webAreaBaselineStable == true,
+                  webAreaTextBefore != nil,
+                  observedWebAreaTextChanged == nil {
+            notes.append(missingPostWebAreaSampleNote)
+        }
         if intent.isEmpty {
             notes.append(ambient.isEmpty ? noSignalNote : ambientOnlyNote)
         }
@@ -111,7 +148,11 @@ enum ClickIntentVerifier {
 
     /// True for notes this verifier itself appends, so a re-assessment can replace them instead of stacking.
     static func isAssessmentNote(_ note: String) -> Bool {
-        note == ambientOnlyNote || note == noSignalNote
+        note == ambientOnlyNote ||
+            note == noSignalNote ||
+            note == unstableWebAreaBaselineNote ||
+            note == missingWebAreaBaselineNote ||
+            note == missingPostWebAreaSampleNote
     }
 
     static func verified(_ verification: ClickVerificationEvidenceDTO?) -> Bool {

@@ -118,6 +118,9 @@ public struct ClickVerificationEvidenceDTO: Encodable, Sendable {
     public let windowTitleChanged: Bool?
     public let modalDialogOpened: Bool?
     public let targetStateChanged: Bool?
+    public let webAreaTextChanged: Bool?
+    public let webAreaBaselineStable: Bool?
+    public let webAreaBaselineDiagnostic: String?
     public let ocrAnchorMatched: Bool?
     public let ocrAnchorRelocated: Bool?
     public let ocrAnchorDisappeared: Bool?
