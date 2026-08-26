@@ -86,6 +86,114 @@ private struct ClickFocusBaseline {
     let diagnostic: String?
 }
 
+struct ClickVerificationStateSnapshot: Equatable {
+    let renderedText: String
+    let focusedNodeID: String?
+    let selectedText: String?
+    let selectedTextSource: String?
+    let selectedCanonicalIndices: [Int]
+    let selectedNodeIDs: [String]
+
+    init(
+        renderedText: String?,
+        focusedNodeID: String?,
+        selectedText: String? = nil,
+        selectedTextSource: String? = nil,
+        selectedCanonicalIndices: [Int] = [],
+        selectedNodeIDs: [String] = []
+    ) {
+        self.renderedText = Self.normalize(renderedText)
+        self.focusedNodeID = focusedNodeID
+        self.selectedText = selectedText
+        self.selectedTextSource = selectedTextSource
+        self.selectedCanonicalIndices = selectedCanonicalIndices
+        self.selectedNodeIDs = selectedNodeIDs
+    }
+
+    init(capture: AXActionStateCapture) {
+        self.init(
+            renderedText: capture.envelope.response.tree.renderedText,
+            focusedNodeID: capture.envelope.response.selectionSummary?.focusedNodeID,
+            selectedText: capture.envelope.response.selectionSummary?.selectedText,
+            selectedTextSource: capture.envelope.response.selectionSummary?.selectedTextSource,
+            selectedCanonicalIndices: capture.envelope.response.selectionSummary?.selectedCanonicalIndices ?? [],
+            selectedNodeIDs: capture.envelope.response.selectionSummary?.selectedNodeIDs ?? []
+        )
+    }
+
+    private static func normalize(_ text: String?) -> String {
+        (text ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+}
+
+struct ClickVerificationStateChanges: Equatable {
+    let renderedTextChanged: Bool
+    let selectionSummaryChanged: Bool
+}
+
+enum ClickVerificationStateComparator {
+    static func compare(
+        baseline: ClickVerificationStateSnapshot,
+        after: ClickVerificationStateSnapshot
+    ) -> ClickVerificationStateChanges {
+        ClickVerificationStateChanges(
+            renderedTextChanged: baseline.renderedText != after.renderedText,
+            selectionSummaryChanged: baseline.focusedNodeID != after.focusedNodeID ||
+                baseline.selectedText != after.selectedText ||
+                baseline.selectedTextSource != after.selectedTextSource ||
+                baseline.selectedCanonicalIndices != after.selectedCanonicalIndices ||
+                baseline.selectedNodeIDs != after.selectedNodeIDs
+        )
+    }
+}
+
+enum ClickCoordinateVerificationStateComparator {
+    static func compare(
+        preFocus _: ClickVerificationStateSnapshot,
+        postFocus: ClickVerificationStateSnapshot?,
+        postDispatch: ClickVerificationStateSnapshot?
+    ) -> ClickVerificationStateChanges? {
+        guard let postFocus, let postDispatch else {
+            return nil
+        }
+        return ClickVerificationStateComparator.compare(
+            baseline: postFocus,
+            after: postDispatch
+        )
+    }
+}
+
+enum ClickAXEscalationStateComparator {
+    static func compare(
+        postCoordinate: ClickVerificationStateSnapshot?,
+        postAX: ClickVerificationStateSnapshot?
+    ) -> ClickVerificationStateChanges? {
+        guard let postCoordinate, let postAX else {
+            return nil
+        }
+        return ClickVerificationStateComparator.compare(
+            baseline: postCoordinate,
+            after: postAX
+        )
+    }
+}
+
+enum ClickCoordinateEscalationPolicy {
+    static func decision(
+        gate: ClickVerificationGate.Decision,
+        completeBaselineAvailable: Bool
+    ) -> ClickVerificationGate.Decision {
+        ClickVerificationGate.Decision(
+            verified: gate.verified,
+            reportedClassification: gate.reportedClassification,
+            shouldEscalate: gate.shouldEscalate && completeBaselineAvailable
+        )
+    }
+}
+
 struct ClickRouteService {
     private let executionOptions: ActionExecutionOptions
     private let targetResolver: AXActionTargetResolver
@@ -1222,14 +1330,15 @@ struct ClickRouteService {
             pointAppKit: plan.appKitPoint,
             windowFrameAppKit: capture.envelope.response.window.frameAppKit
         )
-        let beforeWindowImage = CGWindowCaptureService.captureImage(
-            window: capture.envelope.response.window,
-            attachedSurfaces: capture.envelope.response.attachedSurfaces
-        )
-        let webAreaBaseline = sampleWebAreaTextBaseline(before: capture)
-
         let frontmostBeforeDispatch = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let transportResult: NativeBackgroundClickTransportResult
+        var verificationBaseline: AXActionStateCapture?
+        var verificationBaselineDiagnostic: String? = "The complete verification baseline was not sampled after the transport's focus-without-raise step."
+        var beforeWindowImage: CGImage?
+        var webAreaBaseline = WebAreaTextBaseline(
+            unavailableDiagnostic: "The web-area baseline was not sampled after the transport's focus-without-raise step."
+        )
+        var verificationTarget: AXActionTargetSnapshot?
         var focusBaseline = ClickFocusBaseline(
             element: nil,
             diagnostic: "Focused-element baseline was not sampled after the transport's focus-without-raise step."
@@ -1248,8 +1357,24 @@ struct ClickRouteService {
                 afterTargetFocus: {
                     do {
                         let focusedCapture = try targetResolver.reread(after: capture, imageMode: .omit)
+                        verificationBaseline = focusedCapture
+                        verificationBaselineDiagnostic = nil
                         focusBaseline = self.focusBaseline(from: focusedCapture)
+                        beforeWindowImage = CGWindowCaptureService.captureImage(
+                            window: focusedCapture.envelope.response.window,
+                            attachedSurfaces: focusedCapture.envelope.response.attachedSurfaces
+                        )
+                        webAreaBaseline = sampleWebAreaTextBaseline(before: focusedCapture)
+                        verificationTarget = target.flatMap {
+                            targetResolver.locateRefreshedTarget(
+                                in: focusedCapture,
+                                prior: $0,
+                                kind: .click
+                            ).target
+                        }
                     } catch {
+                        verificationBaseline = nil
+                        verificationBaselineDiagnostic = "The complete verification baseline failed after the transport's focus-without-raise step: \(error)."
                         focusBaseline = ClickFocusBaseline(
                             element: nil,
                             diagnostic: "Focused-element baseline failed after the transport's focus-without-raise step: \(error)."
@@ -1327,12 +1452,22 @@ struct ClickRouteService {
             before: beforeWindowImage,
             after: afterWindowImage
         )
+        let comparisonBaseline = verificationBaseline ?? capture
+        let stateBaselineAvailable = verificationBaseline != nil
+        let coordinateStateChanges = ClickCoordinateVerificationStateComparator.compare(
+            preFocus: ClickVerificationStateSnapshot(capture: capture),
+            postFocus: verificationBaseline.map(ClickVerificationStateSnapshot.init(capture:)),
+            postDispatch: postCapture.map(ClickVerificationStateSnapshot.init(capture:))
+        )
         var verification = verifyClick(
-            before: capture,
+            before: comparisonBaseline,
             after: postCapture,
             focusBaseline: focusBaseline,
-            target: target,
-            refreshedTarget: refreshed?.target,
+            stateBaselineAvailable: stateBaselineAvailable,
+            stateBaselineDiagnostic: verificationBaselineDiagnostic,
+            stateChanges: coordinateStateChanges,
+            target: stateBaselineAvailable ? verificationTarget : nil,
+            refreshedTarget: stateBaselineAvailable && verificationTarget != nil ? refreshed?.target : nil,
             refreshedTargetStrategy: refreshed?.strategy,
             foregroundBeforeDispatch: frontmostBeforeDispatch,
             foregroundAfter: frontmostAfter,
@@ -1346,6 +1481,11 @@ struct ClickRouteService {
             verification: verification,
             fullImageChangeRatio: regionEvidence.fullImageChangeRatio
         )
+        let completeCoordinateBaselineAvailable = verificationBaseline != nil && postCapture != nil
+        let coordinateDecision = ClickCoordinateEscalationPolicy.decision(
+            gate: gate,
+            completeBaselineAvailable: completeCoordinateBaselineAvailable
+        )
         var verified = gate.verified
         var finalRoute = finalRoute
         var fallbackReason = fallbackReason
@@ -1355,8 +1495,19 @@ struct ClickRouteService {
         // Escalate only when the click provably did nothing. A slow but real effect
         // (form submit, navigation, network round trip) is not visible inside the
         // settle delay, and pressing again there would actuate a second time.
+        if gate.shouldEscalate, completeCoordinateBaselineAvailable == false {
+            warnings.append(
+                "coordinate_escalation_skipped: the complete post-focus verification baseline or post-dispatch state was unavailable, so absence of effect could not be proven."
+            )
+        }
+        var escalationWebAreaBaseline = WebAreaTextBaseline(
+            unavailableDiagnostic: "The pre-AX-escalation web-area baseline was unavailable."
+        )
+        if coordinateDecision.shouldEscalate, let postCapture {
+            escalationWebAreaBaseline = sampleWebAreaTextBaseline(before: postCapture)
+        }
         let escalation = ClickVerificationGate.performEscalation(
-            decision: gate,
+            decision: coordinateDecision,
             none: AXPointPressOutcome.none,
             action: {
                 pressAXElement(
@@ -1379,32 +1530,46 @@ struct ClickRouteService {
                 after: capture,
                 imageMode: postImageMode ?? request.imageMode ?? .omit
             )
-            let escalatedWindow = escalatedCapture?.envelope.response.window ?? capture.envelope.response.window
+            let escalatedWindow = escalatedCapture?.envelope.response.window
+                ?? postCapture?.envelope.response.window
+                ?? capture.envelope.response.window
             let escalatedRegion = ClickTargetRegion.evidence(
                 region: region,
-                before: beforeWindowImage,
+                before: afterWindowImage,
                 after: CGWindowCaptureService.captureImage(
                     window: escalatedWindow,
                     attachedSurfaces: escalatedCapture?.envelope.response.attachedSurfaces
                         ?? capture.envelope.response.attachedSurfaces
                 )
             )
-            let escalatedRefreshed = target.flatMap { prior in
+            let escalationTarget = refreshed?.target
+            let escalatedRefreshed = escalationTarget.flatMap { prior in
                 escalatedCapture.flatMap {
                     targetResolver.locateRefreshedTarget(in: $0, prior: prior, kind: .click)
                 }
             }
+            let escalationStateChanges = ClickAXEscalationStateComparator.compare(
+                postCoordinate: postCapture.map(ClickVerificationStateSnapshot.init(capture:)),
+                postAX: escalatedCapture.map(ClickVerificationStateSnapshot.init(capture:))
+            )
+            let escalationBaseline = postCapture ?? comparisonBaseline
+            let escalationBaselineAvailable = postCapture != nil
             let escalatedVerification = verifyClick(
-                before: capture,
+                before: escalationBaseline,
                 after: escalatedCapture,
-                focusBaseline: postCapture.map(focusBaseline(from:)) ?? focusBaseline,
-                target: target,
-                refreshedTarget: escalatedRefreshed?.target,
+                focusBaseline: postCapture.map(focusBaseline(from:)),
+                stateBaselineAvailable: escalationBaselineAvailable,
+                stateBaselineDiagnostic: escalationBaselineAvailable
+                    ? nil
+                    : "The post-coordinate state was unavailable before AX escalation.",
+                stateChanges: escalationStateChanges,
+                target: escalationTarget,
+                refreshedTarget: escalationTarget != nil ? escalatedRefreshed?.target : nil,
                 refreshedTargetStrategy: escalatedRefreshed?.strategy,
                 foregroundBeforeDispatch: frontmostBeforeDispatch,
                 foregroundAfter: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
                 dispatchSuccess: press.succeeded,
-                webAreaBaseline: webAreaBaseline,
+                webAreaBaseline: escalationWebAreaBaseline,
                 region: escalatedRegion,
                 extraNotes: [
                     "Coordinate dispatch proved no effect; pressed the accessibility element under the same point (role=\(press.role ?? "unknown"), label=\(press.label.isEmpty ? "none" : press.label), AXPress status=\(press.status.rawValue))."
@@ -1963,6 +2128,9 @@ struct ClickRouteService {
         before: AXActionStateCapture,
         after: AXActionStateCapture?,
         focusBaseline: ClickFocusBaseline? = nil,
+        stateBaselineAvailable: Bool = true,
+        stateBaselineDiagnostic: String? = nil,
+        stateChanges: ClickVerificationStateChanges? = nil,
         target: AXActionTargetSnapshot?,
         refreshedTarget: AXActionTargetSnapshot?,
         refreshedTargetStrategy: String?,
@@ -1979,9 +2147,13 @@ struct ClickRouteService {
         let focusedElementDiagnostic: String?
         let windowTitleChanged: Bool?
         let modalDialogOpened: Bool?
-        if let after {
-            renderedTextChanged = self.renderedTextChanged(before: before, after: after)
-            selectionSummaryChanged = self.selectionSummaryChanged(before: before, after: after)
+        if let after, stateBaselineAvailable {
+            let resolvedStateChanges = stateChanges ?? ClickVerificationStateComparator.compare(
+                baseline: ClickVerificationStateSnapshot(capture: before),
+                after: ClickVerificationStateSnapshot(capture: after)
+            )
+            renderedTextChanged = resolvedStateChanges.renderedTextChanged
+            selectionSummaryChanged = resolvedStateChanges.selectionSummaryChanged
             let baseline = focusBaseline ?? self.focusBaseline(from: before)
             let focusEvidence = ClickFocusVerifier.evidence(
                 baselineAfterTransport: baseline.element,
@@ -1998,7 +2170,10 @@ struct ClickRouteService {
             renderedTextChanged = nil
             selectionSummaryChanged = nil
             focusedElementChanged = nil
-            focusedElementDiagnostic = "Focused-element change was not computed because no post-click state was available."
+            focusedElementDiagnostic = focusBaseline?.diagnostic
+                ?? (after == nil
+                    ? "Focused-element change was not computed because no post-click state was available."
+                    : nil)
             windowTitleChanged = nil
             modalDialogOpened = nil
         }
@@ -2016,6 +2191,9 @@ struct ClickRouteService {
         var verificationNotes = extraNotes
         if after == nil {
             verificationNotes.append("No post-click state was available for verification.")
+        }
+        if let stateBaselineDiagnostic {
+            verificationNotes.append(stateBaselineDiagnostic)
         }
         if renderedTextChanged == true {
             verificationNotes.append("Rendered text changed after click.")
@@ -2079,8 +2257,12 @@ struct ClickRouteService {
             afterTargetFocused: afterFocused,
             beforeTargetValuePreview: beforeValue,
             afterTargetValuePreview: afterValue,
-            beforeFocusedNodeID: before.envelope.response.selectionSummary?.focusedNodeID,
-            afterFocusedNodeID: after?.envelope.response.selectionSummary?.focusedNodeID,
+            beforeFocusedNodeID: stateBaselineAvailable
+                ? before.envelope.response.selectionSummary?.focusedNodeID
+                : nil,
+            afterFocusedNodeID: stateBaselineAvailable
+                ? after?.envelope.response.selectionSummary?.focusedNodeID
+                : nil,
             renderedTextChanged: renderedTextChanged,
             selectionSummaryChanged: selectionSummaryChanged,
             focusedElementChanged: focusedElementChanged,
@@ -2520,10 +2702,6 @@ struct ClickRouteService {
         )
     }
 
-    private func renderedTextChanged(before: AXActionStateCapture, after: AXActionStateCapture) -> Bool {
-        normalizeText(before.envelope.response.tree.renderedText) != normalizeText(after.envelope.response.tree.renderedText)
-    }
-
     private func sampleWebAreaTextBaseline(before capture: AXActionStateCapture) -> WebAreaTextBaseline {
         guard capture.envelope.response.tree.profile == AXProjectionProfile.richWeb.rawValue else {
             return .notApplicable
@@ -2538,14 +2716,6 @@ struct ClickRouteService {
                 unavailableDiagnostic: "The second pre-dispatch web-area text sample failed: \(error)."
             )
         }
-    }
-
-    private func selectionSummaryChanged(before: AXActionStateCapture, after: AXActionStateCapture) -> Bool {
-        before.envelope.response.selectionSummary?.focusedNodeID != after.envelope.response.selectionSummary?.focusedNodeID ||
-            before.envelope.response.selectionSummary?.selectedText != after.envelope.response.selectionSummary?.selectedText ||
-            before.envelope.response.selectionSummary?.selectedTextSource != after.envelope.response.selectionSummary?.selectedTextSource ||
-            before.envelope.response.selectionSummary?.selectedCanonicalIndices != after.envelope.response.selectionSummary?.selectedCanonicalIndices ||
-            before.envelope.response.selectionSummary?.selectedNodeIDs != after.envelope.response.selectionSummary?.selectedNodeIDs
     }
 
     private func focusBaseline(from capture: AXActionStateCapture) -> ClickFocusBaseline {

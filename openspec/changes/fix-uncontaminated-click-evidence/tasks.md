@@ -15,6 +15,9 @@
 - [x] 2.3 Teste verde de não-regressão: movimento real de foco para outro elemento continua produzindo `focused_element_changed`.
 - [x] 2.4 Amostrar o baseline de foco **após** o focus-without-raise do transporte em `NativeBackgroundClickTransport`/`ClickRouteService`.
 - [x] 2.5 Trocar a comparação de foco de caminho posicional AX para identidade estável do elemento focado.
+- [x] 2.6 Teste vermelho: churn de `renderedTextChanged`/`selectionSummaryChanged` causado somente pelo focus-without-raise é absorvido pelo baseline pós-focus e não torna `windowStillSettling` verdadeiro.
+- [x] 2.7 Teste de não-regressão: churn que continua **depois** do baseline pós-focus permanece ambiente e continua bloqueando a escalação.
+- [x] 2.8 Capturar o baseline completo de verificação após o focus-without-raise e antes do mouse event; comparar o pós-dispatch contra esse baseline, sem afrouxar o guard globalmente.
 
 ## 3. Um único veredito (C3)
 

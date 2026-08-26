@@ -169,6 +169,138 @@ struct VerificationHonestyTests {
     }
 
     @Test
+    func transportAmbientChurnIsAbsorbedByPostFocusBaseline() throws {
+        let preFocus = ClickVerificationStateSnapshot(
+            renderedText: "Button not clicked",
+            focusedNodeID: nil
+        )
+        let postFocus = ClickVerificationStateSnapshot(
+            renderedText: "Button not clicked\nFocused: BCU Smoke Button",
+            focusedNodeID: "button-7"
+        )
+        let postDispatch = postFocus
+
+        let contaminatedChanges = ClickVerificationStateComparator.compare(
+            baseline: preFocus,
+            after: postDispatch
+        )
+        let cleanChanges = try #require(
+            ClickCoordinateVerificationStateComparator.compare(
+                preFocus: preFocus,
+                postFocus: postFocus,
+                postDispatch: postDispatch
+            )
+        )
+        let contaminatedGate = ClickVerificationGate.evaluate(
+            dispatchSuccess: true,
+            verification: makeEvidence(
+                renderedTextChanged: contaminatedChanges.renderedTextChanged,
+                selectionSummaryChanged: contaminatedChanges.selectionSummaryChanged,
+                targetRegionChangeRatio: 0
+            ),
+            fullImageChangeRatio: 0
+        )
+        let cleanGate = ClickVerificationGate.evaluate(
+            dispatchSuccess: true,
+            verification: makeEvidence(
+                renderedTextChanged: cleanChanges.renderedTextChanged,
+                selectionSummaryChanged: cleanChanges.selectionSummaryChanged,
+                targetRegionChangeRatio: 0
+            ),
+            fullImageChangeRatio: 0
+        )
+
+        #expect(contaminatedGate.shouldEscalate == false)
+        #expect(cleanChanges.renderedTextChanged == false)
+        #expect(cleanChanges.selectionSummaryChanged == false)
+        #expect(cleanGate.shouldEscalate)
+    }
+
+    @Test
+    func genuineAmbientChurnAfterPostFocusBaselineStillBlocksEscalation() throws {
+        let postFocus = ClickVerificationStateSnapshot(
+            renderedText: "Button not clicked\nFocused: BCU Smoke Button",
+            focusedNodeID: "button-7"
+        )
+        let postDispatch = ClickVerificationStateSnapshot(
+            renderedText: "Button not clicked\nFocused: BCU Smoke Button\nLive counter: 2",
+            focusedNodeID: "live-counter-8"
+        )
+
+        let changes = try #require(
+            ClickCoordinateVerificationStateComparator.compare(
+                preFocus: ClickVerificationStateSnapshot(
+                    renderedText: "Button not clicked",
+                    focusedNodeID: nil
+                ),
+                postFocus: postFocus,
+                postDispatch: postDispatch
+            )
+        )
+        let verification = makeEvidence(
+            renderedTextChanged: changes.renderedTextChanged,
+            selectionSummaryChanged: changes.selectionSummaryChanged,
+            targetRegionChangeRatio: 0
+        )
+        let gate = ClickVerificationGate.evaluate(
+            dispatchSuccess: true,
+            verification: verification,
+            fullImageChangeRatio: 0
+        )
+
+        #expect(changes.renderedTextChanged)
+        #expect(changes.selectionSummaryChanged)
+        #expect(verification.ambientOnlySignals == ["rendered_text_changed", "selection_summary_changed"])
+        #expect(gate.shouldEscalate == false)
+    }
+
+    @Test
+    func missingPostFocusBaselineBlocksEscalation() {
+        let gate = ClickVerificationGate.evaluate(
+            dispatchSuccess: true,
+            verification: makeEvidence(targetRegionChangeRatio: nil),
+            fullImageChangeRatio: nil
+        )
+
+        let coordinateDecision = ClickCoordinateEscalationPolicy.decision(
+            gate: gate,
+            completeBaselineAvailable: false
+        )
+
+        #expect(gate.shouldEscalate)
+        #expect(coordinateDecision.shouldEscalate == false)
+    }
+
+    @Test
+    func axEscalationIgnoresPreCoordinateTransportChurn() throws {
+        let preFocus = ClickVerificationStateSnapshot(
+            renderedText: "Button not clicked",
+            focusedNodeID: nil
+        )
+        let postCoordinate = ClickVerificationStateSnapshot(
+            renderedText: "Button not clicked\nFocused: BCU Smoke Button",
+            focusedNodeID: "button-7"
+        )
+        let postAX = postCoordinate
+
+        let contaminatedChanges = ClickVerificationStateComparator.compare(
+            baseline: preFocus,
+            after: postAX
+        )
+        let axChanges = try #require(
+            ClickAXEscalationStateComparator.compare(
+                postCoordinate: postCoordinate,
+                postAX: postAX
+            )
+        )
+
+        #expect(contaminatedChanges.renderedTextChanged)
+        #expect(contaminatedChanges.selectionSummaryChanged)
+        #expect(axChanges.renderedTextChanged == false)
+        #expect(axChanges.selectionSummaryChanged == false)
+    }
+
+    @Test
     func dispatchFailureIsNeverSuccess() {
         let evidence = makeEvidence(targetRegionChangeRatio: 1)
 
