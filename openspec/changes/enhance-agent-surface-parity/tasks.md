@@ -44,5 +44,5 @@
 ## 6. Gates
 
 - [x] 6.1 `swift build -c release` e `swift test`.
-- [ ] 6.2 `python3 script/smoke_runtime.py` contra o runtime instalado, cobrindo o caso web de P1 e as duas rotas novas.
+- [x] 6.2 `python3 script/smoke_runtime.py` contra o runtime instalado, cobrindo o caso web de P1 e as duas rotas novas. Rodado pelo orquestrador em 2026-08-26: 24 passes / 1 falha `chrome-ocr-click`. A falha é **pré-existente e não é regressão desta change** — o baseline `a33378d` (anterior à Fase 1) falha de forma idêntica (`classification=success`, `intentSignals=['ocr_anchor_disappeared']`, `targetRegionChangeRatio=0`, página inalterada), com o mesmo `script/smoke_runtime.py` byte-a-byte. Falso positivo remanescente da lane `ocr_anchor`, fora do escopo desta change.
 - [x] 6.3 `openspec validate enhance-agent-surface-parity --strict`.
