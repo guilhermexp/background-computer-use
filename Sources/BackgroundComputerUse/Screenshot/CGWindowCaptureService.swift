@@ -46,6 +46,18 @@ enum CGWindowCaptureService {
         window: ResolvedWindowDTO,
         attachedSurfaces: [AttachedSurfaceDTO] = []
     ) -> CGImage? {
+        switch captureImageResult(window: window, attachedSurfaces: attachedSurfaces) {
+        case let .success(capture):
+            return capture.image
+        case .failure:
+            return nil
+        }
+    }
+
+    static func captureImageResult(
+        window: ResolvedWindowDTO,
+        attachedSurfaces: [AttachedSurfaceDTO] = []
+    ) -> Result<CGWindowCapture, CGWindowCaptureError> {
         let rootFrame = CGRect(
             x: window.frameAppKit.x,
             y: window.frameAppKit.y,
@@ -59,16 +71,11 @@ enum CGWindowCaptureService {
             surfaces: attachedSurfaces,
             inventory: CGWindowInventory.current(onScreenOnly: true)
         )
-        switch captureComposite(
+        return captureComposite(
             rootWindowNumber: window.windowNumber,
             rootFrame: rootFrame,
             attachedRecords: records
-        ) {
-        case let .success(capture):
-            return capture.image
-        case .failure:
-            return nil
-        }
+        )
     }
 
     static func capture(windowNumber: Int) -> Result<CGWindowCapture, CGWindowCaptureError> {

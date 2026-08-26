@@ -23,6 +23,22 @@ COLD_OCR_TIMEOUT = 90
 WARM_OCR_BUDGET_SECONDS = 5.0
 
 
+def attempted_ax_escalation(click: dict) -> bool:
+    if str(click.get("finalRoute")) == "coordinate_then_ax_hit_test" or str(
+        click.get("fallbackReason")
+    ) == "coordinate_unverified_using_ax_hit_test":
+        return True
+    if any(
+        isinstance(transport, dict) and transport.get("route") == "ax_perform_action"
+        for transport in click.get("transports", [])
+    ):
+        return True
+    return any(
+        isinstance(step, dict) and step.get("route") == "coordinate_then_ax_hit_test"
+        for step in click.get("routeSteps", [])
+    )
+
+
 class BCUClient:
     def __init__(self) -> None:
         manifest = self._read_manifest()
@@ -396,22 +412,20 @@ class Smoke:
             and clicked_before is False
             and self.find_ocr_anchor(state, ["Button clicked"], budget=0) is not None
         )
-        escalated = str(click.get("finalRoute")) == "coordinate_then_ax_hit_test" or str(
-            click.get("fallbackReason")
-        ) == "coordinate_unverified_using_ax_hit_test"
+        escalated = attempted_ax_escalation(click)
         if page_changed:
             self.pass_("chrome-ocr-click", evidence)
-        elif classification == "success":
-            self.fail(
-                "chrome-ocr-click",
-                f"click reported success but the page never showed 'Button clicked' ({evidence})",
-            )
         elif escalated:
             # The accessibility escalation ran and still proved nothing: that is a
             # regression of the lane under test, not a documented limitation.
             self.fail(
                 "chrome-ocr-click",
                 f"the accessibility escalation ran and the page still did not change ({evidence})",
+            )
+        elif classification == "success":
+            self.fail(
+                "chrome-ocr-click",
+                f"click reported success but the page never showed 'Button clicked' ({evidence})",
             )
         else:
             # Residual limitation, declared: Chromium discards the pid-directed synthetic

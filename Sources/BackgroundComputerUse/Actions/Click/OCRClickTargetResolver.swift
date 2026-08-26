@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 enum OCRClickTargetResolution: Equatable {
@@ -7,7 +8,50 @@ enum OCRClickTargetResolution: Equatable {
     case ambiguous
 }
 
+struct OCRAnchorEvidence {
+    let disappeared: Bool?
+    let diagnostic: String?
+}
+
 enum OCRClickTargetResolver {
+    static func anchorEvidence(
+        anchor: OCRAnchorDTO,
+        captureEvidence: () -> ScreenshotCaptureService.EvidenceCapture,
+        recognize: (CGImage) -> OCRAnchorSummaryDTO
+    ) -> OCRAnchorEvidence {
+        let capture = captureEvidence()
+        let summary = capture.image.map(recognize)
+        return anchorEvidence(
+            anchor: anchor,
+            cleanPostOCR: summary,
+            unavailableDiagnostic: capture.diagnostic
+        )
+    }
+
+    static func anchorEvidence(
+        anchor: OCRAnchorDTO,
+        cleanPostOCR: OCRAnchorSummaryDTO?,
+        unavailableDiagnostic: String?
+    ) -> OCRAnchorEvidence {
+        guard let cleanPostOCR else {
+            return OCRAnchorEvidence(
+                disappeared: nil,
+                diagnostic: unavailableDiagnostic
+                    ?? "Anchor disappearance was not computed because the clean post-click screenshot was unavailable for OCR."
+            )
+        }
+        guard cleanPostOCR.status == .success || cleanPostOCR.status == .noText else {
+            return OCRAnchorEvidence(
+                disappeared: nil,
+                diagnostic: "Anchor disappearance was not computed because clean post-click OCR returned status \(cleanPostOCR.status.rawValue): \(cleanPostOCR.diagnostic ?? "no diagnostic")."
+            )
+        }
+        return OCRAnchorEvidence(
+            disappeared: isAnchorPresent(anchor, in: cleanPostOCR.anchors) == false,
+            diagnostic: nil
+        )
+    }
+
     static func resolve(
         requestedID: String,
         suppliedInteractionToken: String?,

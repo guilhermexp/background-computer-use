@@ -6,6 +6,59 @@ import Testing
 @Suite
 struct CursorScreenshotCompositorTests {
     @Test
+    func verificationModelImageExcludesCursorOverlay() throws {
+        let baseImage = try #require(makeSolidImage(width: 200, height: 120, color: .white))
+        let windowFrame = CGRect(x: 10, y: 20, width: 200, height: 120)
+        let cursor = makeCursorSnapshot(
+            position: CGPoint(x: windowFrame.midX, y: windowFrame.midY)
+        )
+        let window = makeWindow(frame: windowFrame)
+
+        let evidence = ScreenshotCaptureService.captureEvidenceImage(
+            window: window,
+            rawCaptureProvider: {
+                .success(CGWindowCapture(image: baseImage, windowNumber: window.windowNumber, warnings: []))
+            }
+        )
+        let evidenceImage = try #require(evidence.image)
+
+        #expect(nonWhitePixelCount(evidenceImage) == 0)
+        #expect(nonWhitePixelCount(try #require(
+            CursorScreenshotCompositor.compositedImage(
+                baseImage: baseImage,
+                windowFrameAppKit: windowFrame,
+                snapshots: [cursor]
+            )
+        )) > 0)
+    }
+
+    @Test
+    func modelFacingImageReturnedToCallerStillIncludesCursorOverlay() throws {
+        let baseImage = try #require(makeSolidImage(width: 200, height: 120, color: .white))
+        let windowFrame = CGRect(x: 10, y: 20, width: 200, height: 120)
+        let cursor = makeCursorSnapshot(
+            position: CGPoint(x: windowFrame.midX, y: windowFrame.midY)
+        )
+        let window = makeWindow(frame: windowFrame)
+
+        let screenshot = ScreenshotCaptureService.capture(
+            window: window,
+            stateToken: "cursor_response_test",
+            imageMode: .base64,
+            includeCursorOverlay: true,
+            rawCaptureProvider: {
+                .success(CGWindowCapture(image: baseImage, windowNumber: window.windowNumber, warnings: []))
+            },
+            cursorSnapshots: [cursor]
+        )
+        let encodedPNG = try #require(screenshot.image?.imageBase64)
+        let pngData = try #require(Data(base64Encoded: encodedPNG))
+        let callerImage = try #require(NSBitmapImageRep(data: pngData)?.cgImage)
+
+        #expect(nonWhitePixelCount(callerImage) > 0)
+    }
+
+    @Test
     func testModelFacingPointUsesAppKitBottomLeftToTopLeftMapping() {
         let windowFrame = CGRect(x: 100, y: 200, width: 400, height: 300)
         let modelSize = CGSize(width: 800, height: 600)
@@ -170,6 +223,68 @@ struct CursorScreenshotCompositorTests {
         context.setFillColor(color.cgColor)
         context.fill(CGRect(x: 0, y: 0, width: width, height: height))
         return context.makeImage()
+    }
+
+    private func makeCursorSnapshot(position: CGPoint) -> CursorSnapshot {
+        let accent = CursorAccentPalette.derive(from: NSColor.presenceCursorColor(hex: "#00C2C7"))
+        return CursorSnapshot(
+            cursorID: "codex",
+            attachedWindowNumber: 11,
+            attachedWindowLevelRawValue: 0,
+            position: position,
+            angle: CursorMotionConstants.arrowHomeAngle,
+            scale: 1,
+            alpha: 1,
+            glyph: .arrow,
+            previousGlyph: nil,
+            morphProgress: 1,
+            isPressed: false,
+            accent: accent,
+            baseColor: accent.fill,
+            pivotLocal: CursorPivotKind.tip.pathPoint,
+            labelText: "",
+            labelAlpha: 0,
+            labelScale: 1,
+            trailHistories: [],
+            trailVisible: false,
+            caretPhase: 0,
+            anticipationTilt: 0,
+            effects: []
+        )
+    }
+
+    private func makeWindow(frame: CGRect) -> ResolvedWindowDTO {
+        ResolvedWindowDTO(
+            windowID: "cursor-test-window",
+            title: "Cursor test",
+            bundleID: "com.example.cursor-test",
+            pid: 1,
+            launchDate: nil,
+            windowNumber: 11,
+            frameAppKit: RectDTO(
+                x: frame.minX,
+                y: frame.minY,
+                width: frame.width,
+                height: frame.height
+            ),
+            resolutionStrategy: "test"
+        )
+    }
+
+    private func nonWhitePixelCount(_ image: CGImage) -> Int {
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        var count = 0
+        for y in 0..<image.height {
+            for x in 0..<image.width {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+                    continue
+                }
+                if color.redComponent < 0.99 || color.greenComponent < 0.99 || color.blueComponent < 0.99 {
+                    count += 1
+                }
+            }
+        }
+        return count
     }
 
     private func nonBlackPixelCount(

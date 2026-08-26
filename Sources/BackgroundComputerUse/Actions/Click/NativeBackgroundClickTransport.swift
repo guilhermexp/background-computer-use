@@ -17,6 +17,30 @@ struct RoutedClickTarget {
     let processSerialNumberPacked: Int64
     let cgBoundsTopLeft: CGRect?
 
+    init(
+        pid: Int32,
+        bundleID: String,
+        windowNumber: Int,
+        title: String,
+        frameAppKit: CGRect,
+        ownerConnection: Int32,
+        processSerialNumberHigh: UInt32,
+        processSerialNumberLow: UInt32,
+        processSerialNumberPacked: Int64,
+        cgBoundsTopLeft: CGRect?
+    ) {
+        self.pid = pid
+        self.bundleID = bundleID
+        self.windowNumber = windowNumber
+        self.title = title
+        self.frameAppKit = frameAppKit
+        self.ownerConnection = ownerConnection
+        self.processSerialNumberHigh = processSerialNumberHigh
+        self.processSerialNumberLow = processSerialNumberLow
+        self.processSerialNumberPacked = processSerialNumberPacked
+        self.cgBoundsTopLeft = cgBoundsTopLeft
+    }
+
     init(window: ResolvedWindowDTO, routing: NativeWindowServerRouting) {
         pid = window.pid
         bundleID = window.bundleID
@@ -57,7 +81,35 @@ struct NativeBackgroundClickTransportResult {
 }
 
 final class NativeBackgroundClickTransport {
-    func dispatch(_ request: NativeBackgroundClickDispatchRequest) throws -> NativeBackgroundClickTransportResult {
+    typealias TargetPreparation = (focusStatus: Int32, notes: [String])
+    typealias PrepareTarget = (RoutedClickTarget) throws -> TargetPreparation
+    typealias PostEvent = (Int32, CGEvent) -> Void
+    typealias Wait = (useconds_t) -> Void
+
+    private let prepareTarget: PrepareTarget
+    private let postEvent: PostEvent
+    private let wait: Wait
+
+    init() {
+        prepareTarget = Self.prepareTargetWindowForInput
+        postEvent = { pid, event in NativeClickSymbols.slEventPostToPid(pid, event) }
+        wait = { duration in _ = usleep(duration) }
+    }
+
+    init(
+        prepareTarget: @escaping PrepareTarget,
+        postEvent: @escaping PostEvent,
+        wait: @escaping Wait
+    ) {
+        self.prepareTarget = prepareTarget
+        self.postEvent = postEvent
+        self.wait = wait
+    }
+
+    func dispatch(
+        _ request: NativeBackgroundClickDispatchRequest,
+        afterTargetFocus: () -> Void = {}
+    ) throws -> NativeBackgroundClickTransportResult {
         guard request.mouseButton == .left else {
             throw ClickTransportError.unsupported("Only left-button native background clicks are implemented by this transport.")
         }
@@ -65,9 +117,10 @@ final class NativeBackgroundClickTransport {
             throw ClickTransportError.unsupported("Native background clicks support only explicit single or double click.")
         }
 
-        let preparation = try prepareTargetWindowForInput(target: request.target)
-        let focusStatus = preparation.targetFocusStatus ?? -1
-        usleep(50_000)
+        let preparation = try prepareTarget(request.target)
+        let focusStatus = preparation.focusStatus
+        wait(50_000)
+        afterTargetFocus()
 
         let events = makeEventSequence(request: request)
         guard events.isEmpty == false else {
@@ -76,8 +129,8 @@ final class NativeBackgroundClickTransport {
 
         for event in events {
             event.timestamp = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
-            NativeClickSymbols.slEventPostToPid(request.target.pid, event)
-            usleep(30_000)
+            postEvent(request.target.pid, event)
+            wait(30_000)
         }
 
         let clickStates = (1...request.clickCount).map(Int64.init)
@@ -99,7 +152,7 @@ final class NativeBackgroundClickTransport {
         )
     }
 
-    private func prepareTargetWindowForInput(target: RoutedClickTarget) throws -> NativeWindowServerPreparationResult {
+    private static func prepareTargetWindowForInput(target: RoutedClickTarget) throws -> TargetPreparation {
         let preparation = NativeWindowServerPreparation.targetOnlyFocus(
             pid: target.pid,
             windowNumber: target.windowNumber
@@ -110,7 +163,10 @@ final class NativeBackgroundClickTransport {
         guard preparation.preparedTargetWindow(requireKeyWindowRecords: false) else {
             throw ClickTransportError.transportFailed("SLPSPostEventRecordTo target-only focus failed: \(preparation.rawStatus).")
         }
-        return preparation
+        return (
+            focusStatus: preparation.targetFocusStatus ?? -1,
+            notes: preparation.notes
+        )
     }
 
     private func makeEventSequence(request: NativeBackgroundClickDispatchRequest) -> [CGEvent] {

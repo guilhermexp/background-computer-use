@@ -83,7 +83,7 @@ happens, read state twice and only click once two consecutive reads report the s
 
 `classification: "success"` requires dispatch **plus** at least one entry in
 `verification.intentSignals`: `target_region_changed` (target-local pixels moved past
-`verification.targetRegionChangeThreshold`), `ocr_anchor_disappeared`, `focused_element_changed`,
+`verification.targetRegionChangeThreshold`), a clean pre-gate `ocr_anchor_disappeared`, `focused_element_changed`,
 `modal_dialog_opened`, `window_title_changed` on native surfaces, `target_state_changed`, or
 `web_area_text_changed`. Credit `web_area_text_changed` only on a web renderer after two identical
 pre-dispatch web-area text samples and a differing post-settle sample. An unstable or unavailable
@@ -92,6 +92,13 @@ selection-summary changes remain ambient noise; they appear in
 `verification.ambientOnlySignals` and never prove anything by themselves. When
 `targetRegionChangeRatio` or `ocrAnchorDisappeared` is `null`, `targetRegionDiagnostic` /
 `ocrAnchorDiagnostic` says why — a null field is never counted as evidence.
+
+The runtime measures `ocrAnchorDisappeared` from a separate window capture that never composites the
+agent cursor. The screenshot returned to you still includes that cursor. It compares focused elements
+by stable AX identity against a baseline sampled after the click transport's own focus-without-raise
+step. If either clean measurement is unavailable, it fails closed with a diagnostic. Anchor evidence
+computed after the coordinate escalation decision remains diagnostic only and cannot upgrade the
+classification that gate already evaluated.
 
 ### Cost of the first OCR read
 

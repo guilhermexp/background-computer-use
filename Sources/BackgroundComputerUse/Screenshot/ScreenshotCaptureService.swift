@@ -3,13 +3,73 @@ import CoreGraphics
 import Foundation
 
 enum ScreenshotCaptureService {
+    struct EvidenceCapture {
+        let image: CGImage?
+        let diagnostic: String?
+    }
+
+    static func captureEvidenceImage(
+        window: ResolvedWindowDTO,
+        attachedSurfaces: [AttachedSurfaceDTO] = [],
+        rawCaptureProvider: (() -> Result<CGWindowCapture, CGWindowCaptureError>)? = nil
+    ) -> EvidenceCapture {
+        let rawCapture = rawCaptureProvider?() ?? CGWindowCaptureService.captureImageResult(
+            window: window,
+            attachedSurfaces: attachedSurfaces
+        )
+        let rawImage: CGImage
+        switch rawCapture {
+        case let .success(capture):
+            rawImage = capture.image
+        case let .failure(error):
+            return EvidenceCapture(
+                image: nil,
+                diagnostic: "Clean post-click capture failed: \(error.description)"
+            )
+        }
+
+        let targetWindow = TargetWindowIdentity(
+            bundleID: window.bundleID,
+            pid: window.pid,
+            windowNumber: window.windowNumber,
+            title: window.title,
+            logicalFrameTopLeft: GlobalEventTapTopLeftRect(
+                x: window.frameAppKit.x,
+                y: window.frameAppKit.y,
+                width: window.frameAppKit.width,
+                height: window.frameAppKit.height
+            )
+        )
+        let modelSize = ScreenshotFitRule().predictedModelSize(for: targetWindow.logicalFrameTopLeft)
+        guard let image = modelFacingImage(
+            rawImage: rawImage,
+            modelSize: modelSize,
+            windowFrameAppKit: CGRect(
+                x: window.frameAppKit.x,
+                y: window.frameAppKit.y,
+                width: window.frameAppKit.width,
+                height: window.frameAppKit.height
+            ),
+            cursorSnapshots: [],
+            includeCursorOverlay: false
+        ) else {
+            return EvidenceCapture(
+                image: nil,
+                diagnostic: "Clean post-click capture failed while normalizing the raw window image."
+            )
+        }
+        return EvidenceCapture(image: image, diagnostic: nil)
+    }
+
     static func capture(
         window: ResolvedWindowDTO,
         stateToken: String,
         imageMode: ImageMode,
         includeRawRetinaCapture: Bool = false,
         includeCursorOverlay: Bool = true,
-        attachedSurfaces: [AttachedSurfaceDTO] = []
+        attachedSurfaces: [AttachedSurfaceDTO] = [],
+        rawCaptureProvider: (() -> Result<CGWindowCapture, CGWindowCaptureError>)? = nil,
+        cursorSnapshots providedCursorSnapshots: [CursorSnapshot]? = nil
     ) -> ScreenshotDTO {
         if imageMode == .omit {
             return makeResponse(
@@ -34,7 +94,7 @@ enum ScreenshotCaptureService {
             surfaces: attachedSurfaces,
             inventory: CGWindowInventory.current(onScreenOnly: true)
         )
-        let rawCapture = CGWindowCaptureService.captureComposite(
+        let rawCapture = rawCaptureProvider?() ?? CGWindowCaptureService.captureComposite(
             rootWindowNumber: window.windowNumber,
             rootFrame: rootFrame,
             attachedRecords: attachedRecords
@@ -77,7 +137,22 @@ enum ScreenshotCaptureService {
         let fitRule = ScreenshotFitRule()
         let modelSize = fitRule.predictedModelSize(for: targetWindow.logicalFrameTopLeft)
 
-        guard var modelImage = resize(rawImage, to: modelSize) else {
+        let windowFrameAppKit = CGRect(
+            x: window.frameAppKit.x,
+            y: window.frameAppKit.y,
+            width: window.frameAppKit.width,
+            height: window.frameAppKit.height
+        )
+        let cursorSnapshots = includeCursorOverlay
+            ? (providedCursorSnapshots ?? CursorRuntime.snapshots(forWindowNumber: window.windowNumber))
+            : []
+        guard let modelImageResult = makeModelFacingImage(
+            rawImage: rawImage,
+            modelSize: modelSize,
+            windowFrameAppKit: windowFrameAppKit,
+            cursorSnapshots: cursorSnapshots,
+            includeCursorOverlay: includeCursorOverlay
+        ) else {
             return makeResponse(
                 status: "normalize_failed",
                 image: nil,
@@ -86,28 +161,8 @@ enum ScreenshotCaptureService {
                 captureError: "Failed to normalize the raw capture into the model-facing screenshot fit."
             )
         }
-
-        var cursorOverlayError: String?
-        let cursorSnapshots = includeCursorOverlay
-            ? CursorRuntime.snapshots(forWindowNumber: window.windowNumber)
-            : []
-        if cursorSnapshots.isEmpty == false {
-            let windowFrameAppKit = CGRect(
-                x: window.frameAppKit.x,
-                y: window.frameAppKit.y,
-                width: window.frameAppKit.width,
-                height: window.frameAppKit.height
-            )
-            if let compositedImage = CursorScreenshotCompositor.compositedImage(
-                baseImage: modelImage,
-                windowFrameAppKit: windowFrameAppKit,
-                snapshots: cursorSnapshots
-            ) {
-                modelImage = compositedImage
-            } else {
-                cursorOverlayError = "Failed to composite \(cursorSnapshots.count) virtual cursor overlay(s) onto the model-facing screenshot."
-            }
-        }
+        let modelImage = modelImageResult.image
+        let cursorOverlayError = modelImageResult.cursorOverlayError
 
         guard let modelPNGData = NSBitmapImageRep(cgImage: modelImage).representation(
             using: .png,
@@ -217,6 +272,53 @@ enum ScreenshotCaptureService {
                 captureWarnings: captureWarnings
             )
         )
+    }
+
+    static func modelFacingImage(
+        rawImage: CGImage,
+        modelSize: PixelSize,
+        windowFrameAppKit: CGRect,
+        cursorSnapshots: [CursorSnapshot],
+        includeCursorOverlay: Bool
+    ) -> CGImage? {
+        makeModelFacingImage(
+            rawImage: rawImage,
+            modelSize: modelSize,
+            windowFrameAppKit: windowFrameAppKit,
+            cursorSnapshots: cursorSnapshots,
+            includeCursorOverlay: includeCursorOverlay
+        )?.image
+    }
+
+    private struct ModelFacingImageResult {
+        let image: CGImage
+        let cursorOverlayError: String?
+    }
+
+    private static func makeModelFacingImage(
+        rawImage: CGImage,
+        modelSize: PixelSize,
+        windowFrameAppKit: CGRect,
+        cursorSnapshots: [CursorSnapshot],
+        includeCursorOverlay: Bool
+    ) -> ModelFacingImageResult? {
+        guard let modelImage = resize(rawImage, to: modelSize) else {
+            return nil
+        }
+        guard includeCursorOverlay, cursorSnapshots.isEmpty == false else {
+            return ModelFacingImageResult(image: modelImage, cursorOverlayError: nil)
+        }
+        guard let compositedImage = CursorScreenshotCompositor.compositedImage(
+            baseImage: modelImage,
+            windowFrameAppKit: windowFrameAppKit,
+            snapshots: cursorSnapshots
+        ) else {
+            return ModelFacingImageResult(
+                image: modelImage,
+                cursorOverlayError: "Failed to composite \(cursorSnapshots.count) virtual cursor overlay(s) onto the model-facing screenshot."
+            )
+        }
+        return ModelFacingImageResult(image: compositedImage, cursorOverlayError: nil)
     }
 
     private static func resize(_ image: CGImage, to pixelSize: PixelSize) -> CGImage? {

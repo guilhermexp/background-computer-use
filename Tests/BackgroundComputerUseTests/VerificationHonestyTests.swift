@@ -1,4 +1,6 @@
+import ApplicationServices
 import CoreGraphics
+import Darwin
 import Foundation
 import Testing
 @testable import BackgroundComputerUse
@@ -56,8 +58,36 @@ struct VerificationHonestyTests {
 
     @Test
     func structuralSignalsAreAccepted() {
-        let anchorGone = makeEvidence(ocrAnchorDisappeared: true, targetRegionChangeRatio: 0)
-        let focusMoved = makeEvidence(focusedElementChanged: true, targetRegionChangeRatio: 0)
+        let cleanBefore = OCRAnchorSummaryBuilder.summary(
+            lines: [
+                OCRLineDTO(
+                    text: "Submit",
+                    confidence: 0.99,
+                    box: OCRBoxDTO(x: 40, y: 30, width: 80, height: 24)
+                ),
+            ],
+            interactionToken: "clean_before"
+        )
+        let cleanAfter = OCRAnchorSummaryBuilder.summary(lines: [], interactionToken: "clean_after")
+        let anchorEvidence = cleanBefore.anchors.first.map {
+            OCRClickTargetResolver.anchorEvidence(
+                anchor: $0,
+                cleanPostOCR: cleanAfter,
+                unavailableDiagnostic: nil
+            )
+        }
+        let focusEvidence = ClickFocusVerifier.evidence(
+            baselineAfterTransport: AXUIElementCreateApplication(getpid()),
+            afterClick: AXUIElementCreateSystemWide()
+        )
+        let anchorGone = makeEvidence(
+            ocrAnchorDisappeared: anchorEvidence?.disappeared,
+            targetRegionChangeRatio: 0
+        )
+        let focusMoved = makeEvidence(
+            focusedElementChanged: focusEvidence.changed,
+            targetRegionChangeRatio: 0
+        )
         let modalOpened = makeEvidence(modalDialogOpened: true, targetRegionChangeRatio: 0)
         let targetChanged = makeEvidence(targetStateChanged: true, targetRegionChangeRatio: 0)
 
@@ -65,6 +95,77 @@ struct VerificationHonestyTests {
         #expect(focusMoved.intentSignals == ["focused_element_changed"])
         #expect(modalOpened.intentSignals == ["modal_dialog_opened"])
         #expect(targetChanged.intentSignals == ["target_state_changed"])
+    }
+
+    @Test
+    func postHocAnchorEvidenceCannotRaiseReportedClassification() {
+        let gateVerification = makeEvidence(targetRegionChangeRatio: 0)
+        let postHocVerification = makeEvidence(
+            ocrAnchorDisappeared: true,
+            targetRegionChangeRatio: 0
+        )
+
+        let gate = ClickVerificationGate.evaluate(
+            dispatchSuccess: true,
+            verification: gateVerification,
+            fullImageChangeRatio: 0
+        )
+
+        #expect(
+            ClickIntentVerifier.classification(
+                dispatchSuccess: true,
+                verification: postHocVerification
+            ) == .success
+        )
+        #expect(
+            OCRClickVerdict.reportedClassification(
+                gateClassification: gate.reportedClassification,
+                postHocVerification: postHocVerification
+            ) == .effectNotVerified
+        )
+    }
+
+    @Test
+    func quietUnverifiedOCRClickReachesAXEscalation() {
+        let gate = ClickVerificationGate.evaluate(
+            dispatchSuccess: true,
+            verification: makeEvidence(targetRegionChangeRatio: 0),
+            fullImageChangeRatio: 0
+        )
+
+        var escalationAttempted = false
+        let attempted = ClickVerificationGate.performEscalation(
+            decision: gate,
+            none: false,
+            action: {
+                escalationAttempted = true
+                return true
+            }
+        )
+        let route = ClickVerificationGate.successfulEscalationRoute()
+
+        #expect(gate.shouldEscalate)
+        #expect(attempted)
+        #expect(escalationAttempted)
+        #expect(route.finalRoute == .coordinateThenAXHitTest)
+        #expect(route.fallbackReason == .coordinateUnverifiedUsingAXHitTest)
+    }
+
+    @Test
+    func inFlightEffectGuardPreventsEscalation() {
+        let ambient = ClickVerificationGate.evaluate(
+            dispatchSuccess: true,
+            verification: makeEvidence(renderedTextChanged: true, targetRegionChangeRatio: 0),
+            fullImageChangeRatio: 0
+        )
+        let imageChanging = ClickVerificationGate.evaluate(
+            dispatchSuccess: true,
+            verification: makeEvidence(targetRegionChangeRatio: 0),
+            fullImageChangeRatio: 0.01
+        )
+
+        #expect(ambient.shouldEscalate == false)
+        #expect(imageChanging.shouldEscalate == false)
     }
 
     @Test
@@ -237,6 +338,86 @@ struct VerificationHonestyTests {
 
         #expect(assessment.verified == false)
         #expect(assessment.intentSignals.isEmpty)
+    }
+
+    @Test
+    func cursorParkedOnAnchorIsNotProof() throws {
+        let summary = OCRAnchorSummaryBuilder.summary(
+            lines: [
+                OCRLineDTO(
+                    text: "Submit",
+                    confidence: 0.99,
+                    box: OCRBoxDTO(x: 40, y: 30, width: 80, height: 24)
+                ),
+            ],
+            interactionToken: "clean_evidence"
+        )
+        let anchor = try #require(summary.anchors.first)
+        let cleanImage = try makeImage(changedRect: nil)
+        var recognizedCleanImage = false
+
+        let anchorEvidence = OCRClickTargetResolver.anchorEvidence(
+            anchor: anchor,
+            captureEvidence: {
+                ScreenshotCaptureService.EvidenceCapture(image: cleanImage, diagnostic: nil)
+            },
+            recognize: { image in
+                recognizedCleanImage = image === cleanImage
+                return summary
+            }
+        )
+        let verification = makeEvidence(
+            ocrAnchorDisappeared: anchorEvidence.disappeared,
+            targetRegionChangeRatio: 0
+        )
+
+        #expect(anchorEvidence.disappeared == false)
+        #expect(anchorEvidence.diagnostic == nil)
+        #expect(recognizedCleanImage)
+        #expect(verification.intentSignals.isEmpty)
+        #expect(
+            ClickIntentVerifier.classification(dispatchSuccess: true, verification: verification)
+                == .effectNotVerified
+        )
+    }
+
+    @Test
+    func unavailableCleanCaptureFailsClosedWithAnchorDiagnostic() throws {
+        let summary = OCRAnchorSummaryBuilder.summary(
+            lines: [
+                OCRLineDTO(
+                    text: "Submit",
+                    confidence: 0.99,
+                    box: OCRBoxDTO(x: 40, y: 30, width: 80, height: 24)
+                ),
+            ],
+            interactionToken: "clean_evidence"
+        )
+        let anchor = try #require(summary.anchors.first)
+        var recognitionAttempted = false
+
+        let anchorEvidence = OCRClickTargetResolver.anchorEvidence(
+            anchor: anchor,
+            captureEvidence: {
+                ScreenshotCaptureService.EvidenceCapture(
+                    image: nil,
+                    diagnostic: "Clean post-click capture failed: permission denied."
+                )
+            },
+            recognize: { _ in
+                recognitionAttempted = true
+                return summary
+            }
+        )
+        let verification = makeEvidence(
+            ocrAnchorDisappeared: anchorEvidence.disappeared,
+            targetRegionChangeRatio: 0
+        )
+
+        #expect(anchorEvidence.disappeared == nil)
+        #expect(anchorEvidence.diagnostic == "Clean post-click capture failed: permission denied.")
+        #expect(verification.intentSignals.isEmpty)
+        #expect(recognitionAttempted == false)
     }
 
     // MARK: - OCR timing and deadline

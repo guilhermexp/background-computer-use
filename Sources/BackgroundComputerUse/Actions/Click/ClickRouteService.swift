@@ -49,6 +49,43 @@ private struct ClickSemanticOutcome {
     let verification: ClickVerificationEvidenceDTO?
 }
 
+struct ClickFocusEvidence {
+    let changed: Bool?
+    let diagnostic: String?
+}
+
+enum ClickFocusVerifier {
+    static let unavailableDiagnostic = "Focused-element change was not computed because a stable AX element identity was unavailable."
+
+    static func evidence(
+        baselineAfterTransport: AXUIElement?,
+        afterClick: AXUIElement?
+    ) -> ClickFocusEvidence {
+        guard let baselineAfterTransport, let afterClick else {
+            return ClickFocusEvidence(changed: nil, diagnostic: unavailableDiagnostic)
+        }
+        return ClickFocusEvidence(
+            changed: AXHelpers.elementsEqual(baselineAfterTransport, afterClick) == false,
+            diagnostic: nil
+        )
+    }
+
+    static func focusedElement(
+        focusedCanonicalIndex: Int?,
+        liveElementsByCanonicalIndex: [Int: AXUIElement]
+    ) -> AXUIElement? {
+        guard let focusedCanonicalIndex else {
+            return nil
+        }
+        return liveElementsByCanonicalIndex[focusedCanonicalIndex]
+    }
+}
+
+private struct ClickFocusBaseline {
+    let element: AXUIElement?
+    let diagnostic: String?
+}
+
 struct ClickRouteService {
     private let executionOptions: ActionExecutionOptions
     private let targetResolver: AXActionTargetResolver
@@ -435,27 +472,27 @@ struct ClickRouteService {
             verificationRegion: anchorRegion,
             postImageMode: Self.ocrCaptureImageMode(requested: request.imageMode ?? .omit)
         )
-        let afterImage = outcome.postCapture.flatMap(modelFacingImage)
-        let postOCR = afterImage.map {
-            OCRRecognitionService.recognize(
-                cgImage: $0,
-                interactionToken: outcome.postCapture?.envelope.response.interactionToken ?? liveInteractionToken
-            )
-        }
-        let anchorDisappeared: Bool?
-        let anchorDiagnostic: String?
-        if let postOCR {
-            if postOCR.status == .success || postOCR.status == .noText {
-                anchorDisappeared = OCRClickTargetResolver.isAnchorPresent(anchor, in: postOCR.anchors) == false
-                anchorDiagnostic = nil
-            } else {
-                anchorDisappeared = nil
-                anchorDiagnostic = "Anchor disappearance was not computed because post-click OCR returned status \(postOCR.status.rawValue): \(postOCR.diagnostic ?? "no diagnostic")."
+        let anchorEvidence = OCRClickTargetResolver.anchorEvidence(
+            anchor: anchor,
+            captureEvidence: {
+                guard let postCapture = outcome.postCapture else {
+                    return ScreenshotCaptureService.EvidenceCapture(
+                        image: nil,
+                        diagnostic: "Clean post-click capture was unavailable because no post-click state was captured."
+                    )
+                }
+                return ScreenshotCaptureService.captureEvidenceImage(
+                    window: postCapture.envelope.response.window,
+                    attachedSurfaces: postCapture.envelope.response.attachedSurfaces
+                )
+            },
+            recognize: {
+                OCRRecognitionService.recognize(
+                    cgImage: $0,
+                    interactionToken: outcome.postCapture?.envelope.response.interactionToken ?? liveInteractionToken
+                )
             }
-        } else {
-            anchorDisappeared = nil
-            anchorDiagnostic = "Anchor disappearance was not computed because the post-click screenshot was unavailable for OCR."
-        }
+        )
         let dispatched = outcome.transports.contains { $0.didDispatch && $0.transportSuccess }
         let verification = ocrVerification(
             base: outcome.verification,
@@ -463,10 +500,14 @@ struct ClickRouteService {
             after: outcome.postCapture,
             dispatchSuccess: dispatched,
             relocated: relocated,
-            anchorDisappeared: anchorDisappeared,
-            anchorDiagnostic: anchorDiagnostic
+            anchorDisappeared: anchorEvidence.disappeared,
+            anchorDiagnostic: anchorEvidence.diagnostic
         )
-        let verified = dispatched && effectVerified(verification)
+        let reportedClassification = OCRClickVerdict.reportedClassification(
+            gateClassification: outcome.classification,
+            postHocVerification: verification
+        )
+        let verified = reportedClassification == .success
         var routeSteps = outcome.routeSteps
         // Rewrite the OCR pointer step, not the last one: after an accessibility
         // escalation the last step is the AXPress and its note must survive.
@@ -495,7 +536,7 @@ struct ClickRouteService {
         }
 
         return response(
-            classification: verified ? .success : .effectNotVerified,
+            classification: reportedClassification,
             failureDomain: verified ? nil : (dispatched ? (outcome.failureDomain ?? .verification) : (outcome.failureDomain ?? .transport)),
             summary: verified
                 ? "The OCR anchor click produced a verified target-local or structural effect."
@@ -588,7 +629,7 @@ struct ClickRouteService {
             modalDialogOpened: base?.modalDialogOpened,
             windowTitleChanged: base?.windowTitleChanged,
             targetStateChanged: base?.targetStateChanged,
-            ocrAnchorDisappeared: anchorDisappeared,
+            ocrAnchorDisappeared: nil,
             targetRegionChangeRatio: base?.targetRegionChangeRatio,
             renderedTextChanged: base?.renderedTextChanged,
             selectionSummaryChanged: base?.selectionSummaryChanged,
@@ -598,7 +639,7 @@ struct ClickRouteService {
             webAreaTextChanged: base?.webAreaTextChanged
         )
         var notes = (base?.verificationNotes ?? []).filter { ClickIntentVerifier.isAssessmentNote($0) == false }
-        notes.append("OCR verification requires anchor disappearance, target-local pixels, or structural AX evidence; unrelated full-window changes are ignored.")
+        notes.append("The OCR click gate requires target-local or structural evidence; the clean anchor check runs after that gate and remains diagnostic only. Unrelated full-window changes are ignored.")
         if let anchorDiagnostic {
             notes.append(anchorDiagnostic)
         }
@@ -1189,6 +1230,10 @@ struct ClickRouteService {
 
         let frontmostBeforeDispatch = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let transportResult: NativeBackgroundClickTransportResult
+        var focusBaseline = ClickFocusBaseline(
+            element: nil,
+            diagnostic: "Focused-element baseline was not sampled after the transport's focus-without-raise step."
+        )
         do {
             let routing = try NativeWindowServerRoutingResolver().resolve(windowNumber: capture.envelope.response.window.windowNumber)
             notes.append(contentsOf: routing.notes)
@@ -1199,7 +1244,18 @@ struct ClickRouteService {
                     appKitPoint: plan.appKitPoint,
                     clickCount: clickCount,
                     mouseButton: mouseButton
-                )
+                ),
+                afterTargetFocus: {
+                    do {
+                        let focusedCapture = try targetResolver.reread(after: capture, imageMode: .omit)
+                        focusBaseline = self.focusBaseline(from: focusedCapture)
+                    } catch {
+                        focusBaseline = ClickFocusBaseline(
+                            element: nil,
+                            diagnostic: "Focused-element baseline failed after the transport's focus-without-raise step: \(error)."
+                        )
+                    }
+                }
             )
         } catch {
             AXCursorTargeting.finishClick(cursor: cursor)
@@ -1274,6 +1330,7 @@ struct ClickRouteService {
         var verification = verifyClick(
             before: capture,
             after: postCapture,
+            focusBaseline: focusBaseline,
             target: target,
             refreshedTarget: refreshed?.target,
             refreshedTargetStrategy: refreshed?.strategy,
@@ -1284,7 +1341,12 @@ struct ClickRouteService {
             region: regionEvidence,
             extraNotes: transportResult.notes
         )
-        var verified = transportResult.dispatchSuccess && effectVerified(verification)
+        let gate = ClickVerificationGate.evaluate(
+            dispatchSuccess: transportResult.dispatchSuccess,
+            verification: verification,
+            fullImageChangeRatio: regionEvidence.fullImageChangeRatio
+        )
+        var verified = gate.verified
         var finalRoute = finalRoute
         var fallbackReason = fallbackReason
         var escalationTransport: ClickTransportAttemptDTO?
@@ -1293,15 +1355,17 @@ struct ClickRouteService {
         // Escalate only when the click provably did nothing. A slow but real effect
         // (form submit, navigation, network round trip) is not visible inside the
         // settle delay, and pressing again there would actuate a second time.
-        let windowStillSettling = verification.ambientOnlySignals.isEmpty == false
-            || (regionEvidence.fullImageChangeRatio ?? 0) > 0
-        let escalation = transportResult.dispatchSuccess && verified == false && windowStillSettling == false
-            ? pressAXElement(
+        let escalation = ClickVerificationGate.performEscalation(
+            decision: gate,
+            none: AXPointPressOutcome.none,
+            action: {
+                pressAXElement(
                 underPointTopLeft: plan.eventTapPointTopLeft,
                 pid: Int32(capture.envelope.response.window.pid),
                 confirmed: request.confirm == true
-            )
-            : .none
+                )
+            }
+        )
 
         if case let .requiresConfirmation(reason) = escalation {
             warnings.append(
@@ -1333,6 +1397,7 @@ struct ClickRouteService {
             let escalatedVerification = verifyClick(
                 before: capture,
                 after: escalatedCapture,
+                focusBaseline: postCapture.map(focusBaseline(from:)) ?? focusBaseline,
                 target: target,
                 refreshedTarget: escalatedRefreshed?.target,
                 refreshedTargetStrategy: escalatedRefreshed?.strategy,
@@ -1382,9 +1447,10 @@ struct ClickRouteService {
             verification = escalatedVerification
             postCapture = escalatedCapture ?? postCapture
             if escalationVerified {
+                let escalatedRoute = ClickVerificationGate.successfulEscalationRoute()
                 verified = true
-                finalRoute = .coordinateThenAXHitTest
-                fallbackReason = .coordinateUnverifiedUsingAXHitTest
+                finalRoute = escalatedRoute.finalRoute
+                fallbackReason = escalatedRoute.fallbackReason
             }
         }
 
@@ -1896,6 +1962,7 @@ struct ClickRouteService {
     private func verifyClick(
         before: AXActionStateCapture,
         after: AXActionStateCapture?,
+        focusBaseline: ClickFocusBaseline? = nil,
         target: AXActionTargetSnapshot?,
         refreshedTarget: AXActionTargetSnapshot?,
         refreshedTargetStrategy: String?,
@@ -1909,12 +1976,19 @@ struct ClickRouteService {
         let renderedTextChanged: Bool?
         let selectionSummaryChanged: Bool?
         let focusedElementChanged: Bool?
+        let focusedElementDiagnostic: String?
         let windowTitleChanged: Bool?
         let modalDialogOpened: Bool?
         if let after {
             renderedTextChanged = self.renderedTextChanged(before: before, after: after)
             selectionSummaryChanged = self.selectionSummaryChanged(before: before, after: after)
-            focusedElementChanged = self.focusedElementChanged(before: before, after: after)
+            let baseline = focusBaseline ?? self.focusBaseline(from: before)
+            let focusEvidence = ClickFocusVerifier.evidence(
+                baselineAfterTransport: baseline.element,
+                afterClick: focusedLiveElement(in: after)
+            )
+            focusedElementChanged = focusEvidence.changed
+            focusedElementDiagnostic = baseline.diagnostic ?? focusEvidence.diagnostic
             windowTitleChanged = before.envelope.response.window.title != after.envelope.response.window.title
             modalDialogOpened = ClickDialogEffectVerifier.modalDialogOpened(
                 before: before.envelope.response.tree.nodes,
@@ -1924,6 +1998,7 @@ struct ClickRouteService {
             renderedTextChanged = nil
             selectionSummaryChanged = nil
             focusedElementChanged = nil
+            focusedElementDiagnostic = "Focused-element change was not computed because no post-click state was available."
             windowTitleChanged = nil
             modalDialogOpened = nil
         }
@@ -1950,6 +2025,9 @@ struct ClickRouteService {
         }
         if focusedElementChanged == true {
             verificationNotes.append("Focused element changed after click.")
+        }
+        if let focusedElementDiagnostic {
+            verificationNotes.append(focusedElementDiagnostic)
         }
         if targetStateChanged == true {
             verificationNotes.append("Target selected/focused/value evidence changed after click.")
@@ -2470,22 +2548,21 @@ struct ClickRouteService {
             before.envelope.response.selectionSummary?.selectedNodeIDs != after.envelope.response.selectionSummary?.selectedNodeIDs
     }
 
-    /// Whether focus really moved between two captures.
-    ///
-    /// `focusedElement.index` is a POSITIONAL index in the projection: on a live page
-    /// any node inserted or removed before the focused element shifts it while focus
-    /// never moved. Treating that as a focus change would hand full intent credit to
-    /// a click that never landed, which is the ambient-noise problem this gate exists
-    /// to remove. Identity and labels are stable, so only those count.
-    private func focusedElementChanged(before: AXActionStateCapture, after: AXActionStateCapture) -> Bool {
-        let beforeNodeID = before.envelope.response.selectionSummary?.focusedNodeID
-        let afterNodeID = after.envelope.response.selectionSummary?.focusedNodeID
-        if beforeNodeID != nil || afterNodeID != nil, beforeNodeID != afterNodeID {
-            return true
+    private func focusBaseline(from capture: AXActionStateCapture) -> ClickFocusBaseline {
+        guard let element = focusedLiveElement(in: capture) else {
+            return ClickFocusBaseline(
+                element: nil,
+                diagnostic: ClickFocusVerifier.unavailableDiagnostic
+            )
         }
-        return before.envelope.response.focusedElement.title != after.envelope.response.focusedElement.title ||
-            before.envelope.response.focusedElement.description != after.envelope.response.focusedElement.description ||
-            before.envelope.response.focusedElement.displayRole != after.envelope.response.focusedElement.displayRole
+        return ClickFocusBaseline(element: element, diagnostic: nil)
+    }
+
+    private func focusedLiveElement(in capture: AXActionStateCapture) -> AXUIElement? {
+        ClickFocusVerifier.focusedElement(
+            focusedCanonicalIndex: capture.envelope.rawCapture.focusedCanonicalIndex,
+            liveElementsByCanonicalIndex: capture.liveElementsByCanonicalIndex
+        )
     }
 
     private func normalizeText(_ text: String?) -> String {

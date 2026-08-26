@@ -167,6 +167,58 @@ enum ClickIntentVerifier {
     }
 }
 
+enum ClickVerificationGate {
+    struct Decision: Equatable {
+        let verified: Bool
+        let reportedClassification: ActionClassificationDTO
+        let shouldEscalate: Bool
+    }
+
+    struct EscalationRoute: Equatable {
+        let finalRoute: ClickFinalRouteDTO
+        let fallbackReason: ClickFallbackReasonDTO
+    }
+
+    static func evaluate(
+        dispatchSuccess: Bool,
+        verification: ClickVerificationEvidenceDTO?,
+        fullImageChangeRatio: Double?
+    ) -> Decision {
+        let verified = dispatchSuccess && ClickIntentVerifier.verified(verification)
+        let windowStillSettling = verification?.ambientOnlySignals.isEmpty == false
+            || (fullImageChangeRatio ?? 0) > 0
+        return Decision(
+            verified: verified,
+            reportedClassification: verified ? .success : .effectNotVerified,
+            shouldEscalate: dispatchSuccess && verified == false && windowStillSettling == false
+        )
+    }
+
+    static func successfulEscalationRoute() -> EscalationRoute {
+        EscalationRoute(
+            finalRoute: .coordinateThenAXHitTest,
+            fallbackReason: .coordinateUnverifiedUsingAXHitTest
+        )
+    }
+
+    static func performEscalation<Result>(
+        decision: Decision,
+        none: @autoclosure () -> Result,
+        action: () -> Result
+    ) -> Result {
+        decision.shouldEscalate ? action() : none()
+    }
+}
+
+enum OCRClickVerdict {
+    static func reportedClassification(
+        gateClassification: ActionClassificationDTO,
+        postHocVerification _: ClickVerificationEvidenceDTO
+    ) -> ActionClassificationDTO {
+        gateClassification
+    }
+}
+
 /// Resolves the region of the window that a click was aimed at, and turns before/after window images
 /// into target-local pixel evidence. A missing ratio always carries a diagnostic, never silence.
 enum ClickTargetRegion {
