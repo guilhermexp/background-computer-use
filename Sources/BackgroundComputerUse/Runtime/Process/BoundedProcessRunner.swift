@@ -181,7 +181,12 @@ struct BoundedProcessRunner {
                         throw BoundedProcessRunnerError.waitFailed(errno)
                     }
                 }
-                try Self.verifyProcessTreeTerminated(processID, descendants: observedDescendants)
+                do {
+                    try Self.verifyProcessTreeTerminated(processID, descendants: observedDescendants)
+                } catch {
+                    _ = ioGroup.wait(timeout: .now() + 1)
+                    throw error
+                }
                 break
             }
             usleep(10_000)

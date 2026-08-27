@@ -36,4 +36,25 @@ struct PIDWindowDiscoveryTests {
         #expect(fields.contains { $0.name == "pid" && $0.type == "integer" })
         #expect(fields.contains { $0.name == "app" } == false)
     }
+
+    @Test
+    func exactPIDMatchSelectsOnlyRequestedInstanceAmongDuplicateBundleIDs() throws {
+        struct FakeAppInstance {
+            let bundleID: String
+            let processIdentifier: pid_t
+        }
+
+        let firstInstance = FakeAppInstance(bundleID: "com.example.duplicate", processIdentifier: 111)
+        let secondInstance = FakeAppInstance(bundleID: "com.example.duplicate", processIdentifier: 222)
+        let instances = [firstInstance, secondInstance]
+
+        let resolved = RunningAppService.exactPIDMatch(222, in: instances, processIdentifier: \.processIdentifier)
+        #expect(resolved?.processIdentifier == 222)
+
+        let unresolved = RunningAppService.exactPIDMatch(333, in: instances, processIdentifier: \.processIdentifier)
+        #expect(unresolved == nil)
+
+        let rejectedNonPositivePID = RunningAppService.exactPIDMatch(0, in: instances, processIdentifier: \.processIdentifier)
+        #expect(rejectedNonPositivePID == nil)
+    }
 }

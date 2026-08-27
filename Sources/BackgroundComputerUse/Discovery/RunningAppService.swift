@@ -19,8 +19,16 @@ struct RunningAppService {
     }
 
     func resolveApp(pid: pid_t) -> NSRunningApplication? {
+        Self.exactPIDMatch(pid, in: targetableApps(), processIdentifier: \.processIdentifier)
+    }
+
+    static func exactPIDMatch<Candidate>(
+        _ pid: pid_t,
+        in candidates: [Candidate],
+        processIdentifier: (Candidate) -> pid_t
+    ) -> Candidate? {
         guard pid > 0 else { return nil }
-        return targetableApps().first { $0.processIdentifier == pid }
+        return candidates.first { processIdentifier($0) == pid }
     }
 
     private func targetableApps(frontmostBundleID: String?) -> [NSRunningApplication] {
