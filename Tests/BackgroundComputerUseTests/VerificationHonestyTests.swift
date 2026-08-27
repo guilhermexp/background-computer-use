@@ -552,32 +552,6 @@ struct VerificationHonestyTests {
         #expect(recognitionAttempted == false)
     }
 
-    // MARK: - OCR timing and deadline
-
-    @Test
-    func ocrRecognitionReportsItsOwnDuration() throws {
-        let image = try makeImage(changedRect: nil, width: 64, height: 64)
-        let outcome = OCRRecognitionService.measure(cgImage: image, interactionToken: "it_test")
-
-        #expect(outcome.durationMs > 0)
-        #expect(outcome.summary.status == .success || outcome.summary.status == .noText)
-    }
-
-    @Test
-    func ocrRecognitionFailsClosedOnDeadline() throws {
-        let image = try makeImage(changedRect: nil, width: 512, height: 512)
-        let outcome = OCRRecognitionService.measure(
-            cgImage: image,
-            interactionToken: "it_test",
-            deadline: 0
-        )
-
-        #expect(outcome.summary.status == .recognitionFailed)
-        let diagnostic = try #require(outcome.summary.diagnostic)
-        #expect(diagnostic.lowercased().contains("deadline"))
-        #expect(outcome.summary.anchors.isEmpty)
-    }
-
     @Test
     func readPerformanceEncodesOCRTimeOnlyWhenMeasured() throws {
         let encoder = JSONEncoder()

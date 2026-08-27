@@ -4,17 +4,25 @@ import Foundation
 struct TypeTextRouteService {
     private let executionOptions: ActionExecutionOptions
     private let targetResolver: AXActionTargetResolver
+    private let backgroundTextPreparation: BackgroundTextPreparation
+    private let foregroundApplication: @Sendable () -> ForegroundApplicationSnapshot?
     private let dispatchPrimitive = "CGEvent.keyboardSetUnicodeString + postToPid"
     private let elementValueDispatchPrimitive = "AXUIElementSetAttributeValue(kAXValueAttribute) + AXUIElementSetAttributeValue(kAXSelectedTextRangeAttribute)"
     private let settleDelay: TimeInterval = 0.35
 
-    init(executionOptions: ActionExecutionOptions = .visualCursorEnabled) {
+    init(
+        executionOptions: ActionExecutionOptions = .visualCursorEnabled,
+        backgroundTextPreparation: BackgroundTextPreparation = .live,
+        foregroundApplication: @escaping @Sendable () -> ForegroundApplicationSnapshot? = ForegroundApplicationSnapshot.capture
+    ) {
         self.executionOptions = executionOptions
+        self.backgroundTextPreparation = backgroundTextPreparation
+        self.foregroundApplication = foregroundApplication
         targetResolver = AXActionTargetResolver(executionOptions: executionOptions)
     }
 
     func typeText(request: TypeTextRequest) throws -> TypeTextResponse {
-        let focusAssistMode = request.focusAssistMode ?? .none
+        let foregroundBefore = foregroundApplication()
         let capture = try targetResolver.capture(
             windowID: request.window,
             includeMenuBar: request.includeMenuBar ?? true,
@@ -43,7 +51,7 @@ struct TypeTextRouteService {
                 return typeTextOnOpaqueFocusedSurface(
                     request: request,
                     capture: capture,
-                    focusAssistMode: focusAssistMode,
+                    foregroundBefore: foregroundBefore,
                     warnings: warnings,
                     notes: notes
                 )
@@ -58,7 +66,6 @@ struct TypeTextRouteService {
                 window: capture.envelope.response.window,
                 target: nil,
                 text: request.text,
-                focusAssistMode: focusAssistMode,
                 dispatchPrimitive: nil,
                 dispatchSucceeded: nil,
                 semanticAppropriate: nil,
@@ -92,7 +99,6 @@ struct TypeTextRouteService {
                 window: capture.envelope.response.window,
                 target: target,
                 text: request.text,
-                focusAssistMode: focusAssistMode,
                 dispatchPrimitive: nil,
                 dispatchSucceeded: nil,
                 semanticAppropriate: nil,
@@ -120,7 +126,6 @@ struct TypeTextRouteService {
                 window: capture.envelope.response.window,
                 target: target,
                 text: request.text,
-                focusAssistMode: focusAssistMode,
                 dispatchPrimitive: dispatchPrimitive,
                 dispatchSucceeded: nil,
                 semanticAppropriate: semantic.appropriate,
@@ -150,7 +155,6 @@ struct TypeTextRouteService {
                 window: capture.envelope.response.window,
                 target: target,
                 text: request.text,
-                focusAssistMode: focusAssistMode,
                 dispatchPrimitive: dispatchPrimitive,
                 dispatchSucceeded: nil,
                 semanticAppropriate: semantic.appropriate,
@@ -168,8 +172,6 @@ struct TypeTextRouteService {
                 verification: nil
             )
         }
-        let beforeState = AXActionRuntimeSupport.readTextState(liveElement.element)
-
         let cursor = AXCursorTargeting.prepareTypeText(
             requested: request.cursor,
             target: target,
@@ -178,25 +180,65 @@ struct TypeTextRouteService {
         )
         warnings.append(contentsOf: cursor.warnings)
 
-        let preparedBeforeState = applyFocusAssistIfRequested(
-            focusAssistMode,
-            to: liveElement.element,
-            from: beforeState,
-            warnings: &warnings,
-            notes: &notes
+        let window = capture.envelope.response.window
+        let preparation = backgroundTextPreparation.prepare(
+            pid: window.pid,
+            windowNumber: window.windowNumber
         )
+        notes.append(contentsOf: preparation.notes)
+        warnings.append(contentsOf: preparation.warnings)
+        let foregroundBeforeDispatch = foregroundApplication()
+        let preDispatchBackgroundSafety = TypeTextBackgroundSafety.evaluate(
+            before: foregroundBefore,
+            beforeDispatch: foregroundBeforeDispatch,
+            after: foregroundBeforeDispatch
+        )
+        guard preparation.preparedTargetWindow(requireKeyWindowRecords: true),
+              preDispatchBackgroundSafety.foregroundPreserved else {
+            AXCursorTargeting.finishTypeText(cursor: cursor, text: request.text)
+            let preparationFailed = preparation.preparedTargetWindow(requireKeyWindowRecords: true) == false
+            return response(
+                classification: .effectNotVerified,
+                failureDomain: preparationFailed ? .transport : .backgroundSafety,
+                summary: preparationFailed
+                    ? "Text dispatch failed closed during target-window preparation."
+                    : "Text dispatch was blocked because target preparation changed the user's foreground application.",
+                window: window,
+                target: target,
+                text: request.text,
+                dispatchPrimitive: nil,
+                dispatchSucceeded: false,
+                semanticAppropriate: semantic.appropriate,
+                semanticReasons: semantic.reasons,
+                liveElementResolution: liveElement.resolution,
+                preStateToken: capture.envelope.response.stateToken,
+                postStateToken: nil,
+                cursor: cursor,
+                warnings: warnings,
+                notes: notes,
+                verification: nil,
+                backgroundSafety: preDispatchBackgroundSafety
+            )
+        }
+
+        let preparedBeforeState = AXActionRuntimeSupport.readTextState(liveElement.element)
         let expected = expectedOutcome(from: preparedBeforeState, text: request.text)
 
         let dispatchResult = dispatchText(
             request.text,
             expected: expected,
             to: liveElement.element,
-            pid: capture.envelope.response.window.pid,
+            pid: window.pid,
             warnings: &warnings,
             notes: &notes
         )
         if dispatchResult.succeeded == false {
             AXCursorTargeting.finishTypeText(cursor: cursor, text: request.text)
+            let backgroundSafety = TypeTextBackgroundSafety.evaluate(
+                before: foregroundBefore,
+                beforeDispatch: foregroundBeforeDispatch,
+                after: foregroundApplication()
+            )
             return response(
                 classification: .effectNotVerified,
                 failureDomain: .transport,
@@ -204,7 +246,6 @@ struct TypeTextRouteService {
                 window: capture.envelope.response.window,
                 target: target,
                 text: request.text,
-                focusAssistMode: focusAssistMode,
                 dispatchPrimitive: dispatchResult.primitive,
                 dispatchSucceeded: false,
                 semanticAppropriate: semantic.appropriate,
@@ -233,7 +274,8 @@ struct TypeTextRouteService {
                     afterTargetFocused: nil,
                     renderedTextChanged: false,
                     verificationNotes: ["Transport failed before a reread could verify text insertion."]
-                )
+                ),
+                backgroundSafety: backgroundSafety
             )
         }
 
@@ -302,6 +344,11 @@ struct TypeTextRouteService {
                 afterSameElementState: afterSameElementState
             )
         )
+        let backgroundSafety = TypeTextBackgroundSafety.evaluate(
+            before: foregroundBefore,
+            beforeDispatch: foregroundBeforeDispatch,
+            after: foregroundApplication()
+        )
 
         return classifyResult(
             request: request,
@@ -309,7 +356,6 @@ struct TypeTextRouteService {
             target: target,
             semantic: semantic,
             liveElementResolution: liveElement.resolution,
-            focusAssistMode: focusAssistMode,
             dispatchPrimitive: dispatchResult.primitive,
             dispatchSucceeded: dispatchResult.succeeded,
             preStateToken: capture.envelope.response.stateToken,
@@ -317,7 +363,8 @@ struct TypeTextRouteService {
             cursor: cursor,
             warnings: warnings,
             notes: notes,
-            verification: verification
+            verification: verification,
+            backgroundSafety: backgroundSafety
         )
     }
 
@@ -329,7 +376,7 @@ struct TypeTextRouteService {
     private func typeTextOnOpaqueFocusedSurface(
         request: TypeTextRequest,
         capture: AXActionStateCapture,
-        focusAssistMode: TypeTextFocusAssistModeDTO,
+        foregroundBefore: ForegroundApplicationSnapshot?,
         warnings: [String],
         notes: [String]
     ) -> TypeTextResponse {
@@ -348,7 +395,6 @@ struct TypeTextRouteService {
                 window: capture.envelope.response.window,
                 target: nil,
                 text: request.text,
-                focusAssistMode: focusAssistMode,
                 dispatchPrimitive: nil,
                 dispatchSucceeded: nil,
                 semanticAppropriate: nil,
@@ -378,7 +424,6 @@ struct TypeTextRouteService {
                 window: capture.envelope.response.window,
                 target: nil,
                 text: request.text,
-                focusAssistMode: focusAssistMode,
                 dispatchPrimitive: nil,
                 dispatchSucceeded: false,
                 semanticAppropriate: nil,
@@ -404,7 +449,6 @@ struct TypeTextRouteService {
                 window: dispatchWindow,
                 target: nil,
                 text: request.text,
-                focusAssistMode: focusAssistMode,
                 dispatchPrimitive: nil,
                 dispatchSucceeded: false,
                 semanticAppropriate: nil,
@@ -419,24 +463,35 @@ struct TypeTextRouteService {
             )
         }
 
-        let preparation = NativeWindowServerPreparation.targetOnlyFocusAndKeyWindow(
+        let preparation = backgroundTextPreparation.prepare(
             pid: dispatchWindow.pid,
             windowNumber: dispatchWindow.windowNumber
         )
         notes.append(contentsOf: preparation.notes)
         warnings.append(contentsOf: preparation.warnings)
-        guard preparation.preparedTargetWindow(requireKeyWindowRecords: true) else {
-            let preflightFailure = "PID-scoped Unicode posting was not attempted because WindowServer could not establish the requested AX-opaque window as the key input recipient."
+        let foregroundBeforeDispatch = foregroundApplication()
+        let preDispatchBackgroundSafety = TypeTextBackgroundSafety.evaluate(
+            before: foregroundBefore,
+            beforeDispatch: foregroundBeforeDispatch,
+            after: foregroundBeforeDispatch
+        )
+        guard preparation.preparedTargetWindow(requireKeyWindowRecords: true),
+              preDispatchBackgroundSafety.foregroundPreserved else {
+            let preparationFailed = preparation.preparedTargetWindow(requireKeyWindowRecords: true) == false
+            let preflightFailure = preparationFailed
+                ? "PID-scoped Unicode posting was not attempted because WindowServer could not establish the requested AX-opaque window as the key input recipient."
+                : "PID-scoped Unicode posting was not attempted because target preparation changed the user's foreground application."
             warnings.append(preflightFailure)
             notes.append(preflightFailure)
             return response(
                 classification: .effectNotVerified,
-                failureDomain: .transport,
-                summary: "Opaque focused-surface typing failed closed during target-window preflight.",
+                failureDomain: preparationFailed ? .transport : .backgroundSafety,
+                summary: preparationFailed
+                    ? "Opaque focused-surface typing failed closed during target-window preflight."
+                    : "Opaque focused-surface typing failed closed because foreground preservation was not proven.",
                 window: dispatchWindow,
                 target: nil,
                 text: request.text,
-                focusAssistMode: focusAssistMode,
                 dispatchPrimitive: nil,
                 dispatchSucceeded: false,
                 semanticAppropriate: nil,
@@ -447,12 +502,18 @@ struct TypeTextRouteService {
                 cursor: cursor,
                 warnings: warnings,
                 notes: notes,
-                verification: nil
+                verification: nil,
+                backgroundSafety: preDispatchBackgroundSafety
             )
         }
 
         let dispatched = AXActionRuntimeSupport.postUnicodeText(request.text, to: dispatchWindow.pid)
         guard dispatched else {
+            let backgroundSafety = TypeTextBackgroundSafety.evaluate(
+                before: foregroundBefore,
+                beforeDispatch: foregroundBeforeDispatch,
+                after: foregroundApplication()
+            )
             return response(
                 classification: .effectNotVerified,
                 failureDomain: .transport,
@@ -460,7 +521,6 @@ struct TypeTextRouteService {
                 window: dispatchWindow,
                 target: nil,
                 text: request.text,
-                focusAssistMode: focusAssistMode,
                 dispatchPrimitive: dispatchPrimitive,
                 dispatchSucceeded: false,
                 semanticAppropriate: nil,
@@ -471,7 +531,8 @@ struct TypeTextRouteService {
                 cursor: cursor,
                 warnings: warnings,
                 notes: notes,
-                verification: nil
+                verification: nil,
+                backgroundSafety: backgroundSafety
             )
         }
 
@@ -486,14 +547,21 @@ struct TypeTextRouteService {
         notes.append(
             "Explicit opaque focused-surface fallback posted Unicode after successful target-window preflight; call get_window_state with imageMode path or base64 to verify the result before continuing."
         )
+        let backgroundSafety = TypeTextBackgroundSafety.evaluate(
+            before: foregroundBefore,
+            beforeDispatch: foregroundBeforeDispatch,
+            after: foregroundApplication()
+        )
+        let foregroundPreserved = backgroundSafety.foregroundPreserved
         return response(
-            classification: .verifierAmbiguous,
-            failureDomain: .verification,
-            summary: "Text was dispatched to the AX-opaque focused surface; visual verification is required.",
+            classification: foregroundPreserved ? .verifierAmbiguous : .effectNotVerified,
+            failureDomain: foregroundPreserved ? .verification : .backgroundSafety,
+            summary: foregroundPreserved
+                ? "Text was dispatched to the AX-opaque focused surface; visual verification is required."
+                : "Text dispatch did not preserve the user's foreground application.",
             window: dispatchWindow,
             target: nil,
             text: request.text,
-            focusAssistMode: focusAssistMode,
             dispatchPrimitive: dispatchPrimitive,
             dispatchSucceeded: true,
             semanticAppropriate: nil,
@@ -504,7 +572,8 @@ struct TypeTextRouteService {
             cursor: cursor,
             warnings: warnings,
             notes: notes,
-            verification: nil
+            verification: nil,
+            backgroundSafety: backgroundSafety
         )
     }
 
@@ -556,55 +625,12 @@ struct TypeTextRouteService {
         )
     }
 
-    private func applyFocusAssistIfRequested(
-        _ mode: TypeTextFocusAssistModeDTO,
-        to element: AXUIElement,
-        from beforeState: TypeTextObservedStateDTO,
-        warnings: inout [String],
-        notes: inout [String]
-    ) -> TypeTextObservedStateDTO {
-        guard mode != .none else {
-            return beforeState
-        }
-
-        let focusResult = AXActionRuntimeSupport.setBoolAttributeResult(
-            element,
-            attribute: kAXFocusedAttribute as CFString,
-            value: true
-        )
-        notes.append("AX focus assist result: \(AXActionRuntimeSupport.rawStatusString(for: focusResult)).")
-        if focusResult != .success {
-            warnings.append("Focus assist returned \(AXActionRuntimeSupport.rawStatusString(for: focusResult)).")
-        }
-
-        if mode == .focusAndCaretEnd {
-            if let value = beforeState.valueString,
-               AXActionRuntimeSupport.isAttributeSettable(element, attribute: kAXSelectedTextRangeAttribute as CFString) {
-                let rangeResult = AXActionRuntimeSupport.setSelectedTextRangeResult(
-                    element,
-                    location: (value as NSString).length,
-                    length: 0
-                )
-                notes.append("AX caret assist result: \(AXActionRuntimeSupport.rawStatusString(for: rangeResult)).")
-                if rangeResult != .success {
-                    warnings.append("Caret assist returned \(AXActionRuntimeSupport.rawStatusString(for: rangeResult)).")
-                }
-            } else {
-                warnings.append("Caret assist was requested, but the selected text range was not writable.")
-            }
-        }
-
-        sleepRunLoop(0.10)
-        return AXActionRuntimeSupport.readTextState(element)
-    }
-
     private func classifyResult(
         request: TypeTextRequest,
         window: ResolvedWindowDTO,
         target: AXActionTargetSnapshot,
         semantic: (appropriate: Bool, reasons: [String]),
         liveElementResolution: String,
-        focusAssistMode: TypeTextFocusAssistModeDTO,
         dispatchPrimitive: String,
         dispatchSucceeded: Bool,
         preStateToken: String,
@@ -612,40 +638,17 @@ struct TypeTextRouteService {
         cursor: ActionCursorTargetResponseDTO,
         warnings: [String],
         notes: [String],
-        verification: TypeTextVerificationEvidenceDTO
+        verification: TypeTextVerificationEvidenceDTO,
+        backgroundSafety: TypeTextBackgroundSafetyDTO
     ) -> TypeTextResponse {
-        if verification.exactValueMatch {
-            if verification.exactSelectionMatch == false {
-                return response(
-                    classification: .effectNotVerified,
-                    failureDomain: .verification,
-                    summary: "The text inserted exactly, but the expected caret or selection state did not verify.",
-                    window: window,
-                    target: target,
-                    text: request.text,
-                    focusAssistMode: focusAssistMode,
-                    dispatchPrimitive: dispatchPrimitive,
-                    dispatchSucceeded: dispatchSucceeded,
-                    semanticAppropriate: semantic.appropriate,
-                    semanticReasons: semantic.reasons,
-                    liveElementResolution: liveElementResolution,
-                    preStateToken: preStateToken,
-                    postStateToken: postStateToken,
-                    cursor: cursor,
-                    warnings: warnings,
-                    notes: notes,
-                    verification: verification
-                )
-            }
-
+        guard backgroundSafety.foregroundPreserved else {
             return response(
-                classification: .success,
-                failureDomain: nil,
-                summary: "The targeted text dispatch matched the expected inserted value after reread.",
+                classification: .effectNotVerified,
+                failureDomain: .backgroundSafety,
+                summary: "Text dispatch did not preserve the user's foreground application.",
                 window: window,
                 target: target,
                 text: request.text,
-                focusAssistMode: focusAssistMode,
                 dispatchPrimitive: dispatchPrimitive,
                 dispatchSucceeded: dispatchSucceeded,
                 semanticAppropriate: semantic.appropriate,
@@ -656,7 +659,54 @@ struct TypeTextRouteService {
                 cursor: cursor,
                 warnings: warnings,
                 notes: notes,
-                verification: verification
+                verification: verification,
+                backgroundSafety: backgroundSafety
+            )
+        }
+
+        if verification.exactValueMatch {
+            if verification.exactSelectionMatch == false {
+                return response(
+                    classification: .effectNotVerified,
+                    failureDomain: .verification,
+                    summary: "The text inserted exactly, but the expected caret or selection state did not verify.",
+                    window: window,
+                    target: target,
+                    text: request.text,
+                    dispatchPrimitive: dispatchPrimitive,
+                    dispatchSucceeded: dispatchSucceeded,
+                    semanticAppropriate: semantic.appropriate,
+                    semanticReasons: semantic.reasons,
+                    liveElementResolution: liveElementResolution,
+                    preStateToken: preStateToken,
+                    postStateToken: postStateToken,
+                    cursor: cursor,
+                    warnings: warnings,
+                    notes: notes,
+                    verification: verification,
+                    backgroundSafety: backgroundSafety
+                )
+            }
+
+            return response(
+                classification: .success,
+                failureDomain: nil,
+                summary: "The targeted text dispatch matched the expected inserted value after reread.",
+                window: window,
+                target: target,
+                text: request.text,
+                dispatchPrimitive: dispatchPrimitive,
+                dispatchSucceeded: dispatchSucceeded,
+                semanticAppropriate: semantic.appropriate,
+                semanticReasons: semantic.reasons,
+                liveElementResolution: liveElementResolution,
+                preStateToken: preStateToken,
+                postStateToken: postStateToken,
+                cursor: cursor,
+                warnings: warnings,
+                notes: notes,
+                verification: verification,
+                backgroundSafety: backgroundSafety
             )
         }
 
@@ -668,7 +718,6 @@ struct TypeTextRouteService {
                 window: window,
                 target: target,
                 text: request.text,
-                focusAssistMode: focusAssistMode,
                 dispatchPrimitive: dispatchPrimitive,
                 dispatchSucceeded: dispatchSucceeded,
                 semanticAppropriate: semantic.appropriate,
@@ -679,7 +728,8 @@ struct TypeTextRouteService {
                 cursor: cursor,
                 warnings: warnings,
                 notes: notes,
-                verification: verification
+                verification: verification,
+                backgroundSafety: backgroundSafety
             )
         }
 
@@ -690,7 +740,6 @@ struct TypeTextRouteService {
             window: window,
             target: target,
             text: request.text,
-            focusAssistMode: focusAssistMode,
             dispatchPrimitive: dispatchPrimitive,
             dispatchSucceeded: dispatchSucceeded,
             semanticAppropriate: semantic.appropriate,
@@ -701,7 +750,8 @@ struct TypeTextRouteService {
             cursor: cursor,
             warnings: warnings,
             notes: notes,
-            verification: verification
+            verification: verification,
+            backgroundSafety: backgroundSafety
         )
     }
 
@@ -712,7 +762,6 @@ struct TypeTextRouteService {
         window: ResolvedWindowDTO?,
         target: AXActionTargetSnapshot?,
         text: String,
-        focusAssistMode: TypeTextFocusAssistModeDTO,
         dispatchPrimitive: String?,
         dispatchSucceeded: Bool?,
         semanticAppropriate: Bool?,
@@ -723,7 +772,8 @@ struct TypeTextRouteService {
         cursor: ActionCursorTargetResponseDTO,
         warnings: [String],
         notes: [String],
-        verification: TypeTextVerificationEvidenceDTO?
+        verification: TypeTextVerificationEvidenceDTO?,
+        backgroundSafety: TypeTextBackgroundSafetyDTO? = nil
     ) -> TypeTextResponse {
         TypeTextResponse(
             contractVersion: ContractVersion.current,
@@ -734,7 +784,6 @@ struct TypeTextRouteService {
             window: window,
             target: target?.dto,
             text: text,
-            focusAssistMode: focusAssistMode,
             dispatchPrimitive: dispatchPrimitive,
             dispatchSucceeded: dispatchSucceeded,
             semanticAppropriate: semanticAppropriate,
@@ -745,6 +794,7 @@ struct TypeTextRouteService {
             cursor: cursor,
             warnings: warnings,
             notes: notes,
+            backgroundSafety: backgroundSafety,
             verification: verification
         )
     }

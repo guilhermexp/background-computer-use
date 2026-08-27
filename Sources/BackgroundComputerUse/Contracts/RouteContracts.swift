@@ -53,16 +53,16 @@ public struct RouteDescriptorDTO: Encodable, Sendable {
 
 public enum RouteTargetKindDTO: String, Encodable, Sendable {
     case shared
-    case appQuery = "app_query"
+    case appPID = "app_pid"
     case window
 }
 
 public struct RouteTargetSummaryDTO: Encodable, Sendable {
     public let kind: RouteTargetKindDTO
-    public let appQuery: String?
+    public let pid: Int32?
     public let windowID: String?
 
-    static let shared = RouteTargetSummaryDTO(kind: .shared, appQuery: nil, windowID: nil)
+    static let shared = RouteTargetSummaryDTO(kind: .shared, pid: nil, windowID: nil)
 }
 
 public struct RouteExecutionReceiptDTO: Encodable, Sendable {

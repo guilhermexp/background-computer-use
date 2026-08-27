@@ -132,7 +132,7 @@ struct APIDocumentationTests {
         #expect(json["contractVersion"] as? String == ContractVersion.current)
         #expect(json["ok"] as? Bool == false)
         #expect(json["error"] as? String == "invalid_request")
-        #expect((json["message"] as? String)?.contains("Missing required field 'app'") == true)
+        #expect((json["message"] as? String)?.contains("Missing required field 'pid'") == true)
 
         let recovery = try #require(json["recovery"] as? [String])
         #expect(recovery.contains { $0.contains("/v1/routes") })

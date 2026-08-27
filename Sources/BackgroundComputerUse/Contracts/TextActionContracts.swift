@@ -13,13 +13,18 @@ public enum ActionFailureDomainDTO: String, Encodable, Sendable {
     case coercion
     case transport
     case verification
+    case backgroundSafety = "background_safety"
     case appSpecificSemantics = "app_specific_semantics"
 }
 
-public enum TypeTextFocusAssistModeDTO: String, Decodable, Encodable, Sendable {
-    case none
-    case focus
-    case focusAndCaretEnd = "focus_and_caret_end"
+public struct TypeTextBackgroundSafetyDTO: Encodable, Equatable, Sendable {
+    public let frontmostPIDBefore: Int32?
+    public let frontmostBundleBefore: String?
+    public let frontmostPIDBeforeDispatch: Int32?
+    public let frontmostBundleBeforeDispatch: String?
+    public let frontmostPIDAfter: Int32?
+    public let frontmostBundleAfter: String?
+    public let foregroundPreserved: Bool
 }
 
 public struct AXActionTargetSnapshotDTO: Encodable, Sendable {
@@ -169,7 +174,6 @@ public struct TypeTextResponse: Encodable, Sendable {
     public let window: ResolvedWindowDTO?
     public let target: AXActionTargetSnapshotDTO?
     public let text: String
-    public let focusAssistMode: TypeTextFocusAssistModeDTO
     public let dispatchPrimitive: String?
     public let dispatchSucceeded: Bool?
     public let semanticAppropriate: Bool?
@@ -180,5 +184,6 @@ public struct TypeTextResponse: Encodable, Sendable {
     public let cursor: ActionCursorTargetResponseDTO
     public let warnings: [String]
     public let notes: [String]
+    public let backgroundSafety: TypeTextBackgroundSafetyDTO?
     public let verification: TypeTextVerificationEvidenceDTO?
 }

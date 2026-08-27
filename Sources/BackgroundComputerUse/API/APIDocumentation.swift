@@ -7,7 +7,7 @@ enum APIDocumentation {
             "Read $TMPDIR/background-computer-use/runtime-manifest.json first. Use baseURL from the manifest and send authToken as the X-Background-Computer-Use-Token header for every /v1 request.",
             "Call GET /v1/bootstrap next and stop if instructions.ready is false.",
             "Call GET /v1/routes for the complete route catalog, request fields, response fields, execution policy, examples, and error codes.",
-            "Call POST /v1/list_apps to find a target app, then POST /v1/list_windows with an app name or bundle ID.",
+            "Call POST /v1/list_apps to find a target process, then POST /v1/list_windows with its exact pid.",
             "Call POST /v1/get_window_state with a window ID and imageMode path or base64. Use the screenshot as visual ground truth and the projected tree for semantic targets.",
             "Use POST /v1/find_elements when role or text can identify a target without returning the full tree; its matches and interactionToken come from one capture.",
             "Use POST /v1/run_script only when an arbitrary Apple Events capability is required. It has no effect verification; always read state afterwards.",
@@ -85,7 +85,7 @@ enum APIDocumentation {
         ],
         troubleshooting: [
             "invalid_request means the JSON body did not match the route's request fields or enum values. Inspect the route entry in /v1/routes.",
-            "app_not_found means list_windows could not resolve the app query. Call list_apps and retry with the exact name or bundleID.",
+            "app_not_found means list_windows could not resolve the requested pid. Call list_apps and retry with a current pid.",
             "window_not_found means the window ID is stale or closed. Call list_windows again and choose a live window.",
             "accessibility_denied or screenshot failures mean macOS privacy permissions need to be granted to the signed app bundle, then the app must be relaunched."
         ]
@@ -128,17 +128,17 @@ enum APIDocumentation {
             return usage(
                 whenToUse: "Find targetable running apps and the current frontmost app.",
                 useAfter: ["Bootstrap is ready."],
-                successSignals: ["runningApps contains the app you intend to operate and includes its bundleID."],
-                nextSteps: ["Call list_windows with the app name or bundleID."],
+                successSignals: ["runningApps contains the process you intend to operate and includes its pid."],
+                nextSteps: ["Call list_windows with that exact pid."],
                 exampleRequest: #"{}"#
             )
         case .listWindows:
             return usage(
-                whenToUse: "Resolve an app query to live windows and obtain stable window IDs.",
-                useAfter: ["Call list_apps, or already know an app name or bundleID."],
+                whenToUse: "Resolve one exact running process to live windows and obtain stable window IDs.",
+                useAfter: ["Call list_apps and select a current positive pid."],
                 successSignals: ["windows contains at least one on-screen window with a windowID."],
                 nextSteps: ["Call get_window_state with the selected windowID."],
-                exampleRequest: #"{"app":"Safari"}"#
+                exampleRequest: #"{"pid":12345}"#
             )
         case .cursorFeedback:
             return usage(
@@ -247,9 +247,9 @@ enum APIDocumentation {
             return usage(
                 whenToUse: "Insert text into a focused text entry or a specific text-entry element.",
                 useAfter: ["Call get_window_state and identify a text-entry target, or deliberately rely on the current focused element."],
-                successSignals: ["ok=true and verification exact value or selection evidence matches the requested text."],
+                successSignals: ["ok=true, backgroundSafety.foregroundPreserved=true, and verification exact value or selection evidence matches the requested text."],
                 nextSteps: ["Use press_key for explicit Return/Tab submission; type_text does not auto-submit."],
-                exampleRequest: #"{"window":"WINDOW_ID","stateToken":"STATE_TOKEN","target":{"kind":"display_index","value":4},"text":"hello","focusAssistMode":"focus_and_caret_end"}"#
+                exampleRequest: #"{"window":"WINDOW_ID","stateToken":"STATE_TOKEN","target":{"kind":"display_index","value":4},"text":"hello"}"#
             )
         case .pressKey:
             return usage(
@@ -326,8 +326,8 @@ enum APIDocumentation {
                 RouteErrorDTO(
                     statusCode: 404,
                     error: "app_not_found",
-                    meaning: "The app query did not match a targetable running application.",
-                    recovery: ["Call list_apps and retry with the exact name or bundleID."]
+                    meaning: "The requested pid did not match a targetable running application.",
+                    recovery: ["Call list_apps and retry with a current pid."]
                 )
             )
         }

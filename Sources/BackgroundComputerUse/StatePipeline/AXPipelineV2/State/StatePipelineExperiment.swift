@@ -8,7 +8,7 @@ typealias StatePipelineScenario = AXPipelineV2Scenario
 typealias StatePipelineMenuMode = AXMenuMode
 
 struct StatePipelineLiveCaptureOptions {
-    let appQuery: String
+    let targetPID: pid_t
     let windowTitleContains: String?
     let includeMenuBar: Bool
     let menuMode: StatePipelineMenuMode?
@@ -20,7 +20,7 @@ struct StatePipelineLiveCaptureOptions {
     let scenarioID: String?
 
     init(
-        appQuery: String,
+        targetPID: pid_t,
         windowTitleContains: String? = nil,
         includeMenuBar: Bool,
         menuMode: StatePipelineMenuMode? = nil,
@@ -31,7 +31,7 @@ struct StatePipelineLiveCaptureOptions {
         includeCursorOverlay: Bool = true,
         scenarioID: String? = nil
     ) {
-        self.appQuery = appQuery
+        self.targetPID = targetPID
         self.windowTitleContains = windowTitleContains
         self.includeMenuBar = includeMenuBar
         self.menuMode = menuMode
@@ -94,7 +94,7 @@ struct StatePipelineExperiment {
     func captureLive(_ options: StatePipelineLiveCaptureOptions) throws -> StatePipelineCaptureResult {
         let frontmostBefore = NSWorkspace.shared.frontmostApplication
         let resolved = try targetResolver.resolve(
-            appQuery: options.appQuery,
+            pid: options.targetPID,
             windowTitleContains: options.windowTitleContains
         )
         let platformProfile = platformProfileService.prepareAndProfile(app: resolved.app, appElement: resolved.appElement)
@@ -258,7 +258,7 @@ struct StatePipelineExperiment {
         let fixture = AXPipelineV2Fixture(
             generatedAt: Time.iso8601String(from: generatedAt),
             scenarioID: options.scenarioID,
-            appQuery: options.appQuery,
+            targetPID: options.targetPID,
             includeMenuBar: options.includeMenuBar,
             menuMode: effectiveMenuMode,
             maxNodes: options.maxNodes,
@@ -392,7 +392,7 @@ struct StatePipelineExperiment {
         )
 
         let options = StatePipelineLiveCaptureOptions(
-            appQuery: resolved.bundleID,
+            targetPID: resolved.app.processIdentifier,
             windowTitleContains: nil,
             includeMenuBar: includeMenuBar,
             menuMode: menuMode,
@@ -456,7 +456,7 @@ struct StatePipelineExperiment {
         let fixture = AXPipelineV2Fixture(
             generatedAt: Time.iso8601String(from: generatedAt),
             scenarioID: scenarioID,
-            appQuery: resolved.bundleID,
+            targetPID: resolved.app.processIdentifier,
             includeMenuBar: includeMenuBar,
             menuMode: effectiveMenuMode,
             maxNodes: maxNodes,

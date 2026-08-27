@@ -7,11 +7,16 @@ private func elapsedMilliseconds(since start: UInt64, to end: UInt64 = DispatchT
 
 struct WindowStateService {
     private let executionOptions: ActionExecutionOptions
+    private let ocrRecognitionService: OCRRecognitionService
     private let resolver = WindowTargetResolver()
     private let statePipeline = StatePipelineExperiment()
 
-    init(executionOptions: ActionExecutionOptions = .visualCursorEnabled) {
+    init(
+        executionOptions: ActionExecutionOptions = .visualCursorEnabled,
+        ocrRecognitionService: OCRRecognitionService = .live
+    ) {
         self.executionOptions = executionOptions
+        self.ocrRecognitionService = ocrRecognitionService
     }
 
     func getWindowState(request: GetWindowStateRequest) throws -> GetWindowStateResponse {
@@ -73,7 +78,7 @@ struct WindowStateService {
         let ocrMs: Double?
         if request.includeOCR == true {
             if let imagePath = screenshot.image?.imagePath {
-                let outcome = OCRRecognitionService.measure(
+                let outcome = ocrRecognitionService.measure(
                     imagePath: imagePath,
                     interactionToken: capture.envelope.response.interactionToken
                 )

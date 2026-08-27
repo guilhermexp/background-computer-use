@@ -18,28 +18,9 @@ struct RunningAppService {
         targetableApps(frontmostBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier)
     }
 
-    func resolveApp(query: String) -> NSRunningApplication? {
-        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard normalized.isEmpty == false else {
-            return nil
-        }
-
-        let apps = targetableApps()
-
-        if let exactBundle = apps.first(where: { ($0.bundleIdentifier ?? "").lowercased() == normalized }) {
-            return exactBundle
-        }
-        if let exactName = apps.first(where: { ($0.localizedName ?? "").lowercased() == normalized }) {
-            return exactName
-        }
-        if let containsBundle = apps.first(where: { ($0.bundleIdentifier ?? "").lowercased().contains(normalized) }) {
-            return containsBundle
-        }
-        if let containsName = apps.first(where: { ($0.localizedName ?? "").lowercased().contains(normalized) }) {
-            return containsName
-        }
-
-        return nil
+    func resolveApp(pid: pid_t) -> NSRunningApplication? {
+        guard pid > 0 else { return nil }
+        return targetableApps().first { $0.processIdentifier == pid }
     }
 
     private func targetableApps(frontmostBundleID: String?) -> [NSRunningApplication] {

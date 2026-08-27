@@ -68,9 +68,9 @@ struct WindowTargetResolver {
         throw DiscoveryError.windowNotFound(windowID)
     }
 
-    func resolve(appQuery: String, windowTitleContains: String? = nil) throws -> ResolvedWindowTarget {
-        guard let app = runningAppService.resolveApp(query: appQuery) else {
-            throw DiscoveryError.appNotFound(appQuery)
+    func resolve(pid: pid_t, windowTitleContains: String? = nil) throws -> ResolvedWindowTarget {
+        guard let app = runningAppService.resolveApp(pid: pid) else {
+            throw DiscoveryError.appNotFound("PID \(pid)")
         }
 
         let appElement = AXHelpers.applicationElement(pid: app.processIdentifier)
@@ -123,7 +123,7 @@ struct WindowTargetResolver {
         }
 
         guard let window else {
-            throw DiscoveryError.windowNotFound("No usable window found for app query: \(appQuery)")
+            throw DiscoveryError.windowNotFound("No usable window found for PID \(pid)")
         }
 
         if resolutionStrategy == "fallback_window" {

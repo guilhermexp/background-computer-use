@@ -701,7 +701,7 @@ struct Router {
                     message: "No targetable app matched query '\(query)'.",
                     requestID: requestID,
                     recovery: [
-                        "Call POST /v1/list_apps and retry with an exact app name or bundleID.",
+                        "Call POST /v1/list_apps and retry with a current pid.",
                         "Confirm the app is running and has at least one targetable process."
                     ]
                 ),

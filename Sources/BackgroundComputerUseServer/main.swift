@@ -1,3 +1,7 @@
 import BackgroundComputerUse
 
-BackgroundComputerUseServer.run()
+if CommandLine.arguments.dropFirst().first == "--ocr-worker" {
+    OCRWorkerMain.run()
+} else {
+    BackgroundComputerUseServer.run()
+}

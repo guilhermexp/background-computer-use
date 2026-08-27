@@ -158,11 +158,35 @@ public struct ListAppsRequest: Decodable, Sendable {
 }
 
 public struct ListWindowsRequest: Decodable, Sendable {
-    public let app: String
+    public let pid: Int32
 
-    public init(app: String) {
-        self.app = app
+    public init(pid: Int32) throws {
+        guard pid > 0 else {
+            throw ListWindowsRequestValidationError.nonPositivePID(pid)
+        }
+        self.pid = pid
     }
+
+    enum CodingKeys: String, CodingKey {
+        case pid
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let pid = try container.decode(Int32.self, forKey: .pid)
+        guard pid > 0 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .pid,
+                in: container,
+                debugDescription: "pid must be a positive process identifier."
+            )
+        }
+        self.pid = pid
+    }
+}
+
+public enum ListWindowsRequestValidationError: Error, Equatable, Sendable {
+    case nonPositivePID(Int32)
 }
 
 struct CursorFeedbackRequest: Decodable, Sendable {
@@ -657,7 +681,6 @@ public struct TypeTextRequest: Decodable, Sendable {
     public let interactionToken: String?
     public let target: ActionTargetRequestDTO?
     public let text: String
-    public let focusAssistMode: TypeTextFocusAssistModeDTO?
     public let allowOpaqueFocusedSurface: Bool?
     public let cursor: CursorRequestDTO?
     public let includeMenuBar: Bool?
@@ -671,7 +694,6 @@ public struct TypeTextRequest: Decodable, Sendable {
         interactionToken: String? = nil,
         target: ActionTargetRequestDTO? = nil,
         text: String,
-        focusAssistMode: TypeTextFocusAssistModeDTO? = nil,
         allowOpaqueFocusedSurface: Bool? = nil,
         cursor: CursorRequestDTO? = nil,
         includeMenuBar: Bool? = nil,
@@ -684,7 +706,6 @@ public struct TypeTextRequest: Decodable, Sendable {
         self.interactionToken = interactionToken
         self.target = target
         self.text = text
-        self.focusAssistMode = focusAssistMode
         self.allowOpaqueFocusedSurface = allowOpaqueFocusedSurface
         self.cursor = cursor
         self.includeMenuBar = includeMenuBar
@@ -699,7 +720,6 @@ public struct TypeTextRequest: Decodable, Sendable {
         case interactionToken
         case target
         case text
-        case focusAssistMode
         case allowOpaqueFocusedSurface
         case cursor
         case includeMenuBar
@@ -715,7 +735,6 @@ public struct TypeTextRequest: Decodable, Sendable {
         interactionToken = try container.decodeIfPresent(String.self, forKey: .interactionToken)
         target = try container.decodeIfPresent(ActionTargetRequestDTO.self, forKey: .target)
         text = try container.decode(String.self, forKey: .text)
-        focusAssistMode = try container.decodeIfPresent(TypeTextFocusAssistModeDTO.self, forKey: .focusAssistMode)
         allowOpaqueFocusedSurface = try container.decodeIfPresent(Bool.self, forKey: .allowOpaqueFocusedSurface)
         cursor = try container.decodeIfPresent(CursorRequestDTO.self, forKey: .cursor)
         includeMenuBar = try container.decodeIfPresent(Bool.self, forKey: .includeMenuBar)

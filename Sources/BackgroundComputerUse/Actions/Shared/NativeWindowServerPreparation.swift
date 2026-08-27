@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-struct NativeWindowServerPreparationResult {
+struct NativeWindowServerPreparationResult: Sendable {
     let psnStatus: Int32?
     let targetFocusStatus: Int32?
     let keyWindowStatuses: [Int32]

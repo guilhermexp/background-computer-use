@@ -606,7 +606,7 @@ struct AXPipelineV2Envelope: Codable, Sendable {
 struct AXPipelineV2Fixture: Codable, Sendable {
     let generatedAt: String
     let scenarioID: String?
-    let appQuery: String?
+    let targetPID: Int32?
     let includeMenuBar: Bool
     let menuMode: AXMenuMode?
     let maxNodes: Int
@@ -620,7 +620,7 @@ struct AXPipelineV2Fixture: Codable, Sendable {
 struct AXPipelineV2Scenario: Codable, Sendable {
     let id: String
     let title: String
-    let appQuery: String
+    let targetPID: Int32
     let bundleID: String
     let includeMenuBar: Bool
     let menuMode: AXMenuMode?

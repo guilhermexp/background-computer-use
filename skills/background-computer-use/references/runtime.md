@@ -54,6 +54,10 @@ Use the route catalog as source of truth for:
 
 This matters because browser routes may or may not be present depending on the installed runtime version.
 
+Application names and bundle IDs are not selectors. Call `list_apps`, choose the exact positive `pid`
+for the intended process, and pass only that PID to `list_windows`. If the process exits, discover it
+again; the runtime never falls back to a sibling process with the same bundle ID.
+
 ## Release Packaging Checklist
 
 For a public install experience:

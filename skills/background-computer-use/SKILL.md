@@ -35,11 +35,15 @@ Use this skill to start or connect to the local macOS `BackgroundComputerUse` ru
    - Treat this as the source of truth for available routes, request fields, response fields, examples, and error codes.
    - Do not assume browser routes exist; use them only when `/v1/routes` advertises them.
 
-5. For visual tasks, request screenshots with `imageMode: "path"` and inspect the returned image files when useful.
+5. Call `POST /v1/list_apps`, select the exact `pid` of the target process, then call
+   `POST /v1/list_windows` with `{"pid": PID}`. Names and bundle IDs are descriptive only and are
+   never accepted as window selectors.
 
-6. For action routes, reuse `stateToken` from the state you inspected. Reuse the same `cursor.id` when the user wants one continuous visible cursor.
+6. For visual tasks, request screenshots with `imageMode: "path"` and inspect the returned image files when useful.
 
-7. When the visible cursor should explain work in real time, call `POST /v1/cursor_feedback` with public agent-facing text. Stream useful observations or visible response text; do not show route labels like "reading screen", tool names, product branding, or hidden chain-of-thought.
+7. For action routes, reuse `stateToken` from the state you inspected. Reuse the same `cursor.id` when the user wants one continuous visible cursor. `type_text` prepares background input automatically; read `backgroundSafety.foregroundPreserved` and never send the removed `focusAssistMode` field.
+
+8. When the visible cursor should explain work in real time, call `POST /v1/cursor_feedback` with public agent-facing text. Stream useful observations or visible response text; do not show route labels like "reading screen", tool names, product branding, or hidden chain-of-thought.
 
 ## Find targeted elements before reading the full tree
 
@@ -102,11 +106,11 @@ classification that gate already evaluated.
 
 ### Cost of the first OCR read
 
-Apple Vision pays a one-off cold start. The runtime prewarms it in the background at boot, but if you
-call `includeOCR` within the first seconds after launch you may still wait several seconds. Warm reads
-are around one second. `performance.ocrMs` reports the recognition time on every read that ran OCR —
-use it instead of guessing. Recognition is bounded by a deadline; if it is exceeded you get
-`ocr.status: "recognition_failed"` with a diagnostic rather than a hung request.
+Apple Vision pays a one-off system cold start that can take tens of seconds after boot. OCR runs in a
+disposable child process, so a stalled recognition is terminated at the deadline and cannot poison
+the loopback server or the next read. Later reads are normally under one second.
+`performance.ocrMs` reports the complete OCR-worker time — use it instead of guessing. A deadline
+failure returns `ocr.status: "recognition_failed"` with a diagnostic and no leaked worker.
 
 ### Chromium web content: the click escalates to accessibility
 
@@ -161,6 +165,7 @@ Examples:
 python3 "$SKILL_DIR/scripts/bcu-request.py" GET /v1/bootstrap
 python3 "$SKILL_DIR/scripts/bcu-request.py" GET /v1/routes
 python3 "$SKILL_DIR/scripts/bcu-request.py" POST /v1/list_apps '{}'
+python3 "$SKILL_DIR/scripts/bcu-request.py" POST /v1/list_windows '{"pid":12345}'
 ```
 
 ## Local Development

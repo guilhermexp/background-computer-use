@@ -365,7 +365,7 @@ struct WindowStatePayloadParityTests {
         let fixture = AXPipelineV2Fixture(
             generatedAt: "2026-08-25T00:00:00Z",
             scenarioID: "payload-budget",
-            appQuery: "com.example.fixture",
+            targetPID: 123,
             includeMenuBar: false,
             menuMode: AXMenuMode.none,
             maxNodes: 100,

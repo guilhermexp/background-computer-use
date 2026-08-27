@@ -197,11 +197,16 @@ enum ClickCoordinateEscalationPolicy {
 struct ClickRouteService {
     private let executionOptions: ActionExecutionOptions
     private let targetResolver: AXActionTargetResolver
+    private let ocrRecognitionService: OCRRecognitionService
     private let settleDelay: TimeInterval = 0.35
     private let coordinateTransport = NativeBackgroundClickTransport()
 
-    init(executionOptions: ActionExecutionOptions = .visualCursorEnabled) {
+    init(
+        executionOptions: ActionExecutionOptions = .visualCursorEnabled,
+        ocrRecognitionService: OCRRecognitionService = .live
+    ) {
         self.executionOptions = executionOptions
+        self.ocrRecognitionService = ocrRecognitionService
         targetResolver = AXActionTargetResolver(executionOptions: executionOptions)
     }
 
@@ -464,7 +469,7 @@ struct ClickRouteService {
         }
 
         let liveInteractionToken = capture.envelope.response.interactionToken
-        let ocr = OCRRecognitionService.recognize(
+        let ocr = ocrRecognitionService.recognize(
             imagePath: imagePath,
             interactionToken: liveInteractionToken
         )
@@ -595,7 +600,7 @@ struct ClickRouteService {
                 )
             },
             recognize: {
-                OCRRecognitionService.recognize(
+                ocrRecognitionService.recognize(
                     cgImage: $0,
                     interactionToken: outcome.postCapture?.envelope.response.interactionToken ?? liveInteractionToken
                 )

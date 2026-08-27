@@ -116,7 +116,7 @@ enum RouteRegistry {
             method: "POST",
             path: "/v1/list_windows",
             category: "discovery",
-            summary: "List windows for a target app query.",
+            summary: "List windows for one exact running application PID.",
             execution: RouteExecutionPolicyDTO(
                 lane: .sharedRead,
                 backgroundBehavior: .backgroundRequired,
@@ -349,8 +349,8 @@ enum RouteRegistry {
             execution: actionPolicy(lane: .windowWrite, mainThreadBehavior: .avoid),
             implementationStatus: .implemented,
             notes: [
-                "Uses Unicode CGEvent postToPid, optional AX focus/caret assist, cursor approach, and read-act-read verification.",
-                "Default focusAssistMode is none; no app/window focus restacking or Return submission is hidden inside the route."
+                "Prepares the target window without global activation, uses element-bound AX writes or confirmed PID-scoped Unicode delivery, and verifies exact text state.",
+                "Success requires foreground preservation; no public focus mode or Return submission is hidden inside the route."
             ]
         ),
         RouteDescriptorDTO(
@@ -463,7 +463,7 @@ enum RouteRegistry {
             return json([])
         case RouteID.listWindows.rawValue:
             return json([
-                field("app", "string", required: true, "App name, bundle ID, or target query.")
+                field("pid", "integer", required: true, "Positive process identifier returned by list_apps.")
             ])
         case RouteID.cursorFeedback.rawValue:
             return json([
@@ -609,7 +609,6 @@ enum RouteRegistry {
                     "Optional semantic text-entry target. Omit to type into the current focused text entry."
                 ),
                 field("text", "string", required: true),
-                field("focusAssistMode", "none | focus | focus_and_caret_end", defaultValue: "none"),
                 field(
                     "allowOpaqueFocusedSurface",
                     "boolean",
@@ -829,7 +828,7 @@ enum RouteRegistry {
                 field("contractVersion", "string", required: true),
                 field("ok", "boolean", required: true),
                 field("classification", "success | unsupported | effect_not_verified | verifier_ambiguous", required: true),
-                field("failureDomain", "targeting | unsupported | coercion | transport | verification | app_specific_semantics | null"),
+                field("failureDomain", "targeting | unsupported | coercion | transport | verification | background_safety | app_specific_semantics | null"),
                 field("summary", "string", required: true),
                 field("window", "ResolvedWindow | null"),
                 field("target", "AXActionTarget | null"),
@@ -925,7 +924,7 @@ enum RouteRegistry {
             field("contractVersion", "string", required: true),
             field("ok", "boolean", required: true),
             field("classification", "success | unsupported | effect_not_verified | verifier_ambiguous", required: true),
-            field("failureDomain", "targeting | unsupported | coercion | transport | verification | app_specific_semantics | null"),
+            field("failureDomain", "targeting | unsupported | coercion | transport | verification | background_safety | app_specific_semantics | null"),
             field("summary", "string", required: true),
             field("window", "ResolvedWindow | null"),
             field("target", "AXActionTarget | null"),
@@ -946,9 +945,9 @@ enum RouteRegistry {
             fields.insert(field("writePrimitive", "string | null"), at: 8)
         } else if type == "TypeTextResponse" {
             fields.insert(field("text", "string", required: true), at: 6)
-            fields.insert(field("focusAssistMode", "none | focus | focus_and_caret_end", required: true), at: 7)
-            fields.insert(field("dispatchPrimitive", "string | null"), at: 8)
-            fields.insert(field("dispatchSucceeded", "boolean | null"), at: 9)
+            fields.insert(field("dispatchPrimitive", "string | null"), at: 7)
+            fields.insert(field("dispatchSucceeded", "boolean | null"), at: 8)
+            fields.insert(field("backgroundSafety", "TypeTextBackgroundSafety | null"), at: 9)
         }
 
         return json(fields)
@@ -959,7 +958,7 @@ enum RouteRegistry {
             field("contractVersion", "string", required: true),
             field("ok", "boolean", required: true, "Transport-level success: true when the key chord dispatched (including dispatched_no_observed_effect). Inspect verification.classification for the observed effect signal."),
             field("classification", "success | unsupported | effect_not_verified | verifier_ambiguous", required: true),
-            field("failureDomain", "targeting | unsupported | coercion | transport | verification | app_specific_semantics | null"),
+            field("failureDomain", "targeting | unsupported | coercion | transport | verification | background_safety | app_specific_semantics | null"),
             field("summary", "string", required: true),
             field("window", "ResolvedWindow | null"),
             field("parsedKey", "PressKeyParsedKey | null"),

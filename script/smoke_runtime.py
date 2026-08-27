@@ -3,6 +3,7 @@ import argparse
 import json
 import math
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -15,12 +16,24 @@ from typing import Optional
 
 AUTH_HEADER = "X-Background-Computer-Use-Token"
 
-# Apple Vision pays a one-off cold-start cost on the first recognition after the runtime boots.
-# The runtime prewarms it, but a runtime that just launched can still be mid-warmup.
+# Apple Vision can pay a one-off cold-start cost in the first disposable OCR worker after boot.
 DEFAULT_TIMEOUT = 30
 COLD_OCR_TIMEOUT = 90
-# A warm OCR read must stay under this budget; anything slower is a real regression, not a cold start.
+# A later worker must stay under this budget; anything slower is a real regression, not a cold start.
 WARM_OCR_BUDGET_SECONDS = 5.0
+
+
+def list_windows_request(pid: int) -> dict:
+    if pid <= 0:
+        raise ValueError("pid must be positive")
+    return {"pid": pid}
+
+
+def text_result_is_background_safe(payload: dict) -> bool:
+    return (
+        payload.get("classification") == "success"
+        and payload.get("backgroundSafety", {}).get("foregroundPreserved") is True
+    )
 
 
 def attempted_ax_escalation(click: dict) -> bool:
@@ -93,6 +106,12 @@ class Smoke:
     def __init__(self) -> None:
         self.client = BCUClient()
         self.results: list[dict] = []
+        self.chrome_process: Optional[subprocess.Popen] = None
+        self.chrome_profile: Optional[Path] = None
+        self.fixture_path: Optional[Path] = None
+        self.safari_fixture_opened = False
+        self.safari_was_running = False
+        self.original_frontmost_bundle: Optional[str] = None
 
     def pass_(self, name: str, detail: str = "") -> None:
         self.results.append({"name": name, "status": "pass", "detail": detail})
@@ -139,23 +158,31 @@ class Smoke:
         return payload
 
     def run(self, include_apps: bool) -> dict:
-        self.require_status("health-open", "GET", "/health", 200, auth=False)
-        self.require_status("v1-requires-auth", "GET", "/v1/routes", 401, auth=False)
-        self.require_status("v1-routes-authenticated", "GET", "/v1/routes", 200)
-        if include_apps:
-            self.chrome_fixture()
-        return self.summary()
+        try:
+            self.require_status("health-open", "GET", "/health", 200, auth=False)
+            self.require_status("v1-requires-auth", "GET", "/v1/routes", 401, auth=False)
+            self.require_status("v1-routes-authenticated", "GET", "/v1/routes", 200)
+            if include_apps:
+                self.chrome_fixture()
+                self.safari_text_fixture()
+            return self.summary()
+        finally:
+            self.cleanup_fixture()
 
     def chrome_fixture(self) -> None:
-        app_name = self.open_chrome_fixture()
-        if app_name is None:
+        chrome_pid = self.open_chrome_fixture()
+        if chrome_pid is None:
             return
 
-        window_id = self.wait_for_window(app_name)
+        window_id = self.wait_for_window(
+            chrome_pid,
+            title_contains="BCU Smoke Fixture",
+            check_name="chrome",
+        )
         if window_id is None:
-            self.fail("chrome-window", f"no visible window for {app_name}")
+            self.fail("chrome-window", f"no visible window for pid {chrome_pid}")
             return
-        self.pass_("chrome-window", window_id)
+        self.pass_("chrome-window", f"pid={chrome_pid} window={window_id}")
 
         # First OCR read may still be paying Apple Vision warmup, so it gets the cold budget.
         state = self.get_state(
@@ -388,6 +415,36 @@ class Smoke:
         if status != 200:
             self.fail("chrome-ocr-click", f"HTTP {status}: {click}")
             return
+        if click.get("fallbackReason") == "stale_coordinate_guard":
+            state = self.read_state_with_stable_interaction_token(
+                window_id,
+                "chrome-recover-stale-state",
+                attempts=6,
+                required_consecutive=2,
+            )
+            if state is None:
+                return
+            button_anchor = self.find_ocr_anchor(state, ["BCU Smoke Button"])
+            if button_anchor is None:
+                self.fail("chrome-recover-stale-anchor", "fresh OCR button anchor was unavailable")
+                return
+            status, click = self.call(
+                "chrome-ocr-click-after-refresh",
+                "POST",
+                "/v1/click",
+                {
+                    "window": window_id,
+                    "stateToken": state["stateToken"],
+                    "interactionToken": state["interactionToken"],
+                    "target": button_anchor["target"],
+                    "clickCount": 1,
+                    "imageMode": "path",
+                    "maxNodes": 6500,
+                },
+            )
+            if status != 200 or click.get("fallbackReason") == "stale_coordinate_guard":
+                self.fail("chrome-ocr-click-after-refresh", f"HTTP {status}: {click}")
+                return
 
         classification = str(click.get("classification"))
         verification = click.get("verification") or {}
@@ -468,6 +525,7 @@ class Smoke:
         window_id: str,
         name: str,
         attempts: int = 4,
+        required_consecutive: int = 2,
     ) -> Optional[dict]:
         """Read state until two consecutive reads agree on interactionToken.
 
@@ -477,6 +535,7 @@ class Smoke:
         """
         body = {"window": window_id, "imageMode": "path", "includeOCR": True, "maxNodes": 6500}
         previous: Optional[dict] = None
+        stable_count = 0
         for attempt in range(max(attempts, 1)):
             status, payload = self.call(name, "POST", "/v1/get_window_state", body)
             if status is None:
@@ -485,36 +544,73 @@ class Smoke:
                 self.fail(name, f"HTTP {status}: {payload}")
                 return None
             if previous is not None and previous["interactionToken"] == payload["interactionToken"]:
-                self.pass_(name, f"interactionToken stable after {attempt + 1} reads")
+                stable_count += 1
+            else:
+                stable_count = 1
+            if stable_count >= max(required_consecutive, 2):
+                self.pass_(
+                    name,
+                    f"interactionToken stable for {stable_count} consecutive reads",
+                )
                 return payload
             previous = payload
             time.sleep(0.3)
         self.fail(name, f"interactionToken never stabilised across {attempts} consecutive reads")
         return previous
 
-    def open_chrome_fixture(self) -> Optional[str]:
-        if subprocess.run(["/usr/bin/pgrep", "-x", "Google Chrome"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
-            installed = subprocess.run(
-                ["/usr/bin/mdfind", "kMDItemCFBundleIdentifier == 'com.google.Chrome'"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                timeout=5,
-            )
-            if not installed.stdout.strip():
-                self.skip("chrome-fixture", "Google Chrome is not installed")
-                return None
+    def open_chrome_fixture(self) -> Optional[int]:
+        chrome_binary = self.find_chrome_binary()
+        if chrome_binary is None:
+            self.skip("chrome-fixture", "Google Chrome is not installed")
+            return None
         fixture = self.write_fixture()
         # A cache-busting query forces Chrome to load the document fresh instead of re-focusing a tab
         # that a previous run left scrolled, which would hide the fixture controls from AX and OCR.
         url = f"file://{fixture}?run={int(time.time())}"
-        subprocess.run(["/usr/bin/open", "-a", "Google Chrome", url], check=False)
+        self.chrome_profile = Path(tempfile.mkdtemp(prefix="bcu-smoke-chrome-"))
+        self.chrome_process = subprocess.Popen(
+            [
+                str(chrome_binary),
+                f"--user-data-dir={self.chrome_profile}",
+                "--no-first-run",
+                "--disable-default-apps",
+                "--disable-extensions",
+                "--disable-sync",
+                "--disable-background-networking",
+                "--new-window",
+                url,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
         time.sleep(2.0)
-        self.pass_("chrome-fixture", url)
-        return "Google Chrome"
+        if self.chrome_process.poll() is not None:
+            self.fail("chrome-fixture", "isolated Google Chrome exited before discovery")
+            return None
+        self.pass_("chrome-fixture", f"pid={self.chrome_process.pid} {url}")
+        return self.chrome_process.pid
+
+    def find_chrome_binary(self) -> Optional[Path]:
+        standard = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+        if standard.is_file():
+            return standard
+        installed = subprocess.run(
+            ["/usr/bin/mdfind", "kMDItemCFBundleIdentifier == 'com.google.Chrome'"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=5,
+        )
+        for app_path in installed.stdout.splitlines():
+            candidate = Path(app_path) / "Contents/MacOS/Google Chrome"
+            if candidate.is_file():
+                return candidate
+        return None
 
     def write_fixture(self) -> Path:
         path = Path(tempfile.gettempdir()) / "bcu-smoke-runtime.html"
+        self.fixture_path = path
         rows = "\n".join(f"<div class='row'>Row {i}</div>" for i in range(1, 80))
         path.write_text(
             f"""<!doctype html>
@@ -552,22 +648,212 @@ class Smoke:
         )
         return path
 
-    def wait_for_window(self, app_name: str) -> Optional[str]:
+    def wait_for_window(
+        self,
+        pid: int,
+        title_contains: str,
+        check_name: str,
+    ) -> Optional[str]:
         for _ in range(20):
             try:
-                status, payload = self.client.request("POST", "/v1/list_windows", {"app": app_name})
+                status, payload = self.client.request(
+                    "POST",
+                    "/v1/list_windows",
+                    list_windows_request(pid),
+                )
             except Exception:
                 status, payload = None, {}
             if status == 200:
+                resolved_pid = payload.get("app", {}).get("pid")
+                window_pids = {window.get("pid") for window in payload.get("windows", [])}
+                if resolved_pid != pid or any(window_pid != pid for window_pid in window_pids):
+                    self.fail(
+                        f"{check_name}-pid-isolation",
+                        f"requested pid={pid} resolved pid={resolved_pid} window pids={list(window_pids)}",
+                    )
+                    return None
                 for window in payload.get("windows", []):
                     title = str(window.get("title", ""))
-                    if "BCU Smoke Fixture" in title:
+                    if title_contains in title:
+                        self.pass_(f"{check_name}-pid-isolation", f"all windows belong to pid={pid}")
                         return str(window.get("windowID"))
-                windows = payload.get("windows", [])
-                if windows:
-                    return str(windows[0].get("windowID"))
             time.sleep(0.25)
         return None
+
+    def safari_text_fixture(self) -> None:
+        if self.fixture_path is None:
+            self.fail("safari-fixture", "shared smoke fixture was unavailable")
+            return
+        apps_before = self.list_apps_payload()
+        if apps_before is None:
+            return
+        frontmost = apps_before.get("frontmostApp") or {}
+        self.original_frontmost_bundle = frontmost.get("bundleID")
+        self.safari_was_running = any(
+            app.get("bundleID") == "com.apple.Safari"
+            for app in apps_before.get("runningApps", [])
+        )
+
+        subprocess.run(
+            ["/usr/bin/open", "-a", "Safari", f"file://{self.fixture_path}"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        self.safari_fixture_opened = True
+        safari_pid = self.wait_for_app_pid("com.apple.Safari")
+        if safari_pid is None:
+            self.fail("safari-fixture", "Safari did not become targetable")
+            return
+        window_id = self.wait_for_window(
+            safari_pid,
+            title_contains="BCU Smoke Fixture",
+            check_name="safari",
+        )
+        if window_id is None:
+            self.fail("safari-window", f"fixture window was unavailable for pid={safari_pid}")
+            return
+
+        if self.original_frontmost_bundle:
+            subprocess.run(
+                ["/usr/bin/open", "-b", self.original_frontmost_bundle],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        foreground_before = self.wait_for_frontmost_pid(excluding=safari_pid)
+        if foreground_before is None:
+            self.fail("safari-background-setup", "could not place another application in foreground")
+            return
+
+        status, found = self.call(
+            "safari-find-input",
+            "POST",
+            "/v1/find_elements",
+            {
+                "window": window_id,
+                "role": "textField",
+                "includeMenuBar": False,
+            },
+        )
+        matches = found.get("matches", []) if status == 200 else []
+        preferred_matches = [
+            match for match in matches
+            if match.get("domIdentifier") == "bcu-smoke-input"
+        ]
+        if preferred_matches:
+            matches = preferred_matches
+        if not matches:
+            self.fail("safari-find-input", f"HTTP {status}: {found}")
+            return
+        node_id = matches[0].get("nodeID")
+        if not node_id:
+            self.fail("safari-find-input", "matched input exposed no nodeID")
+            return
+
+        status, typed = self.call(
+            "safari-background-type",
+            "POST",
+            "/v1/type_text",
+            {
+                "window": window_id,
+                "stateToken": found.get("stateToken"),
+                "target": {"kind": "node_id", "value": node_id},
+                "text": "bcu-background-safe",
+                "includeMenuBar": False,
+            },
+        )
+        foreground_after = self.frontmost_pid()
+        detail = (
+            f"HTTP {status} classification={typed.get('classification')} "
+            f"backgroundSafety={typed.get('backgroundSafety')} "
+            f"frontmostBefore={foreground_before} frontmostAfter={foreground_after}"
+        )
+        if (
+            status == 200
+            and text_result_is_background_safe(typed)
+            and foreground_after == foreground_before
+        ):
+            self.pass_("safari-background-type", detail)
+        else:
+            self.fail("safari-background-type", detail)
+
+    def list_apps_payload(self) -> Optional[dict]:
+        try:
+            status, payload = self.client.request("POST", "/v1/list_apps", {})
+        except Exception as exc:
+            self.fail("list-apps-runtime", f"{type(exc).__name__}: {exc}")
+            return None
+        if status != 200:
+            self.fail("list-apps-runtime", f"HTTP {status}: {payload}")
+            return None
+        return payload
+
+    def wait_for_app_pid(self, bundle_id: str) -> Optional[int]:
+        for _ in range(30):
+            payload = self.list_apps_payload()
+            if payload is None:
+                return None
+            for app in payload.get("runningApps", []):
+                if app.get("bundleID") == bundle_id and isinstance(app.get("pid"), int):
+                    return int(app["pid"])
+            time.sleep(0.2)
+        return None
+
+    def frontmost_pid(self) -> Optional[int]:
+        payload = self.list_apps_payload()
+        if payload is None:
+            return None
+        pid = (payload.get("frontmostApp") or {}).get("pid")
+        return int(pid) if isinstance(pid, int) else None
+
+    def wait_for_frontmost_pid(self, excluding: int) -> Optional[int]:
+        for _ in range(30):
+            pid = self.frontmost_pid()
+            if pid is not None and pid != excluding:
+                return pid
+            time.sleep(0.2)
+        return None
+
+    def cleanup_fixture(self) -> None:
+        if self.safari_fixture_opened:
+            close_script = (
+                'tell application "Safari" to close every document whose name is "BCU Smoke Fixture"'
+            )
+            subprocess.run(
+                ["/usr/bin/osascript", "-e", close_script],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if not self.safari_was_running:
+                subprocess.run(
+                    ["/usr/bin/osascript", "-e", 'tell application "Safari" to quit'],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+        if self.original_frontmost_bundle:
+            subprocess.run(
+                ["/usr/bin/open", "-b", self.original_frontmost_bundle],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        if self.chrome_process is not None and self.chrome_process.poll() is None:
+            self.chrome_process.terminate()
+            try:
+                self.chrome_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.chrome_process.kill()
+                self.chrome_process.wait(timeout=5)
+        if self.chrome_profile is not None:
+            shutil.rmtree(self.chrome_profile, ignore_errors=True)
+        if self.fixture_path is not None:
+            try:
+                self.fixture_path.unlink()
+            except FileNotFoundError:
+                pass
 
     def get_state(
         self,

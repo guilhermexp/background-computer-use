@@ -19,7 +19,7 @@ struct RuntimeFacadePublicAPITests {
         let cursor = CursorRequestDTO(id: "agent-1", name: "Agent", color: "#20C46B")
         let target = try ActionTargetRequestDTO.displayIndex(3)
 
-        let listWindows = ListWindowsRequest(app: "Safari")
+        let listWindows = try ListWindowsRequest(pid: 12_345)
         let state = GetWindowStateRequest(window: "window-id", imageMode: .path)
         let findElements = FindElementsRequest(window: "window-id", role: "button", text: "Save")
         let runScript = RunScriptRequest(language: "applescript", source: "return 1", timeoutMs: 1_000)
@@ -40,7 +40,7 @@ struct RuntimeFacadePublicAPITests {
         let pressKey = PressKeyRequest(window: "window-id", key: "command+a")
         let setValue = SetValueRequest(window: "window-id", target: target, value: "hello")
 
-        #expect(listWindows.app == "Safari")
+        #expect(listWindows.pid == 12_345)
         #expect(state.imageMode == .path)
         #expect(findElements.role == "button")
         #expect(runScript.language == "applescript")

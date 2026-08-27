@@ -56,9 +56,9 @@ struct RuntimeServices {
     func listWindows(_ request: ListWindowsRequest) throws -> ListWindowsResponse {
         try execute(
             routeID: .listWindows,
-            target: RouteTargetSummaryDTO(kind: .appQuery, appQuery: request.app, windowID: nil)
+            target: RouteTargetSummaryDTO(kind: .appPID, pid: request.pid, windowID: nil)
         ) {
-            try windowListService.listWindows(appQuery: request.app)
+            try windowListService.listWindows(pid: request.pid)
         }
     }
 
@@ -174,6 +174,6 @@ struct RuntimeServices {
     }
 
     private func windowTarget(_ windowID: String) -> RouteTargetSummaryDTO {
-        RouteTargetSummaryDTO(kind: .window, appQuery: nil, windowID: windowID)
+        RouteTargetSummaryDTO(kind: .window, pid: nil, windowID: windowID)
     }
 }

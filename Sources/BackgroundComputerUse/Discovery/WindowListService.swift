@@ -7,11 +7,11 @@ struct WindowListService {
     private let attachedSurfaceDiscovery = AXAttachedSurfaceDiscovery()
     private let targetCache = WindowTargetCache.shared
 
-    func listWindows(appQuery: String) throws -> ListWindowsResponse {
-        guard let app = runningAppService.resolveApp(query: appQuery),
+    func listWindows(pid: pid_t) throws -> ListWindowsResponse {
+        guard let app = runningAppService.resolveApp(pid: pid),
               let bundleID = app.bundleIdentifier,
               let name = app.localizedName else {
-            throw DiscoveryError.appNotFound(appQuery)
+            throw DiscoveryError.appNotFound("PID \(pid)")
         }
 
         let (windows, notes) = try axWindowDiscovery.windows(for: app)
