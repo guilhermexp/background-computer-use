@@ -45,4 +45,3 @@
 
 - **WHEN** a `wait_for` with `gone:false` is polling and the target window closes
 - **THEN** the runtime returns `conditionMet:false` with a note that the target window closed, instead of a 404 error
-

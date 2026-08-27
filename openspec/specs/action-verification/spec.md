@@ -44,4 +44,3 @@ The configured settle delay before a verification reread, and the poll interval 
 
 - **WHEN** a call site depends on pumping the run loop (AX observer callbacks, or an explicitly main-thread branch)
 - **THEN** it continues to use `run(until:)` rather than a plain sleep
-

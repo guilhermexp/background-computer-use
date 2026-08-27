@@ -63,4 +63,3 @@ Error responses for unexpected failures SHALL include the underlying error descr
 
 - **WHEN** an error response is produced
 - **THEN** its `requestID` is the identifier of the failing request, not a freshly generated one
-

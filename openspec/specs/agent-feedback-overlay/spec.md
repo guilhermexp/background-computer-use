@@ -108,4 +108,3 @@ The runtime SHALL support an explicit pointing feedback operation that moves or 
 
 - **WHEN** visual cursor behavior is disabled for the caller
 - **THEN** pointing feedback returns a disabled or no-op cursor response and does not start overlay windows or wait for animation
-

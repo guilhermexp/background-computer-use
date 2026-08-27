@@ -5,12 +5,12 @@ Servidor HTTP loopback (macOS) que controla e lê janelas nativas em background 
 ## Tech stack
 
 - **Swift 6.2**, `platforms: [.macOS(.v14)]` (macOS 14 mínimo). O app/runtime usa somente SDKs Apple (AppKit, ApplicationServices, CoreGraphics, Vision); dependências externas ficam restritas ao target de testes.
-- **Package.swift:** library `BackgroundComputerUseKit` (target `BackgroundComputerUse`) + executable `BackgroundComputerUse` (target `BackgroundComputerUseServer`, trivial: `BackgroundComputerUseServer.run()`).
+- **Package.swift:** library `BackgroundComputerUseKit` (target `BackgroundComputerUse`) + executable `BackgroundComputerUse` (target `BackgroundComputerUseServer`): sem argumentos sobe o servidor; com `--ocr-worker` o mesmo binário roda como worker OCR descartável (`OCRWorkerMain.run()`), lendo a request em stdin e escrevendo a resposta em stdout.
 - **Testes:** Swift Testing (`import Testing`, `@Suite`, `@Test`, `#expect`). **Não** XCTest. `Package.swift` fixa `swift-testing` em `swift-6.2.3-RELEASE` como dependência exclusiva do test target, permitindo `swift test` também em instalações de Command Line Tools sem o módulo `Testing` embutido.
 
 ## Convenções
 
-- **Camadas** (por diretório, target único): `API/` (Router, RouteRegistry, HTTP, auth) · `Actions/<Nome>/` (RouteServices, um por rota mutante) + `Actions/Shared/` · `StatePipeline/` (captura AX → projeção) · `Screenshot/` · `Cursor/` · `Contracts/` (DTOs Codable públicos, camada folha) · `Runtime/` (RuntimeServices, filas) · `App/` (facade pública, bootstrap). Regra: `Actions` consome `StatePipeline`/`Cursor`, não o contrário.
+- **Camadas** (por diretório, target único): `API/` (Router, RouteRegistry, HTTP, auth) · `Actions/<Nome>/` (RouteServices, um por rota mutante) + `Actions/Shared/` · `StatePipeline/` (captura AX → projeção) · `Screenshot/` · `Cursor/` · `OCR/` (worker fora do processo + Vision síncrono) · `Contracts/` (DTOs Codable públicos, camada folha) · `Runtime/` (RuntimeServices, filas, `Runtime/Process/` runner de subprocessos com timeout) · `App/` (facade pública, bootstrap). Regra: `Actions` consome `StatePipeline`/`Cursor`, não o contrário.
 - **RouteService read-act-read:** capture (pipeline AX) → validar request/stateToken → resolveTarget → safety gate → cursor prepare → dispatch (AX action ou native transport) → reread/verify → response com classificação verifier-first (`success`/`effect_not_verified`/`verifier_ambiguous`/`unsupported`). Erro de background é reportado, nunca escondido roubando foco.
 - **Self-documentation:** `GET /v1/routes` (RouteRegistry + APIDocumentation) é a fonte de verdade do contrato para o agente. Todo campo de request/response deve estar documentado lá e bater com o DTO real.
 

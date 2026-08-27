@@ -31,4 +31,3 @@
 
 - **WHEN** screenshot capture fails or is unavailable
 - **THEN** the route returns the state and marks it could compute, reports `annotatedImage:null`, and includes a note explaining why no annotated artifact was generated
-

@@ -78,4 +78,3 @@ When action execution options disable the visual cursor, the runtime SHALL NOT s
 
 - **WHEN** an HTTP action route runs with visual cursors enabled and no explicit cursor is provided
 - **THEN** the default `agent` cursor may render action state and feedback according to the cursor-overlay and agent-feedback-overlay requirements
-

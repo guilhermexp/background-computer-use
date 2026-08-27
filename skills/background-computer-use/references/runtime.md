@@ -18,6 +18,8 @@ https://github.com/actuallyepic/background-computer-use/releases/latest/download
 
 When using a release zip, set `BCU_RELEASE_SHA256` when possible.
 
+When the manifest runtime is unreachable and the helper falls back to launching the installed app, it first terminates any running `BackgroundComputerUse` process and deletes the stale manifest, so the relaunched runtime publishes a fresh base URL and auth token.
+
 ## Permission Contract
 
 macOS Accessibility and Screen Recording permissions attach to the signed app bundle. The helper scripts install and launch the app, but the user may still need to grant permissions in System Settings. Read the manifest first, then trust the authenticated `GET /v1/bootstrap` response:

@@ -68,7 +68,7 @@ import BackgroundComputerUse
 
 let runtime = BackgroundComputerUseRuntime()
 let apps = runtime.listApps()
-let windows = try runtime.listWindows(.init(app: "Safari"))
+let windows = try runtime.listWindows(.init(pid: apps.runningApps[0].pid))
 ```
 
 Direct package calls default to `visualCursor: .disabled`, so action methods do not start the virtual cursor overlay or wait for cursor animation before dispatching. Existing action verification and post-action rereads still run.
@@ -91,7 +91,7 @@ macOS permissions attach to the signed host application. The bundled HTTP runtim
 2. Check `permissions` and `instructions.ready`.
 3. `GET /v1/routes`
 4. `POST /v1/list_apps`
-5. `POST /v1/list_windows`
+5. `POST /v1/list_windows` with the exact `pid` picked from `list_apps`. Application names and bundle IDs are descriptive only and are never accepted as selectors, so duplicate instances of the same app stay distinguishable.
 6. `POST /v1/get_window_state`
 7. Optionally call `POST /v1/annotate_window` when you need a numbered screenshot-to-target map.
 8. Optionally stream visible agent feedback with `/v1/cursor_feedback`.
@@ -117,6 +117,7 @@ Core routes:
 - `POST /v1/list_windows`
 - `POST /v1/cursor_feedback`
 - `POST /v1/get_window_state`
+- `POST /v1/find_elements`
 - `POST /v1/annotate_window`
 - `POST /v1/click`
 - `POST /v1/scroll`
@@ -130,6 +131,7 @@ Core routes:
 - `POST /v1/wait_for`
 - `POST /v1/read_text`
 - `POST /v1/select_text`
+- `POST /v1/run_script`
 
 ## Minimal Curl
 
@@ -161,7 +163,7 @@ Read a window:
 curl -s -X POST "$BASE/v1/list_windows" \
   -H "X-Background-Computer-Use-Token: $TOKEN" \
   -H 'content-type: application/json' \
-  -d '{"app":"Safari"}' | python3 -m json.tool
+  -d '{"pid":1234}' | python3 -m json.tool
 
 curl -s -X POST "$BASE/v1/get_window_state" \
   -H "X-Background-Computer-Use-Token: $TOKEN" \
@@ -193,7 +195,7 @@ Type into a text target:
 curl -s -X POST "$BASE/v1/type_text" \
   -H "X-Background-Computer-Use-Token: $TOKEN" \
   -H 'content-type: application/json' \
-  -d '{"window":"WINDOW_ID","target":{"kind":"display_index","value":4},"text":"hello","focusAssistMode":"focus_and_caret_end","imageMode":"path"}' | python3 -m json.tool
+  -d '{"window":"WINDOW_ID","target":{"kind":"display_index","value":4},"text":"hello","imageMode":"path"}' | python3 -m json.tool
 ```
 
 Action routes show the on-screen agent cursor by default when the HTTP runtime has visual cursors enabled. If the request omits `cursor`, the runtime reuses the stable default session:
@@ -229,7 +231,11 @@ Use `POST /v1/wait_for` after navigation or actions that trigger loading instead
 
 `press_key` accepts normal macOS chord names such as `command+a`, `escape`, and `backspace`. For select-all in Electron text fields, the runtime first tries verified AX selection semantics and falls back to native key delivery when AX selection cannot be verified.
 
-`POST /v1/list_windows` returns only real AX windows and keeps one entry per backing `windowID`; auxiliary AX containers such as Finder's desktop scroll area are excluded.
+`POST /v1/type_text` prepares background input by itself: there is no public focus mode, and a success requires that the user's foreground application was preserved. Read `backgroundSafety.foregroundPreserved` in the response.
+
+`POST /v1/list_windows` takes the exact `pid` of one running process, returns only real AX windows, and keeps one entry per backing `windowID`; auxiliary AX containers such as Finder's desktop scroll area are excluded.
+
+`POST /v1/run_script` runs arbitrary AppleScript/JXA source, so the runtime token also authorizes control of any scriptable app. The lane is unverified — re-read state afterwards — and every attempt is recorded in `$TMPDIR/background-computer-use/audit/script-executions.jsonl`.
 
 ## License
 

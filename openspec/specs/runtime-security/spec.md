@@ -56,4 +56,3 @@ The runtime session mutex SHALL use reference counting so its exclusion holds wh
 
 - **WHEN** a session issues two concurrent requests and the first finishes while the second is still executing
 - **THEN** the session exclusion remains held (refcount > 0) and another session cannot acquire it until the second request finishes
-
