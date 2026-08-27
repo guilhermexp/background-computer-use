@@ -1,42 +1,28 @@
-# Reboot continuation — F1 click evidence
+# Diagnóstico histórico — AX globalmente travado (pré-reboot, F1 click evidence)
 
-## Repo state
+Estado de tarefas, critérios de aceite e roteiro de smoke **não vivem aqui**. Donos canônicos:
 
-- Repo: `/Users/guilhermevarela/Documents/Projetos/SelfHosting/background-computer-use`
-- Branch: `fix/bcu-web-reliability`
-- Change: `fix-uncontaminated-click-evidence` — 22/23 tasks; only live smoke 6.3 remains.
-- Implementation commits: `e782f56` (uncontaminated cursor/focus evidence), `d8b6bec` (post-focus baseline for ambient churn).
-- Change artifacts commit: `6abc7f1`.
-- Installed app is the debug build from `d8b6bec`; bundle permissions were green before reboot.
-- Leave pre-existing `multiplan-artifacts/` untracked and untouched.
+- `openspec/changes/fix-uncontaminated-click-evidence/` (tasks e deltas do F1 click evidence)
+- `openspec/changes/harden-bcu-runtime-excellence/` (smoke ao vivo assinado que superou este roteiro)
 
-## Proven before reboot
+O único registro preservado abaixo é o diagnóstico do travamento do subsistema de
+Accessibility do macOS, porque nenhum outro documento o cobre.
 
-- `swift build -c release` passes.
-- `swift test`: 204 tests, only pre-existing `ocrRecognitionReportsItsOwnDuration` fails.
-- `openspec validate fix-uncontaminated-click-evidence --strict` passes.
-- Live smoke on `e782f56` proved the original false positive is gone:
-  - `ocrAnchorDisappeared=False` (was True).
-  - `intentSignals=[]`, `classification=effect_not_verified` (was false-positive success).
-  - Real AX click still reports `focused_element_changed` and succeeds.
-- That smoke also found transport-created `rendered_text_changed` + `selection_summary_changed` blocked AX escalation. Commit `d8b6bec` adds a full post-focus/pre-mouse baseline without weakening `windowStillSettling` for genuine churn.
+## Sintomas
 
-## Why reboot
+- BCU retornava 0 janelas AX para Chrome, TextEdit e Finder.
+- `macos-harness state TextEdit` (ferramenta independente) também retornava só
+  `AXApplication`, 0 `AXWindow` — logo, não era bug do BCU.
+- CGWindow continuava enxergando as janelas reais de TextEdit/Chrome.
+- `AXIsProcessTrusted` permanecia `true` nas duas ferramentas.
 
-The macOS AX subsystem became globally wedged before `d8b6bec` could be smoke-tested:
+## O que não resolveu
 
-- BCU returned 0 AX windows for Chrome, TextEdit and Finder.
-- Independent `macos-harness state TextEdit` also returned only `AXApplication`, 0 `AXWindow`.
-- CGWindow still saw the real TextEdit/Chrome windows.
-- `AXIsProcessTrusted` remained true in both tools.
-- Restarted verified user services `universalaccessd` (PID 953 → 69365) and `AccessibilityUIServer` (1064 → 72939), then relaunched TextEdit; AX remained wedged.
-- User explicitly chose a Mac reboot.
+Reiniciar os serviços de usuário `universalaccessd` e `AccessibilityUIServer` e
+relançar o app alvo: o AX seguiu travado. Só o reboot da máquina recuperou.
 
-## First action after reboot
+## Como reconhecer de novo
 
-1. Start the installed BCU runtime (`script/start.sh` or the skill ensure-runtime helper) and confirm `/v1/bootstrap` ready.
-2. Confirm independent AX health: launch TextEdit and ensure both BCU `list_windows` and `macos-harness state TextEdit` see an `AXWindow`.
-3. Run `python3 script/smoke_runtime.py`.
-4. Required F1 result: `chrome-ocr-click` must actually change the fixture. Expected recovery route is `coordinate_then_ax_hit_test` with `fallbackReason=coordinate_unverified_using_ax_hit_test`. Static-page transport churn must not appear as ambient; genuine live-page churn remains guarded.
-5. If green, mark task 6.3 complete, record literal smoke output, validate OpenSpec strict, commit the task result, then decide whether to archive/push.
-6. If red, do not weaken `windowStillSettling`; capture `classification`, `finalRoute`, `fallbackReason`, signals and region/full-image ratios before changing code.
+Se `list_windows` retorna 0 janelas AX para múltiplos apps ao mesmo tempo e uma
+ferramenta AX independente concorda, o subsistema está travado globalmente — não
+investigue o BCU nem enfraqueça heurísticas de settle; rebote a máquina.

@@ -142,7 +142,7 @@ Todas as 9 categorias de requirement (R1–R9), incluindo a dívida arquitetural
 - `openspec/changes/add-annotate-window-route/` (archive), `openspec/changes/enhance-wait-for-conditions/` (archive), `openspec/changes/enhance-agent-cursor-feedback/` (archive)
 - `openspec/specs/action-verification/spec.md`, `cursor-overlay/spec.md`, `request-validation/spec.md`, `window-discovery/spec.md` (preencher `## Purpose` TBD)
 - `openspec/project.md` (criar — convenções do repo pra autores de spec)
-- `SWIFT_PACKAGE_EXPOSURE_PLAN.md` (mover pra archive ou virar seção README)
+- `SWIFT_PACKAGE_EXPOSURE_PLAN.md` (mover pra archive ou virar seção README) — feito: `docs/plans/archive/2026-04-26-swift-package-exposure-plan.md`
 **Approach:** As 3 changes têm tasks 100% `[x]` e código presente no tree (`add-annotate-window-route` e `enhance-wait-for-conditions` untracked; `enhance-agent-cursor-feedback` já commitada). Commitar as untracked como features coesas, depois `openspec archive <slug>` nas 3 pra promover os deltas a `specs/`. Preencher os 4 `Purpose: TBD` (1-2 frases cada). Criar `openspec/project.md` documentando: Swift 6.2 / macOS 14, zero deps, Swift Testing, os 5 pontos de wiring de rota, o ciclo read-act-read.
 **Execution note:** Esta fase é do orquestrador (git/openspec), não de worker de código. **GATE: o push dos commits precisa de OK explícito do Guilherme** (git sagrado) — commit local e archive podem prosseguir; push espera.
 **Test scenarios:** `Test expectation: none — housekeeping git/docs, sem mudança de comportamento. Verificação: openspec validate --strict passa nas 4 specs promovidas; git log mostra as 2 features commitadas; openspec/specs/ tem 7 capabilities (4 atuais + wait-for + visual-annotations + agent-feedback-overlay).`

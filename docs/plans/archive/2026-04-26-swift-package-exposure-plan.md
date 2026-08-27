@@ -1,4 +1,9 @@
-# Swift Package Exposure Plan
+# Swift Package Exposure Plan (arquivado — concluído)
+
+> **Histórico.** Plano de 2026-04-26, já implementado e concluído. Mantido apenas como
+> registro de intenção e critérios de decisão da época. Não é fonte de verdade sobre a
+> superfície atual: o inventário autoritativo de rotas HTTP e do uso do pacote Swift vive
+> no [README](../../../README.md) e em `GET /v1/routes` (catálogo auto-documentado).
 
 ## Goal
 
@@ -223,19 +228,7 @@ Keep internal:
 - `GET /health` returns 200.
 - `GET /v1/bootstrap` returns contract version, permission info, instructions, guide, and route summaries.
 - `GET /v1/routes` returns the same route count as `RouteID.allCases.count`.
-- Core POST routes remain callable with the same method/path pairs:
-  - `/v1/list_apps`
-  - `/v1/list_windows`
-  - `/v1/get_window_state`
-  - `/v1/click`
-  - `/v1/scroll`
-  - `/v1/perform_secondary_action`
-  - `/v1/drag`
-  - `/v1/resize`
-  - `/v1/set_window_frame`
-  - `/v1/type_text`
-  - `/v1/press_key`
-  - `/v1/set_value`
+- Core POST routes remain callable with the same method/path pairs (inventário atual: `GET /v1/routes` e a seção Routes do README).
 
 ### Documentation Surface
 
