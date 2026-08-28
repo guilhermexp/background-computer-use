@@ -101,7 +101,8 @@ enum OCRClickTargetResolver {
         let components = id.dropFirst(4).split(separator: ".", omittingEmptySubsequences: false)
         guard components.count == 4,
               let occurrence = Int(components[0]),
-              let text = decodeText(String(components[1])) else {
+              let text = decodeText(String(components[1]))
+        else {
             return nil
         }
         let boxValues = components[2].split(separator: ",").compactMap { Double($0).map { $0 * 4 } }

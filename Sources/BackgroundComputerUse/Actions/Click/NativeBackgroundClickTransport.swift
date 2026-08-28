@@ -119,7 +119,7 @@ final class NativeBackgroundClickTransport {
 
         let preparation = try prepareTarget(request.target)
         let focusStatus = preparation.focusStatus
-        wait(50_000)
+        wait(50000)
         afterTargetFocus()
 
         let events = makeEventSequence(request: request)
@@ -130,10 +130,10 @@ final class NativeBackgroundClickTransport {
         for event in events {
             event.timestamp = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
             postEvent(request.target.pid, event)
-            wait(30_000)
+            wait(30000)
         }
 
-        let clickStates = (1...request.clickCount).map(Int64.init)
+        let clickStates = (1 ... request.clickCount).map(Int64.init)
         return NativeBackgroundClickTransportResult(
             dispatchSuccess: true,
             eventsPrepared: events.count,
@@ -147,7 +147,7 @@ final class NativeBackgroundClickTransport {
                 "Target-only SLPSPostEventRecordTo focus-without-raise status=\(focusStatus).",
                 "Posted one target-local move, one offscreen primer down/up at (-1, -1), then \(request.clickCount) explicit target click(s) through SLEventPostToPid.",
                 "Stamped pid, window number, PSN, owner connection, and window-local location on all native click events.",
-                "Native background click route does not foreground the target app and does not intentionally move the physical cursor."
+                "Native background click route does not foreground the target app and does not intentionally move the physical cursor.",
             ]
         )
     }
@@ -189,7 +189,7 @@ final class NativeBackgroundClickTransport {
         appendEvent(type: .leftMouseDown, point: primer, windowLocal: primer, clickState: 1, target: request.target, to: &events)
         appendEvent(type: .leftMouseUp, point: primer, windowLocal: primer, clickState: 1, target: request.target, to: &events)
 
-        for clickState in (1...request.clickCount).map(Int64.init) {
+        for clickState in (1 ... request.clickCount).map(Int64.init) {
             appendEvent(
                 type: .leftMouseDown,
                 point: request.eventTapPointTopLeft,
@@ -311,7 +311,6 @@ final class NativeBackgroundClickTransport {
             y: point.y - windowFrameAppKit.minY
         )
     }
-
 }
 
 struct NativeWindowServerRouting {
@@ -322,7 +321,6 @@ struct NativeWindowServerRouting {
     let cgBoundsTopLeft: CGRect?
     let notes: [String]
 }
-
 
 struct NativeWindowServerRoutingResolver {
     func resolve(windowNumber: Int) throws -> NativeWindowServerRouting {
@@ -349,7 +347,7 @@ struct NativeWindowServerRoutingResolver {
         let notes = [
             "Resolved ownerConnection=\(ownerConnection) psn=(\(high), \(low)).",
             cgBounds.map { "Resolved CG window bounds top-left x=\($0.minX) y=\($0.minY) width=\($0.width) height=\($0.height)." }
-                ?? "CG window bounds unavailable; used AppKit frame to derive window-local top-left."
+                ?? "CG window bounds unavailable; used AppKit frame to derive window-local top-left.",
         ]
         return NativeWindowServerRouting(
             ownerConnection: ownerConnection,
@@ -364,7 +362,8 @@ struct NativeWindowServerRoutingResolver {
     private func cgBoundsTopLeft(windowNumber: Int) -> CGRect? {
         guard let list = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(windowNumber)) as? [[String: Any]],
               let entry = list.first,
-              let bounds = entry[kCGWindowBounds as String] as? [String: Any] else {
+              let bounds = entry[kCGWindowBounds as String] as? [String: Any]
+        else {
             return nil
         }
         return CGRect(
@@ -382,8 +381,8 @@ enum ClickTransportError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .unsupported(let message), .transportFailed(let message):
-            return message
+        case let .unsupported(message), let .transportFailed(message):
+            message
         }
     }
 }

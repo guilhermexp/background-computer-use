@@ -165,6 +165,7 @@ public struct ClickResponse: Encodable, Sendable {
     public let frontmostBundleAfter: String?
     public let warnings: [String]
     public let notes: [String]
+    public let performance: ActionPerformanceDTO?
     public let verification: ClickVerificationEvidenceDTO?
     public let postScreenshot: ScreenshotDTO?
 }

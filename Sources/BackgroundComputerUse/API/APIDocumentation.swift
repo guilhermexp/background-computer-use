@@ -10,9 +10,9 @@ enum APIDocumentation {
             "Call POST /v1/list_apps to find a target process, then POST /v1/list_windows with its exact pid.",
             "Call POST /v1/get_window_state with a window ID and imageMode path or base64. Use the screenshot as visual ground truth and the projected tree for semantic targets.",
             "Use POST /v1/find_elements when role or text can identify a target without returning the full tree; its matches and interactionToken come from one capture.",
-            "Use POST /v1/run_script only when an arbitrary Apple Events capability is required. It has no effect verification; always read state afterwards.",
+            "Standalone library runtimes may expose POST /v1/run_script for arbitrary Apple Events without effect verification. The signed BCU Control app blocks this route because arbitrary source cannot be bound to one approved app identity.",
             "Call one action route. Reuse stateToken when available; actions without cursor reuse the visible Agent cursor, and cursor.id creates a separate lane. Read state again before planning the next meaningful action.",
-            "When showing cursor feedback, stream public agent-facing text or observations. Do not use hidden chain-of-thought, route labels, tool names, or product branding as bubble copy."
+            "When showing cursor feedback, stream public agent-facing text or observations. Do not use hidden chain-of-thought, route labels, tool names, or product branding as bubble copy.",
         ],
         concepts: [
             APIConceptDTO(
@@ -81,13 +81,13 @@ enum APIDocumentation {
             "Transport errors use non-2xx HTTP status codes and the common error body: contractVersion, ok=false, error, message, requestID, and recovery.",
             "Action routes can return HTTP 200 with ok=false when the request was understood but the effect was unsupported, unresolved, unverified, or ambiguous. Read classification, failureDomain or issueBucket, summary, warnings, transports, and verification before retrying.",
             "For visual tasks, trust screenshots over AX-only summaries when they disagree. AX trees and verifier summaries can lag or miss purely visual state.",
-            "Verbose implementation notes are omitted from most action responses unless the request includes debug: true."
+            "Verbose implementation notes are omitted from most action responses unless the request includes debug: true.",
         ],
         troubleshooting: [
             "invalid_request means the JSON body did not match the route's request fields or enum values. Inspect the route entry in /v1/routes.",
             "app_not_found means list_windows could not resolve the requested pid. Call list_apps and retry with a current pid.",
             "window_not_found means the window ID is stale or closed. Call list_windows again and choose a live window.",
-            "accessibility_denied or screenshot failures mean macOS privacy permissions need to be granted to the signed app bundle, then the app must be relaunched."
+            "accessibility_denied or screenshot failures mean macOS privacy permissions need to be granted to the signed app bundle, then the app must be relaunched.",
         ]
     )
 
@@ -140,6 +140,14 @@ enum APIDocumentation {
                 nextSteps: ["Call get_window_state with the selected windowID."],
                 exampleRequest: #"{"pid":12345}"#
             )
+        case .launchApp:
+            return usage(
+                whenToUse: "Launch or resolve one exact signed macOS app without activating it.",
+                useAfter: ["Start a Control-owned task session and be ready to answer an explicit app approval."],
+                successSignals: ["ok=true, foregroundPreserved=true, activates=false, and pid identifies the authorized process."],
+                nextSteps: ["Call list_windows with the returned pid, or use one of the returned window IDs."],
+                exampleRequest: #"{"bundleID":"com.apple.Safari","sessionID":"TASK_SESSION"}"#
+            )
         case .cursorFeedback:
             return usage(
                 whenToUse: "Stream the agent's public visible response or observation near the active cursor without dispatching input.",
@@ -166,8 +174,8 @@ enum APIDocumentation {
             )
         case .runScript:
             return usage(
-                whenToUse: "Execute arbitrary AppleScript or JavaScript for Automation without effect verification when no verified UI action route covers the operation.",
-                useAfter: ["Use only after confirming the requested operation requires arbitrary Apple Events authority."],
+                whenToUse: "In a standalone library runtime only, execute arbitrary AppleScript or JavaScript without effect verification when no verified route covers the operation. BCU Control returns control_policy_required instead.",
+                useAfter: ["Prefer an approved per-window route. Do not weaken BCU Control policy to make arbitrary source convenient."],
                 successSignals: ["status=0 reports process-level script success only; it does not claim any UI effect."],
                 nextSteps: ["Call get_window_state or find_elements to confirm the intended effect after every execution."],
                 exampleRequest: #"{"language":"applescript","source":"tell application \"Finder\" to get name of front window","timeoutMs":10000}"#
@@ -251,6 +259,14 @@ enum APIDocumentation {
                 nextSteps: ["Use press_key for explicit Return/Tab submission; type_text does not auto-submit."],
                 exampleRequest: #"{"window":"WINDOW_ID","stateToken":"STATE_TOKEN","target":{"kind":"display_index","value":4},"text":"hello"}"#
             )
+        case .paste:
+            return usage(
+                whenToUse: "Paste plain text, Markdown, or HTML into one exact text-entry target without losing the user's clipboard.",
+                useAfter: ["Call get_window_state or find_elements and choose a text-entry target."],
+                successSignals: ["ok=true, pasteboardRestored=true, backgroundSafety.foregroundPreserved=true, and verification.exactValueMatch=true."],
+                nextSteps: ["Use press_key for explicit Return/Tab submission; paste does not auto-submit."],
+                exampleRequest: #"{"window":"WINDOW_ID","stateToken":"STATE_TOKEN","target":{"kind":"node_id","value":"NODE_ID"},"content":"**hello**","format":"markdown"}"#
+            )
         case .pressKey:
             return usage(
                 whenToUse: "Send a key or key chord to the target window, including semantic shortcuts like command+f where supported.",
@@ -301,7 +317,7 @@ enum APIDocumentation {
                     meaning: "The JSON body is missing, malformed, has a wrong type, or uses an unsupported enum value.",
                     recovery: [
                         "Inspect this route's request.fields.",
-                        "Include all required fields and match enum values exactly."
+                        "Include all required fields and match enum values exactly.",
                     ]
                 )
             )
@@ -315,7 +331,7 @@ enum APIDocumentation {
                     meaning: "The runtime cannot read or control the target because macOS Accessibility permission is missing.",
                     recovery: [
                         "Grant Accessibility permission to the signed BackgroundComputerUse app bundle.",
-                        "Quit and relaunch through script/start.sh or script/build_and_run.sh run."
+                        "Quit and relaunch through script/start.sh or script/build_and_run.sh run.",
                     ]
                 )
             )
@@ -374,7 +390,7 @@ enum APIDocumentation {
 
     private static func routeNeedsAccessibility(_ id: RouteID) -> Bool {
         switch id {
-        case .health, .bootstrap, .routes, .cursorFeedback, .runScript:
+        case .health, .bootstrap, .routes, .cursorFeedback, .runScript, .launchApp:
             return false
         default:
             return true
@@ -383,9 +399,9 @@ enum APIDocumentation {
 
     private static func routeNeedsWindow(_ id: RouteID) -> Bool {
         switch id {
-        case .getWindowState, .findElements, .annotateWindow, .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .pressKey, .setValue, .waitFor, .readText, .selectText:
+        case .getWindowState, .findElements, .annotateWindow, .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .paste, .pressKey, .setValue, .waitFor, .readText, .selectText:
             return true
-        case .health, .bootstrap, .routes, .listApps, .listWindows, .cursorFeedback, .runScript:
+        case .health, .bootstrap, .routes, .listApps, .listWindows, .launchApp, .cursorFeedback, .runScript:
             return false
         }
     }
@@ -404,7 +420,7 @@ enum APIDocumentation {
                 meaning: "The route failed after the request was accepted.",
                 recovery: [
                     "Retry once if the target UI is changing.",
-                    "If it persists, call the action with debug=true where supported and include requestID in logs."
+                    "If it persists, call the action with debug=true where supported and include requestID in logs.",
                 ]
             ),
         ]

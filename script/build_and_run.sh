@@ -17,6 +17,13 @@ APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
+CORE_XPC_NAME="BackgroundComputerUseCoreXPCService"
+CORE_XPC_ID="xyz.dubdub.backgroundcomputeruse.CoreXPC"
+CORE_XPC_BUNDLE="$APP_CONTENTS/XPCServices/$CORE_XPC_NAME.xpc"
+CORE_XPC_CONTENTS="$CORE_XPC_BUNDLE/Contents"
+CORE_XPC_MACOS="$CORE_XPC_CONTENTS/MacOS"
+CORE_XPC_BINARY="$CORE_XPC_MACOS/$CORE_XPC_NAME"
+CORE_XPC_INFO_PLIST="$CORE_XPC_CONTENTS/Info.plist"
 
 if [ -z "${BACKGROUND_COMPUTER_USE_SIGNING_IDENTITY:-}" ] && [ ! -f "$DEV_KEYCHAIN" ]; then
   "$ROOT_DIR/script/bootstrap_signing_identity.sh"
@@ -61,18 +68,39 @@ if [ "$MODE" != "build" ]; then
 fi
 
 if [ "${BACKGROUND_COMPUTER_USE_RELEASE_BUILD:-0}" = "1" ]; then
-  swift build --configuration release --arch arm64 --arch x86_64 --product "$APP_NAME"
-  BUILD_BINARY="$(swift build --configuration release --arch arm64 --arch x86_64 --show-bin-path)/$APP_NAME"
+  ARM64_SCRATCH="$ROOT_DIR/.build/release-arm64"
+  X86_64_SCRATCH="$ROOT_DIR/.build/release-x86_64"
+  UNIVERSAL_DIR="$DIST_DIR/.universal-build"
+  swift build --configuration release --arch arm64 --scratch-path "$ARM64_SCRATCH" --product "$APP_NAME"
+  swift build --configuration release --arch arm64 --scratch-path "$ARM64_SCRATCH" --product "$CORE_XPC_NAME"
+  swift build --configuration release --arch x86_64 --scratch-path "$X86_64_SCRATCH" --product "$APP_NAME"
+  swift build --configuration release --arch x86_64 --scratch-path "$X86_64_SCRATCH" --product "$CORE_XPC_NAME"
+  mkdir -p "$UNIVERSAL_DIR"
+  /usr/bin/lipo -create \
+    "$(swift build --configuration release --arch arm64 --scratch-path "$ARM64_SCRATCH" --show-bin-path)/$APP_NAME" \
+    "$(swift build --configuration release --arch x86_64 --scratch-path "$X86_64_SCRATCH" --show-bin-path)/$APP_NAME" \
+    -output "$UNIVERSAL_DIR/$APP_NAME"
+  /usr/bin/lipo -create \
+    "$(swift build --configuration release --arch arm64 --scratch-path "$ARM64_SCRATCH" --show-bin-path)/$CORE_XPC_NAME" \
+    "$(swift build --configuration release --arch x86_64 --scratch-path "$X86_64_SCRATCH" --show-bin-path)/$CORE_XPC_NAME" \
+    -output "$UNIVERSAL_DIR/$CORE_XPC_NAME"
+  BUILD_BINARY="$UNIVERSAL_DIR/$APP_NAME"
+  CORE_XPC_BUILD_BINARY="$UNIVERSAL_DIR/$CORE_XPC_NAME"
 else
   swift build --product "$APP_NAME"
+  swift build --product "$CORE_XPC_NAME"
   BUILD_BINARY="$(swift build --show-bin-path)/$APP_NAME"
+  CORE_XPC_BUILD_BINARY="$(swift build --show-bin-path)/$CORE_XPC_NAME"
 fi
 
 mkdir -p "$APP_BUNDLE"
 rm -rf "$APP_CONTENTS"
 mkdir -p "$APP_MACOS"
+mkdir -p "$CORE_XPC_MACOS"
 cp "$BUILD_BINARY" "$APP_BINARY"
+cp "$CORE_XPC_BUILD_BINARY" "$CORE_XPC_BINARY"
 chmod +x "$APP_BINARY"
+chmod +x "$CORE_XPC_BINARY"
 
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -91,6 +119,34 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$MIN_SYSTEM_VERSION</string>
   <key>NSPrincipalClass</key>
   <string>NSApplication</string>
+  <key>LSUIElement</key>
+  <true/>
+</dict>
+</plist>
+PLIST
+
+cat >"$CORE_XPC_INFO_PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key>
+  <string>$CORE_XPC_NAME</string>
+  <key>CFBundleIdentifier</key>
+  <string>$CORE_XPC_ID</string>
+  <key>CFBundleName</key>
+  <string>$CORE_XPC_NAME</string>
+  <key>CFBundlePackageType</key>
+  <string>XPC!</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>$MIN_SYSTEM_VERSION</string>
+  <key>XPCService</key>
+  <dict>
+    <key>ServiceType</key>
+    <string>Application</string>
+  </dict>
 </dict>
 </plist>
 PLIST
@@ -103,6 +159,13 @@ if [ "$USE_DEV_KEYCHAIN" -eq 1 ]; then
   /usr/bin/codesign \
     --force \
     --sign "$SIGNING_IDENTITY" \
+    --identifier "$CORE_XPC_ID" \
+    --timestamp=none \
+    --keychain "$DEV_KEYCHAIN" \
+    "$CORE_XPC_BUNDLE"
+  /usr/bin/codesign \
+    --force \
+    --sign "$SIGNING_IDENTITY" \
     --identifier "$BUNDLE_ID" \
     --timestamp=none \
     --keychain "$DEV_KEYCHAIN" \
@@ -111,10 +174,17 @@ else
   /usr/bin/codesign \
     --force \
     --sign "$SIGNING_IDENTITY" \
+    --identifier "$CORE_XPC_ID" \
+    --timestamp=none \
+    "$CORE_XPC_BUNDLE"
+  /usr/bin/codesign \
+    --force \
+    --sign "$SIGNING_IDENTITY" \
     --identifier "$BUNDLE_ID" \
     --timestamp=none \
     "$APP_BUNDLE"
 fi
+/usr/bin/codesign --verify --deep --strict "$APP_BUNDLE"
 
 open_app() {
   mkdir -p "$INSTALL_DIR"

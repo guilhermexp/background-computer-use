@@ -22,12 +22,16 @@ struct TypeTextRouteService {
     }
 
     func typeText(request: TypeTextRequest) throws -> TypeTextResponse {
+        let totalStarted = DispatchTime.now().uptimeNanoseconds
         let foregroundBefore = foregroundApplication()
+        let captureStarted = DispatchTime.now().uptimeNanoseconds
         let capture = try targetResolver.capture(
             windowID: request.window,
             includeMenuBar: request.includeMenuBar ?? true,
             maxNodes: request.maxNodes ?? 6500
         )
+        let captureMs = elapsedMilliseconds(since: captureStarted)
+        let resolveStarted = DispatchTime.now().uptimeNanoseconds
         var warnings = targetResolver.stateTokenWarnings(
             suppliedStateToken: request.stateToken,
             liveStateToken: capture.envelope.response.stateToken
@@ -176,15 +180,19 @@ struct TypeTextRouteService {
             requested: request.cursor,
             target: target,
             window: capture.envelope.response.window,
+            text: request.text,
             options: executionOptions
         )
         warnings.append(contentsOf: cursor.warnings)
+        let resolveMs = elapsedMilliseconds(since: resolveStarted)
 
         let window = capture.envelope.response.window
+        let preparationStarted = DispatchTime.now().uptimeNanoseconds
         let preparation = backgroundTextPreparation.prepare(
             pid: window.pid,
             windowNumber: window.windowNumber
         )
+        let preparationMs = elapsedMilliseconds(since: preparationStarted)
         notes.append(contentsOf: preparation.notes)
         warnings.append(contentsOf: preparation.warnings)
         let foregroundBeforeDispatch = foregroundApplication()
@@ -194,7 +202,8 @@ struct TypeTextRouteService {
             after: foregroundBeforeDispatch
         )
         guard preparation.preparedTargetWindow(requireKeyWindowRecords: true),
-              preDispatchBackgroundSafety.foregroundPreserved else {
+              preDispatchBackgroundSafety.foregroundPreserved
+        else {
             AXCursorTargeting.finishTypeText(cursor: cursor, text: request.text)
             let preparationFailed = preparation.preparedTargetWindow(requireKeyWindowRecords: true) == false
             return response(
@@ -224,14 +233,19 @@ struct TypeTextRouteService {
         let preparedBeforeState = AXActionRuntimeSupport.readTextState(liveElement.element)
         let expected = expectedOutcome(from: preparedBeforeState, text: request.text)
 
+        let transportStarted = DispatchTime.now().uptimeNanoseconds
         let dispatchResult = dispatchText(
             request.text,
+            baseline: preparedBeforeState,
             expected: expected,
             to: liveElement.element,
             pid: window.pid,
+            foregroundBefore: foregroundBefore,
+            foregroundBeforeDispatch: foregroundBeforeDispatch,
             warnings: &warnings,
             notes: &notes
         )
+        let transportMs = elapsedMilliseconds(since: transportStarted)
         if dispatchResult.succeeded == false {
             AXCursorTargeting.finishTypeText(cursor: cursor, text: request.text)
             let backgroundSafety = TypeTextBackgroundSafety.evaluate(
@@ -248,6 +262,8 @@ struct TypeTextRouteService {
                 text: request.text,
                 dispatchPrimitive: dispatchResult.primitive,
                 dispatchSucceeded: false,
+                strategiesAttempted: dispatchResult.strategiesAttempted.map(\.rawValue),
+                fallbackReason: dispatchResult.fallbackReason?.rawValue,
                 semanticAppropriate: semantic.appropriate,
                 semanticReasons: semantic.reasons,
                 liveElementResolution: liveElement.resolution,
@@ -280,15 +296,34 @@ struct TypeTextRouteService {
         }
 
         AXCursorTargeting.finishTypeText(cursor: cursor, text: request.text)
-        sleepRunLoop(settleDelay)
-        let afterSameElementState = AXActionRuntimeSupport.readTextState(liveElement.element)
+        let settle = ConditionedActionWait.poll(
+            intervalMs: 25,
+            deadlineMs: Int((settleDelay * 1000).rounded()),
+            sample: { AXActionRuntimeSupport.readTextState(liveElement.element) },
+            isSatisfied: { state in
+                ExactTextSettlePolicy.isSatisfied(
+                    expected: expected?.valueString,
+                    observed: state.valueString
+                )
+            }
+        )
+        let afterSameElementState = settle.sample
+        let verificationStarted = DispatchTime.now().uptimeNanoseconds
 
         let postCapture: AXActionStateCapture?
-        do {
-            postCapture = try targetResolver.reread(after: capture)
-        } catch {
+        if TypeTextFastVerificationPolicy.canSkipProjectionReread(
+            expected: expected,
+            observed: afterSameElementState
+        ) {
             postCapture = nil
-            notes.append("Post-type reread failed: \(error).")
+            notes.append("Exact same-element value and selection evidence made a second full projection capture unnecessary.")
+        } else {
+            do {
+                postCapture = try targetResolver.reread(after: capture)
+            } catch {
+                postCapture = nil
+                notes.append("Post-type reread failed: \(error).")
+            }
         }
 
         let refreshedTargetResult = postCapture.flatMap {
@@ -299,7 +334,8 @@ struct TypeTextRouteService {
 
         var afterResolvedLiveState: TypeTextObservedStateDTO?
         if let postCapture, let refreshedTarget,
-           let resolved = try? targetResolver.resolveLiveElement(for: refreshedTarget, in: postCapture) {
+           let resolved = try? targetResolver.resolveLiveElement(for: refreshedTarget, in: postCapture)
+        {
             afterResolvedLiveState = AXActionRuntimeSupport.readTextState(resolved.element)
         }
 
@@ -349,6 +385,16 @@ struct TypeTextRouteService {
             beforeDispatch: foregroundBeforeDispatch,
             after: foregroundApplication()
         )
+        let verificationMs = elapsedMilliseconds(since: verificationStarted)
+        let performance = ActionPerformanceDTO(
+            resolveMs: resolveMs,
+            captureMs: captureMs,
+            preparationMs: preparationMs,
+            transportMs: transportMs,
+            settleMs: Double(settle.elapsedMs),
+            verificationMs: verificationMs,
+            totalMs: elapsedMilliseconds(since: totalStarted)
+        )
 
         return classifyResult(
             request: request,
@@ -358,6 +404,9 @@ struct TypeTextRouteService {
             liveElementResolution: liveElement.resolution,
             dispatchPrimitive: dispatchResult.primitive,
             dispatchSucceeded: dispatchResult.succeeded,
+            strategiesAttempted: dispatchResult.strategiesAttempted.map(\.rawValue),
+            fallbackReason: dispatchResult.fallbackReason?.rawValue,
+            performance: performance,
             preStateToken: capture.envelope.response.stateToken,
             postStateToken: postCapture?.envelope.response.stateToken,
             cursor: cursor,
@@ -371,6 +420,8 @@ struct TypeTextRouteService {
     private struct TextDispatchResult {
         let succeeded: Bool
         let primitive: String
+        let strategiesAttempted: [AdaptiveTextStrategy]
+        let fallbackReason: AdaptiveTextDispatchFallbackReason?
     }
 
     private func typeTextOnOpaqueFocusedSurface(
@@ -441,7 +492,8 @@ struct TypeTextRouteService {
         let initialWindow = capture.envelope.response.window
         let dispatchWindow = preDispatchCapture.envelope.response.window
         guard dispatchWindow.pid == initialWindow.pid,
-              dispatchWindow.windowNumber == initialWindow.windowNumber else {
+              dispatchWindow.windowNumber == initialWindow.windowNumber
+        else {
             return response(
                 classification: .effectNotVerified,
                 failureDomain: .targeting,
@@ -476,7 +528,8 @@ struct TypeTextRouteService {
             after: foregroundBeforeDispatch
         )
         guard preparation.preparedTargetWindow(requireKeyWindowRecords: true),
-              preDispatchBackgroundSafety.foregroundPreserved else {
+              preDispatchBackgroundSafety.foregroundPreserved
+        else {
             let preparationFailed = preparation.preparedTargetWindow(requireKeyWindowRecords: true) == false
             let preflightFailure = preparationFailed
                 ? "PID-scoped Unicode posting was not attempted because WindowServer could not establish the requested AX-opaque window as the key input recipient."
@@ -536,13 +589,17 @@ struct TypeTextRouteService {
             )
         }
 
-        sleepRunLoop(settleDelay)
-        let postCapture: AXActionStateCapture?
-        do {
-            postCapture = try targetResolver.reread(after: preDispatchCapture)
-        } catch {
-            postCapture = nil
-            notes.append("Post-type reread failed: \(error).")
+        let settled = ConditionedActionWait.poll(
+            intervalMs: 25,
+            deadlineMs: Int((settleDelay * 1000).rounded()),
+            sample: { try? targetResolver.reread(after: preDispatchCapture) },
+            isSatisfied: { capture in
+                capture?.envelope.response.stateToken != preDispatchCapture.envelope.response.stateToken
+            }
+        )
+        let postCapture = settled.sample
+        if postCapture == nil {
+            notes.append("Post-type reread failed for the AX-opaque target.")
         }
         notes.append(
             "Explicit opaque focused-surface fallback posted Unicode after successful target-window preflight; call get_window_state with imageMode path or base64 to verify the result before continuing."
@@ -579,39 +636,159 @@ struct TypeTextRouteService {
 
     private func dispatchText(
         _ text: String,
+        baseline: TypeTextObservedStateDTO,
         expected: TypeTextExpectedOutcomeDTO?,
         to element: AXUIElement,
         pid: pid_t,
+        foregroundBefore: ForegroundApplicationSnapshot?,
+        foregroundBeforeDispatch: ForegroundApplicationSnapshot?,
         warnings: inout [String],
         notes: inout [String]
     ) -> TextDispatchResult {
         if let expectedValue = expected?.valueString,
-           AXActionRuntimeSupport.isAttributeSettable(element, attribute: kAXValueAttribute as CFString) {
+           AXActionRuntimeSupport.isAttributeSettable(element, attribute: kAXValueAttribute as CFString)
+        {
             notes.append("Using element-bound AX value write for type_text to avoid process-scoped same-app window routing.")
-            let valueResult = AXActionRuntimeSupport.setValue(.string(expectedValue), on: element)
-            notes.append("AX value write result: \(AXActionRuntimeSupport.rawStatusString(for: valueResult)).")
-            guard valueResult == .success else {
-                warnings.append("AX value write returned \(AXActionRuntimeSupport.rawStatusString(for: valueResult)); type_text did not fall back to PID-scoped Unicode posting for this writable target.")
-                return TextDispatchResult(succeeded: false, primitive: elementValueDispatchPrimitive)
-            }
-
-            if let selectionRange = expected?.selectionRange {
-                if AXActionRuntimeSupport.isAttributeSettable(element, attribute: kAXSelectedTextRangeAttribute as CFString) {
-                    let rangeResult = AXActionRuntimeSupport.setSelectedTextRangeResult(
-                        element,
-                        location: selectionRange.location,
-                        length: selectionRange.length
-                    )
-                    notes.append("AX caret restore result: \(AXActionRuntimeSupport.rawStatusString(for: rangeResult)).")
-                    if rangeResult != .success {
-                        warnings.append("AX caret restore returned \(AXActionRuntimeSupport.rawStatusString(for: rangeResult)).")
+            var valueStatus = "not_attempted"
+            var rangeStatus: String?
+            var fallbackDiagnostic: String?
+            let adaptive = AdaptiveTextDispatcher.dispatch(
+                baseline: baseline.valueString,
+                expected: expectedValue,
+                fallbackEligible: baseline.selectedTextRange != nil,
+                writeAX: {
+                    let valueResult = AXActionRuntimeSupport.setValue(.string(expectedValue), on: element)
+                    valueStatus = AXActionRuntimeSupport.rawStatusString(for: valueResult)
+                    if valueResult == .success, let selectionRange = expected?.selectionRange {
+                        if AXActionRuntimeSupport.isAttributeSettable(
+                            element,
+                            attribute: kAXSelectedTextRangeAttribute as CFString
+                        ) {
+                            let rangeResult = AXActionRuntimeSupport.setSelectedTextRangeResult(
+                                element,
+                                location: selectionRange.location,
+                                length: selectionRange.length
+                            )
+                            rangeStatus = AXActionRuntimeSupport.rawStatusString(for: rangeResult)
+                        } else {
+                            rangeStatus = "not_settable"
+                        }
                     }
-                } else {
-                    warnings.append("AX value write succeeded, but the selected text range is not writable for caret restoration.")
+                    return valueResult == .success ? .success : .failure
+                },
+                readValue: {
+                    AXActionRuntimeSupport.readTextState(element).valueString
+                },
+                performTargetBoundFallback: {
+                    let textOperationAttribute = "AXTextOperation"
+                    let selectedMarkerRangeAttribute = "AXSelectedTextMarkerRange" as CFString
+                    guard AXActionRuntimeSupport.parameterizedAttributeNames(element)
+                        .contains(textOperationAttribute),
+                        let markerRange = AXActionRuntimeSupport.copyAttributeValue(
+                            element,
+                            attribute: selectedMarkerRangeAttribute
+                        )
+                    else {
+                        return .unavailable
+                    }
+                    let payload = AXTextOperationPayload.replacing(
+                        markerRange: markerRange,
+                        text: text
+                    )
+                    let textOperationResult = AXActionRuntimeSupport.performParameterizedAttribute(
+                        textOperationAttribute,
+                        on: element,
+                        parameter: payload as CFDictionary
+                    )
+                    if textOperationResult != .success {
+                        fallbackDiagnostic = "AX text operation returned \(AXActionRuntimeSupport.rawStatusString(for: textOperationResult)); falling back to verified target focus."
+                    }
+                    return .attempted(succeeded: textOperationResult == .success)
+                },
+                prepareUnicodeFallback: {
+                    if AXActionRuntimeSupport.readTextState(element).isFocused != true {
+                        guard AXActionRuntimeSupport.isAttributeSettable(
+                            element,
+                            attribute: kAXFocusedAttribute as CFString
+                        ), AXActionRuntimeSupport.setBoolAttributeResult(
+                            element,
+                            attribute: kAXFocusedAttribute as CFString,
+                            value: true
+                        ) == .success
+                        else {
+                            fallbackDiagnostic = "Fallback was blocked because the exact target could not be focused."
+                            return false
+                        }
+                    }
+                    let focus = ConditionedActionWait.poll(
+                        intervalMs: 25,
+                        deadlineMs: 150,
+                        sample: { AXActionRuntimeSupport.readTextState(element).isFocused },
+                        isSatisfied: { $0 == true }
+                    )
+                    let foregroundNow = foregroundApplication()
+                    let safety = TypeTextBackgroundSafety.evaluate(
+                        before: foregroundBefore,
+                        beforeDispatch: foregroundBeforeDispatch,
+                        after: foregroundNow
+                    )
+                    guard focus.sample == true, safety.foregroundPreserved
+                    else {
+                        if focus.sample != true {
+                            fallbackDiagnostic = "Fallback was blocked because exact target focus could not be verified."
+                        } else {
+                            fallbackDiagnostic = "Fallback was blocked because the foreground application changed."
+                        }
+                        return false
+                    }
+                    return true
+                },
+                postUnicode: {
+                    let liveState = AXActionRuntimeSupport.readTextState(element)
+                    guard liveState.isFocused == true else {
+                        fallbackDiagnostic = "Unicode fallback was blocked because the exact target was not focused after the AX attempt."
+                        return false
+                    }
+                    let foregroundNow = foregroundApplication()
+                    let safety = TypeTextBackgroundSafety.evaluate(
+                        before: foregroundBefore,
+                        beforeDispatch: foregroundBeforeDispatch,
+                        after: foregroundNow
+                    )
+                    guard safety.foregroundPreserved else {
+                        fallbackDiagnostic = "Unicode fallback was blocked because foreground preservation was lost."
+                        return false
+                    }
+                    return AXActionRuntimeSupport.postUnicodeText(text, to: pid)
+                }
+            )
+            notes.append("AX value write result: \(valueStatus).")
+            if let rangeStatus {
+                notes.append("AX caret restore result: \(rangeStatus).")
+                if rangeStatus != "success" {
+                    warnings.append("AX caret restore returned \(rangeStatus).")
                 }
             }
-
-            return TextDispatchResult(succeeded: true, primitive: elementValueDispatchPrimitive)
+            if adaptive.fallbackReason == .unchangedAXNoOp {
+                notes.append("The complete immediate AX reread matched the prepared baseline; type_text prepared the exact target for one bounded fallback.")
+            }
+            if let fallbackDiagnostic {
+                warnings.append(fallbackDiagnostic)
+            }
+            var primitives = [elementValueDispatchPrimitive]
+            if adaptive.strategiesAttempted.contains(.axTextOperation) {
+                primitives.append("AXUIElementCopyParameterizedAttributeValue(AXTextOperation)")
+            }
+            if adaptive.strategiesAttempted.contains(.pidUnicode) {
+                primitives.append(dispatchPrimitive)
+            }
+            let primitive = primitives.joined(separator: " -> ")
+            return TextDispatchResult(
+                succeeded: adaptive.transportSucceeded,
+                primitive: primitive,
+                strategiesAttempted: adaptive.strategiesAttempted,
+                fallbackReason: adaptive.fallbackReason
+            )
         }
 
         if expected?.valueString == nil {
@@ -621,7 +798,9 @@ struct TypeTextRouteService {
         }
         return TextDispatchResult(
             succeeded: AXActionRuntimeSupport.postUnicodeText(text, to: pid),
-            primitive: dispatchPrimitive
+            primitive: dispatchPrimitive,
+            strategiesAttempted: [.pidUnicode],
+            fallbackReason: nil
         )
     }
 
@@ -633,6 +812,9 @@ struct TypeTextRouteService {
         liveElementResolution: String,
         dispatchPrimitive: String,
         dispatchSucceeded: Bool,
+        strategiesAttempted: [String],
+        fallbackReason: String?,
+        performance: ActionPerformanceDTO,
         preStateToken: String,
         postStateToken: String?,
         cursor: ActionCursorTargetResponseDTO,
@@ -651,6 +833,9 @@ struct TypeTextRouteService {
                 text: request.text,
                 dispatchPrimitive: dispatchPrimitive,
                 dispatchSucceeded: dispatchSucceeded,
+                strategiesAttempted: strategiesAttempted,
+                fallbackReason: fallbackReason,
+                performance: performance,
                 semanticAppropriate: semantic.appropriate,
                 semanticReasons: semantic.reasons,
                 liveElementResolution: liveElementResolution,
@@ -675,6 +860,9 @@ struct TypeTextRouteService {
                     text: request.text,
                     dispatchPrimitive: dispatchPrimitive,
                     dispatchSucceeded: dispatchSucceeded,
+                    strategiesAttempted: strategiesAttempted,
+                    fallbackReason: fallbackReason,
+                    performance: performance,
                     semanticAppropriate: semantic.appropriate,
                     semanticReasons: semantic.reasons,
                     liveElementResolution: liveElementResolution,
@@ -697,6 +885,9 @@ struct TypeTextRouteService {
                 text: request.text,
                 dispatchPrimitive: dispatchPrimitive,
                 dispatchSucceeded: dispatchSucceeded,
+                strategiesAttempted: strategiesAttempted,
+                fallbackReason: fallbackReason,
+                performance: performance,
                 semanticAppropriate: semantic.appropriate,
                 semanticReasons: semantic.reasons,
                 liveElementResolution: liveElementResolution,
@@ -720,6 +911,9 @@ struct TypeTextRouteService {
                 text: request.text,
                 dispatchPrimitive: dispatchPrimitive,
                 dispatchSucceeded: dispatchSucceeded,
+                strategiesAttempted: strategiesAttempted,
+                fallbackReason: fallbackReason,
+                performance: performance,
                 semanticAppropriate: semantic.appropriate,
                 semanticReasons: semantic.reasons,
                 liveElementResolution: liveElementResolution,
@@ -742,6 +936,9 @@ struct TypeTextRouteService {
             text: request.text,
             dispatchPrimitive: dispatchPrimitive,
             dispatchSucceeded: dispatchSucceeded,
+            strategiesAttempted: strategiesAttempted,
+            fallbackReason: fallbackReason,
+            performance: performance,
             semanticAppropriate: semantic.appropriate,
             semanticReasons: semantic.reasons,
             liveElementResolution: liveElementResolution,
@@ -764,6 +961,9 @@ struct TypeTextRouteService {
         text: String,
         dispatchPrimitive: String?,
         dispatchSucceeded: Bool?,
+        strategiesAttempted: [String] = [],
+        fallbackReason: String? = nil,
+        performance: ActionPerformanceDTO? = nil,
         semanticAppropriate: Bool?,
         semanticReasons: [String],
         liveElementResolution: String?,
@@ -786,6 +986,9 @@ struct TypeTextRouteService {
             text: text,
             dispatchPrimitive: dispatchPrimitive,
             dispatchSucceeded: dispatchSucceeded,
+            strategiesAttempted: strategiesAttempted,
+            fallbackReason: fallbackReason,
+            performance: performance,
             semanticAppropriate: semanticAppropriate,
             semanticReasons: semanticReasons,
             liveElementResolution: liveElementResolution,
@@ -804,7 +1007,8 @@ struct TypeTextRouteService {
         text: String
     ) -> TypeTextExpectedOutcomeDTO? {
         guard let value = beforeState.valueString,
-              let range = beforeState.selectedTextRange else {
+              let range = beforeState.selectedTextRange
+        else {
             return nil
         }
 
@@ -812,7 +1016,8 @@ struct TypeTextRouteService {
         let nsRange = NSRange(location: range.location, length: range.length)
         guard nsRange.location >= 0,
               nsRange.length >= 0,
-              nsRange.location + nsRange.length <= string.length else {
+              nsRange.location + nsRange.length <= string.length
+        else {
             return nil
         }
 
@@ -920,5 +1125,9 @@ struct TypeTextRouteService {
         text
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+    }
+
+    private func elapsedMilliseconds(since start: UInt64) -> Double {
+        Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
     }
 }

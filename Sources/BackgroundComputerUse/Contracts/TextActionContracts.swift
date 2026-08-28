@@ -176,6 +176,9 @@ public struct TypeTextResponse: Encodable, Sendable {
     public let text: String
     public let dispatchPrimitive: String?
     public let dispatchSucceeded: Bool?
+    public let strategiesAttempted: [String]
+    public let fallbackReason: String?
+    public let performance: ActionPerformanceDTO?
     public let semanticAppropriate: Bool?
     public let semanticReasons: [String]
     public let liveElementResolution: String?

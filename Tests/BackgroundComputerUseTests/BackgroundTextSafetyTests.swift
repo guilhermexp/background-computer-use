@@ -1,8 +1,7 @@
+@testable import BackgroundComputerUse
 import Foundation
 import Testing
-@testable import BackgroundComputerUse
 
-@Suite
 struct BackgroundTextSafetyTests {
     @Test
     func textSuccessRequiresTheSameForegroundProcessThroughout() {
@@ -50,6 +49,29 @@ struct BackgroundTextSafetyTests {
     }
 
     @Test
+    func typeTextRouteDocumentsAdaptiveStrategies() throws {
+        let route = try #require(
+            RouteRegistry.publicRoutes().first { $0.id == RouteID.typeText.rawValue }
+        )
+        let responseFields = route.response.fields
+
+        #expect(responseFields.contains { $0.name == "strategiesAttempted" && $0.type == "string[]" })
+        #expect(responseFields.contains { $0.name == "fallbackReason" && $0.type == "string | null" })
+        #expect(responseFields.contains { $0.name == "performance" && $0.type == "ActionPerformance | null" })
+    }
+
+    @Test
+    func clickRouteDocumentsPerformanceTelemetry() throws {
+        let route = try #require(
+            RouteRegistry.publicRoutes().first { $0.id == RouteID.click.rawValue }
+        )
+
+        #expect(route.response.fields.contains { field in
+            field.name == "performance" && field.type == "ActionPerformance | null"
+        })
+    }
+
+    @Test
     func strictRouterRejectsLegacyFocusAssistField() throws {
         let body = #"{"window":"window-id","text":"hello","focusAssistMode":"focus"}"#
         let request = try makeRequest(method: "POST", path: "/v1/type_text", body: body)
@@ -78,7 +100,7 @@ private func makeRequest(method: String, path: String, body: String) throws -> H
     var data = Data(request.utf8)
     data.append(bodyData)
     switch HTTPRequest.parse(data) {
-    case .complete(let parsed):
+    case let .complete(parsed):
         return parsed
     case .incomplete, .invalid, .tooLarge:
         throw BackgroundTextSafetyTestError.parseFailed

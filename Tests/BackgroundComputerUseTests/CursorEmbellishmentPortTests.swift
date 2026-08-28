@@ -1,12 +1,16 @@
 import AppKit
+@testable import BackgroundComputerUse
 import CoreGraphics
 import Testing
-@testable import BackgroundComputerUse
 
-@Suite
 struct CursorEmbellishmentPortTests {
     @Test
-    func testLockedSwoopyMotionConstantsAndDurationFormula() {
+    func semanticClickPressLeadStaysInsideResponsiveBudget() {
+        #expect(MotionPacing.pressLead <= 0.060)
+    }
+
+    @Test
+    func lockedSwoopyMotionConstantsAndDurationFormula() {
         let tuning = CursorMotionTuning.swoopy
 
         #expect(abs(tuning.startHandle - 0.94) <= 0.0001)
@@ -23,12 +27,12 @@ struct CursorEmbellishmentPortTests {
         let base = 0.650 / 2.20
         #expect(abs(MotionPacing.transitDuration(for: 520) - base) <= 0.0001)
         #expect(abs(MotionPacing.transitDuration(for: 1) - max(0.28, base * 0.55)) <= 0.0001)
-        #expect(abs(MotionPacing.transitDuration(for: 2_000) - base * 1.80) <= 0.0001)
-        #expect(abs(MotionPacing.transitDuration(for: 2_000, entrance: true) - 0.38 * 1.05) <= 0.0001)
+        #expect(abs(MotionPacing.transitDuration(for: 2000) - base * 1.80) <= 0.0001)
+        #expect(abs(MotionPacing.transitDuration(for: 2000, entrance: true) - 0.38 * 1.05) <= 0.0001)
     }
 
     @Test
-    func testLockedActionTimingDefaults() {
+    func lockedActionTimingDefaults() {
         let timings = CursorActionTimings.defaults
 
         #expect(timings.clickPressHoldMilliseconds == 45)
@@ -49,18 +53,18 @@ struct CursorEmbellishmentPortTests {
     }
 
     @Test
-    func testCursorPresenceDoesNotStickAfterActions() {
+    func cursorPresenceDoesNotStickAfterActions() {
         #expect(CursorPresenceTiming.idleHideDelay == 1.2)
         #expect(CursorPresenceTiming.fadeOutDuration == 0.24)
         #expect(CursorPresenceTiming.idleExpireDelay == 45)
     }
 
     @Test
-    func testEdgeEntrancePointStartsOutsideScreenNearAnEdge() {
+    func edgeEntrancePointStartsOutsideScreenNearAnEdge() {
         let screen = CGRect(x: 100, y: 200, width: 800, height: 600)
         let expanded = screen.insetBy(dx: -121, dy: -121)
 
-        for _ in 0..<40 {
+        for _ in 0 ..< 40 {
             let point = CursorMotionPlanner.edgeEntrancePoint(for: screen)
             #expect(!screen.contains(point))
             #expect(expanded.contains(point))
@@ -68,7 +72,7 @@ struct CursorEmbellishmentPortTests {
     }
 
     @Test
-    func testPressKeyDisplayLabelUsesParsedChordText() {
+    func pressKeyDisplayLabelUsesParsedChordText() {
         #expect(cursorKeycapDisplayLabel(normalized: "command+f") == "⌘F")
         #expect(cursorKeycapDisplayLabel(normalized: "shift+option+return") == "⇧⌥↩")
         #expect(cursorKeycapDisplayLabel(normalized: "command+shift+p") == "⌘⇧P")
@@ -77,7 +81,7 @@ struct CursorEmbellishmentPortTests {
     }
 
     @Test
-    func testRendererDrawsLockedGlyphAndEffectStates() throws {
+    func rendererDrawsLockedGlyphAndEffectStates() throws {
         let glyphs: [CursorGlyph] = [
             .arrow,
             .arrowWithBadge,
@@ -172,7 +176,8 @@ struct CursorEmbellishmentPortTests {
                       bytesPerRow: bytesPerRow,
                       space: CGColorSpaceCreateDeviceRGB(),
                       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-                  ) else {
+                  )
+            else {
                 return false
             }
             context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))

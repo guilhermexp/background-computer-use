@@ -25,6 +25,13 @@ struct WindowStateService {
 
         let resolveStarted = DispatchTime.now().uptimeNanoseconds
         let resolved = try resolver.resolve(windowID: request.window)
+        RendererAccessibilityBootstrap.prepare(
+            application: resolved.appElement,
+            pid: resolved.app.processIdentifier,
+            launchDate: resolved.launchDate,
+            bundleID: resolved.bundleID,
+            bundleURL: resolved.app.bundleURL
+        )
         let resolveFinished = DispatchTime.now().uptimeNanoseconds
 
         let captureStarted = DispatchTime.now().uptimeNanoseconds

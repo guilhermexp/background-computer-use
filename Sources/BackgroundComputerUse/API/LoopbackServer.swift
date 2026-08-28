@@ -13,8 +13,8 @@ final class LoopbackServer: @unchecked Sendable {
     private(set) var baseURL: URL?
     private(set) var startedAt: Date?
 
-    init(auth: RuntimeAuth) {
-        router = Router(auth: auth)
+    init(auth: RuntimeAuth, controlRequired: Bool = false) {
+        router = Router(auth: auth, controlRequired: controlRequired)
     }
 
     func start() async throws -> URL {
@@ -44,21 +44,21 @@ final class LoopbackServer: @unchecked Sendable {
                     guard let port = listener.port else { return }
                     let baseURL = URL(string: "http://127.0.0.1:\(port.rawValue)")!
                     self.baseURL = baseURL
-                    self.startedAt = Date()
+                    startedAt = Date()
                     gate.resumeIfNeeded {
                         continuation.resume(returning: baseURL)
                     }
 
-                case .failed(let error):
-                    self.baseURL = nil
-                    self.startedAt = nil
+                case let .failed(error):
+                    baseURL = nil
+                    startedAt = nil
                     gate.resumeIfNeeded {
                         continuation.resume(throwing: error)
                     }
 
                 case .cancelled:
-                    self.baseURL = nil
-                    self.startedAt = nil
+                    baseURL = nil
+                    startedAt = nil
 
                 default:
                     break
@@ -82,7 +82,7 @@ final class LoopbackServer: @unchecked Sendable {
         on connection: NWConnection,
         buffer: Data
     ) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { [weak self] data, _, isComplete, error in
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
             guard let self else {
                 connection.cancel()
                 return
@@ -94,7 +94,7 @@ final class LoopbackServer: @unchecked Sendable {
             }
 
             if error != nil {
-                self.sendBadRequest(
+                sendBadRequest(
                     on: connection,
                     message: "Connection failed while reading the HTTP request."
                 )
@@ -102,34 +102,34 @@ final class LoopbackServer: @unchecked Sendable {
             }
 
             switch HTTPRequest.parse(updatedBuffer) {
-            case .complete(let request):
-                let response = self.router.response(
+            case let .complete(request):
+                let response = router.response(
                     for: request,
                     context: RouterContext(
-                        baseURL: self.baseURL,
-                        startedAt: self.startedAt
+                        baseURL: baseURL,
+                        startedAt: startedAt
                     )
                 )
-                self.send(response, on: connection)
+                send(response, on: connection)
 
             case .incomplete:
                 guard isComplete == false else {
-                    self.sendBadRequest(
+                    sendBadRequest(
                         on: connection,
                         message: "The HTTP request ended before the full payload arrived."
                     )
                     return
                 }
-                self.receiveRequest(on: connection, buffer: updatedBuffer)
+                receiveRequest(on: connection, buffer: updatedBuffer)
 
             case .invalid:
-                self.sendBadRequest(
+                sendBadRequest(
                     on: connection,
                     message: "Unable to parse the incoming HTTP request."
                 )
 
             case .tooLarge:
-                self.sendPayloadTooLarge(on: connection)
+                sendPayloadTooLarge(on: connection)
             }
         }
     }
@@ -148,14 +148,14 @@ final class LoopbackServer: @unchecked Sendable {
                 requestID: UUID().uuidString,
                 recovery: [
                     "Send a complete HTTP/1.1 request with a valid request line, headers, and Content-Length.",
-                    "For POST routes, send Content-Type: application/json and a JSON object body."
+                    "For POST routes, send Content-Type: application/json and a JSON object body.",
                 ]
             ),
             statusCode: 400,
             reasonPhrase: "Bad Request"
         )
         connection.send(content: response.serialized(), completion: .contentProcessed { _ in
-                connection.cancel()
+            connection.cancel()
         })
     }
 
@@ -167,7 +167,7 @@ final class LoopbackServer: @unchecked Sendable {
                 requestID: UUID().uuidString,
                 recovery: [
                     "Send a smaller JSON payload.",
-                    "For screenshots and large state reads, request imageMode path instead of base64 when possible."
+                    "For screenshots and large state reads, request imageMode path instead of base64 when possible.",
                 ]
             ),
             statusCode: 413,

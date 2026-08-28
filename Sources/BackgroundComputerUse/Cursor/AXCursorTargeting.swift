@@ -6,7 +6,7 @@ enum AXCursorTargeting {
     /// Explicit cursor requests can still override id/name/color, while package-level disabled
     /// execution remains honored.
     static func effectiveOptions(
-        requested: CursorRequestDTO?,
+        requested _: CursorRequestDTO?,
         options: ActionExecutionOptions
     ) -> ActionExecutionOptions {
         options
@@ -78,6 +78,32 @@ enum AXCursorTargeting {
         }
     }
 
+    static func prepareSemanticClick(
+        requested: CursorRequestDTO?,
+        target: AXActionTargetSnapshot,
+        window: ResolvedWindowDTO,
+        options: ActionExecutionOptions = .visualCursorEnabled
+    ) -> ActionCursorTargetResponseDTO {
+        prepareTargetedCursor(
+            requested: requested,
+            target: target,
+            window: window,
+            movement: "asynchronous_semantic_click_choreography",
+            options: options
+        ) { point, windowNumber, cursorID in
+            let duration = CursorRuntime.approach(
+                to: point,
+                attachedWindowNumber: windowNumber,
+                cursorID: cursorID
+            )
+            CursorRuntime.scheduleSemanticClickChoreography(
+                cursorID: cursorID,
+                afterApproach: duration
+            )
+            return duration
+        }
+    }
+
     static func prepareClick(
         requested: CursorRequestDTO?,
         pointAppKit: CGPoint,
@@ -120,7 +146,7 @@ enum AXCursorTargeting {
             targetPointAppKit: PointDTO(x: point.x, y: point.y),
             targetPointSource: targetPointSource,
             moved: true,
-            moveDurationMs: sanitizedJSONDouble(duration * 1_000),
+            moveDurationMs: sanitizedJSONDouble(duration * 1000),
             movement: "approach_click_choreography",
             warnings: warnings
         )
@@ -209,21 +235,33 @@ enum AXCursorTargeting {
         requested: CursorRequestDTO?,
         target: AXActionTargetSnapshot,
         window: ResolvedWindowDTO,
+        text: String,
         options: ActionExecutionOptions = .visualCursorEnabled
     ) -> ActionCursorTargetResponseDTO {
         prepareTargetedCursor(
             requested: requested,
             target: target,
             window: window,
-            movement: "approach_type_text_choreography",
+            movement: "asynchronous_type_text_choreography",
             options: options
         ) { point, windowNumber, cursorID in
-            CursorRuntime.prepareTypeText(to: point, attachedWindowNumber: windowNumber, cursorID: cursorID)
+            let duration = CursorRuntime.approach(
+                to: point,
+                attachedWindowNumber: windowNumber,
+                cursorID: cursorID
+            )
+            CursorRuntime.scheduleTypeTextChoreography(
+                cursorID: cursorID,
+                text: text,
+                afterApproach: duration
+            )
+            return duration
         }
     }
 
     static func finishTypeText(cursor: ActionCursorTargetResponseDTO, text: String) {
         guard cursor.moved else { return }
+        guard cursor.movement != "asynchronous_type_text_choreography" else { return }
         CursorRuntime.finishTypeText(cursorID: cursor.session.id, text: text)
     }
 
@@ -264,7 +302,7 @@ enum AXCursorTargeting {
             targetPointAppKit: PointDTO(x: visualPoint.x, y: visualPoint.y),
             targetPointSource: pointSource,
             moved: false,
-            moveDurationMs: sanitizedJSONDouble(duration * 1_000),
+            moveDurationMs: sanitizedJSONDouble(duration * 1000),
             movement: "key_choreography_in_place",
             warnings: []
         )
@@ -333,7 +371,7 @@ enum AXCursorTargeting {
             targetPointAppKit: PointDTO(x: point.x, y: point.y),
             targetPointSource: resolvedPoint.source,
             moved: true,
-            moveDurationMs: sanitizedJSONDouble(duration * 1_000),
+            moveDurationMs: sanitizedJSONDouble(duration * 1000),
             movement: movement,
             warnings: resolvedPoint.warnings
         )

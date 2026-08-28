@@ -39,11 +39,23 @@ Use this skill to start or connect to the local macOS `BackgroundComputerUse` ru
    `POST /v1/list_windows` with `{"pid": PID}`. Names and bundle IDs are descriptive only and are
    never accepted as window selectors.
 
+   To open an app that is not running, use `POST /v1/launch_app` with exactly one signed target form
+   (`bundleID` or canonical `appPath`) and a task `sessionID`. BCU Control may show an explicit
+   allow-once / always-allow / deny dialog. Do not retry while that user decision is pending.
+
 6. For visual tasks, request screenshots with `imageMode: "path"` and inspect the returned image files when useful.
 
-7. For action routes, reuse `stateToken` from the state you inspected. Reuse the same `cursor.id` when the user wants one continuous visible cursor. `type_text` prepares background input automatically; read `backgroundSafety.foregroundPreserved` and never send the removed `focusAssistMode` field.
+7. For action routes, reuse `stateToken` from the state you inspected. Reuse the same `cursor.id` when the user wants one continuous visible cursor. `type_text` prepares background input automatically and reports `strategiesAttempted`; `paste` supports text, Markdown, and HTML while preserving the complete clipboard. Read `backgroundSafety.foregroundPreserved` and never send the removed `focusAssistMode` field.
+
+   BCU Control binds policy to bundle ID + signer + designated requirement. HTTP 423
+   `control_paused` means mutations are paused but read routes remain available. HTTP 423
+   `control_stopped` means the task session was revoked; only `/health` remains available until the
+   app is restarted.
 
 8. When the visible cursor should explain work in real time, call `POST /v1/cursor_feedback` with public agent-facing text. Stream useful observations or visible response text; do not show route labels like "reading screen", tool names, product branding, or hidden chain-of-thought.
+
+   BCU Control shows at most one transient activity card. The user can disable it in
+   `Ajustes > Mostrar cartão de atividades`; activity history continues to be recorded.
 
 ## Find targeted elements before reading the full tree
 
@@ -146,6 +158,10 @@ capability. Send `language: "applescript"` or `"javascript"`, arbitrary `source`
 returns process-level `status`, `stdout`, `stderr`, `durationMs`, `timedOut`, and
 `effectiveTimeoutMs`.
 
+When BCU Control is connected, this route is blocked by default with `control_policy_required`
+because arbitrary source cannot be bound to one approved app identity. Use the verified per-window
+routes instead; do not weaken the Control policy to make a script convenient.
+
 Treat this lane as **unverified**: the response intentionally has no `classification` and never
 claims an observed UI effect. Always call `get_window_state` or `find_elements` afterwards to confirm
 what changed. The auth token now authorizes arbitrary control of scriptable apps through this lane.
@@ -158,6 +174,10 @@ directory. Never copy the submitted source into ordinary debug artifacts or chat
 - `scripts/ensure-runtime.sh`: find, install, launch, and bootstrap the runtime.
 - `scripts/install-runtime.sh`: install `BackgroundComputerUse.app` from an app zip or release URL.
 - `scripts/bcu-request.py`: call runtime endpoints from the manifest base URL.
+
+Locked use is opt-in and disabled by default. Never run a primary-host installation merely because
+the bundle builds. `script/qualify_locked_use.sh` is non-mutating by default, and actual install is
+eligible only after the VM/secondary-Mac matrix in `docs/locked-use-recovery.md` passes.
 
 Examples:
 

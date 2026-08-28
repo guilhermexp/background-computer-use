@@ -247,7 +247,7 @@ final class CursorCoordinator {
         sleepFor(timings.clickPressHoldMilliseconds / 1000)
         session.isPressed = false
         emit(
-            .sparkRing(origin: point, color: session.accent.trail, count: 6, lifetime: 0.42, age: 0, rngSeed: UInt64.random(in: 0..<9999)),
+            .sparkRing(origin: point, color: session.accent.trail, count: 6, lifetime: 0.42, age: 0, rngSeed: UInt64.random(in: 0 ..< 9999)),
             in: session
         )
         endAction(session)
@@ -403,7 +403,7 @@ final class CursorCoordinator {
         setGlyph(.crosshair, for: session)
         sleepFor(timings.setValuePreRippleMilliseconds / 1000)
         emit(.ripple(origin: point, color: session.accent.fill, maxRadius: 32, thickness: 1.1, lifetime: 0.52, age: 0), in: session)
-        emit(.sparkRing(origin: point, color: session.accent.trail, count: 6, lifetime: 0.52, age: 0, rngSeed: UInt64.random(in: 0..<9999)), in: session)
+        emit(.sparkRing(origin: point, color: session.accent.trail, count: 6, lifetime: 0.52, age: 0, rngSeed: UInt64.random(in: 0 ..< 9999)), in: session)
         return duration
     }
 
@@ -416,30 +416,13 @@ final class CursorCoordinator {
         )
     }
 
-    @discardableResult
-    func prepareTypeText(
-        to point: CGPoint,
-        attachedWindowNumber: Int,
-        cursorID: String
-    ) -> TimeInterval {
-        let session = prepareActionSession(cursorID: cursorID, attachedWindowNumber: attachedWindowNumber, target: point)
-        let duration = moveToTipAndWait(session, point)
-        setGlyph(.ibeam, for: session)
-        sleepFor(timings.typeArrowToIBeamMilliseconds / 1000)
-        setGlyph(.caret, for: session)
-        session.isTyping = true
-        session.caretStart = CACurrentMediaTime()
-        sleepFor(timings.typeIBeamToCaretMilliseconds / 1000)
-        return duration
-    }
-
     func finishTypeText(cursorID: String, text: String) {
         let session = session(for: cursorID)
         let generation = session.actionGeneration
         let puffCount = min(text.count, Self.maxTypeTextPuffs)
         let puffInterval = timings.typeCharacterIntervalMilliseconds / 1000
 
-        for index in 0..<puffCount {
+        for index in 0 ..< puffCount {
             scheduleTypePuff(
                 cursorID: cursorID,
                 generation: generation,
@@ -454,6 +437,24 @@ final class CursorCoordinator {
         )
     }
 
+    func scheduleTypeTextChoreography(
+        cursorID: String,
+        text: String,
+        afterApproach approachDuration: TimeInterval
+    ) {
+        let session = session(for: cursorID)
+        let generation = session.actionGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(approachDuration, 0)) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.beginTypeTextIfCurrent(
+                    cursorID: cursorID,
+                    generation: generation,
+                    text: text
+                )
+            }
+        }
+    }
+
     func finishClick(cursorID: String, afterHold hold: TimeInterval = MotionPacing.releaseHold) {
         let session = session(for: cursorID)
         let generation = session.actionGeneration
@@ -461,6 +462,26 @@ final class CursorCoordinator {
         touchVisibility(session, now: CACurrentMediaTime())
         refreshPresentation()
         scheduleActionEnd(cursorID: cursorID, generation: generation, after: hold)
+    }
+
+    func scheduleSemanticClickChoreography(
+        cursorID: String,
+        afterApproach approachDuration: TimeInterval
+    ) {
+        let session = session(for: cursorID)
+        let generation = session.actionGeneration
+        schedulePressed(
+            true,
+            cursorID: cursorID,
+            generation: generation,
+            after: max(approachDuration, 0)
+        )
+        let releaseDelay: TimeInterval = max(approachDuration, 0) + MotionPacing.pressLead
+        scheduleSemanticClickRelease(
+            cursorID: cursorID,
+            generation: generation,
+            after: releaseDelay
+        )
     }
 
     func beginActionFeedback(cursorID: String, attachedWindowNumber: Int?) {
@@ -546,7 +567,7 @@ final class CursorCoordinator {
         let attachment: String
         let hasWindowAttachment: Bool
         if let attachedWindowNumber {
-            self.updateAttachment(for: session, windowNumber: attachedWindowNumber)
+            updateAttachment(for: session, windowNumber: attachedWindowNumber)
             attachment = "window"
             hasWindowAttachment = true
         } else if session.attachedWindowNumber != nil {
@@ -649,7 +670,8 @@ final class CursorCoordinator {
         guard let session = sessionsByID[cursorID],
               session.hasPosition,
               session.visible,
-              session.visibilityAlpha > 0.01 else {
+              session.visibilityAlpha > 0.01
+        else {
             return nil
         }
         return session.position
@@ -661,7 +683,7 @@ final class CursorCoordinator {
         return session.feedback.snapshot(at: CACurrentMediaTime())
     }
 
-    fileprivate func displayLinkTick(_ link: CADisplayLink) {
+    fileprivate func displayLinkTick(_: CADisplayLink) {
         let now = CACurrentMediaTime()
         let dt = CGFloat(min(max(now - (lastTimestamp ?? now), 1.0 / 240.0), 1.0 / 24.0))
         lastTimestamp = now
@@ -742,7 +764,8 @@ final class CursorCoordinator {
         session.attachmentIsLive = anchor.isOnScreen
         if sameWindow,
            let previous = session.attachedWindowFrame,
-           previous != anchor.frameAppKit {
+           previous != anchor.frameAppKit
+        {
             reanchorPosition(session, from: previous, to: anchor.frameAppKit)
         }
         session.attachedWindowFrame = anchor.frameAppKit
@@ -750,7 +773,8 @@ final class CursorCoordinator {
 
     private func refreshAttachmentIfStale(_ session: CursorSessionState, now: TimeInterval) {
         guard let windowNumber = session.attachedWindowNumber,
-              now - session.attachmentCheckedAt >= Self.attachmentRefreshInterval else {
+              now - session.attachmentCheckedAt >= Self.attachmentRefreshInterval
+        else {
             return
         }
         updateAttachment(for: session, windowNumber: windowNumber, now: now)
@@ -872,6 +896,66 @@ final class CursorCoordinator {
         }
     }
 
+    private func scheduleSemanticClickRelease(
+        cursorID: String,
+        generation: UInt64,
+        after delay: TimeInterval
+    ) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.finishClickIfCurrent(cursorID: cursorID, generation: generation)
+            }
+        }
+    }
+
+    private func finishClickIfCurrent(cursorID: String, generation: UInt64) {
+        guard let current = sessionsByID[cursorID],
+              current.actionGeneration == generation
+        else {
+            return
+        }
+        finishClick(cursorID: cursorID)
+    }
+
+    private func beginTypeTextIfCurrent(
+        cursorID: String,
+        generation: UInt64,
+        text: String
+    ) {
+        guard let session = sessionsByID[cursorID],
+              session.actionGeneration == generation
+        else {
+            return
+        }
+        setGlyph(.ibeam, for: session)
+        let caretDelay = timings.typeArrowToIBeamMilliseconds / 1000
+        DispatchQueue.main.asyncAfter(deadline: .now() + caretDelay) { [weak self] in
+            MainActor.assumeIsolated {
+                self?.beginTypeTextCaretIfCurrent(
+                    cursorID: cursorID,
+                    generation: generation,
+                    text: text
+                )
+            }
+        }
+    }
+
+    private func beginTypeTextCaretIfCurrent(
+        cursorID: String,
+        generation: UInt64,
+        text: String
+    ) {
+        guard let session = sessionsByID[cursorID],
+              session.actionGeneration == generation
+        else {
+            return
+        }
+        setGlyph(.caret, for: session)
+        session.isTyping = true
+        session.caretStart = CACurrentMediaTime()
+        finishTypeText(cursorID: cursorID, text: text)
+    }
+
     private func scheduleActionFeedbackEnd(
         cursorID: String,
         generation: UInt64,
@@ -910,7 +994,8 @@ final class CursorCoordinator {
 
     private func setPressedIfCurrent(_ pressed: Bool, cursorID: String, generation: UInt64) {
         guard let session = sessionsByID[cursorID],
-              session.actionGeneration == generation else {
+              session.actionGeneration == generation
+        else {
             return
         }
         session.isPressed = pressed
@@ -921,7 +1006,8 @@ final class CursorCoordinator {
 
     private func clearActionFeedbackIfCurrent(cursorID: String, generation: UInt64) {
         guard let session = sessionsByID[cursorID],
-              session.actionGeneration == generation else {
+              session.actionGeneration == generation
+        else {
             return
         }
         clearActionFeedback(session)
@@ -929,7 +1015,8 @@ final class CursorCoordinator {
 
     private func endActionIfCurrent(cursorID: String, generation: UInt64) {
         guard let session = sessionsByID[cursorID],
-              session.actionGeneration == generation else {
+              session.actionGeneration == generation
+        else {
             return
         }
         endAction(session)
@@ -937,13 +1024,14 @@ final class CursorCoordinator {
 
     private func emitTypePuffIfCurrent(cursorID: String, generation: UInt64) {
         guard let session = sessionsByID[cursorID],
-              session.actionGeneration == generation else {
+              session.actionGeneration == generation
+        else {
             return
         }
         emit(
             .puff(
-                origin: CGPoint(x: session.position.x + CGFloat.random(in: -2...2), y: session.position.y + 10),
-                drift: CGVector(dx: CGFloat.random(in: -0.3...0.3), dy: 1),
+                origin: CGPoint(x: session.position.x + CGFloat.random(in: -2 ... 2), y: session.position.y + 10),
+                drift: CGVector(dx: CGFloat.random(in: -0.3 ... 0.3), dy: 1),
                 color: session.accent.trail,
                 radius: 2.4,
                 lifetime: 0.5,
@@ -985,7 +1073,7 @@ final class CursorCoordinator {
         session.currentMotion = nil
         session.acquireGlowEmitted = false
         session.anticipationTilt = 0
-        session.followers = (0..<CursorMotionConstants.followerCount).map { _ in
+        session.followers = (0 ..< CursorMotionConstants.followerCount).map { _ in
             CursorFollowerPoint(
                 position: point,
                 velocity: .zero,
@@ -1096,7 +1184,8 @@ final class CursorCoordinator {
     /// attached window, never `NSScreen.main` while an attachment exists.
     private func anchorScreen(for session: CursorSessionState, near point: CGPoint) -> NSScreen? {
         if let windowFrame = session.attachedWindowFrame,
-           let screen = CursorWindowPinning.screen(forWindowFrame: windowFrame) {
+           let screen = CursorWindowPinning.screen(forWindowFrame: windowFrame)
+        {
             return screen
         }
         return DesktopGeometry.screenContaining(point: point) ?? NSScreen.main ?? NSScreen.screens.first
@@ -1154,7 +1243,8 @@ final class CursorCoordinator {
             if plan.progress(at: now) > 0.88,
                CursorMotionConstants.glowOnAcquire,
                session.acquireGlowEmitted == false,
-               plan.entrance == false {
+               plan.entrance == false
+            {
                 session.acquireGlowEmitted = true
                 session.effects.append(.glowPulse(origin: plan.end, color: session.accent.fill, lifetime: 0.4, age: 0))
             }
@@ -1209,7 +1299,8 @@ final class CursorCoordinator {
 
         if CursorMotionConstants.anticipationEnabled,
            let plan = session.currentMotion,
-           plan.progress(at: now) < 0.08 {
+           plan.progress(at: now) < 0.08
+        {
             session.anticipationTilt = 0.24
         } else {
             session.anticipationTilt *= 0.85
@@ -1274,7 +1365,7 @@ final class CursorCoordinator {
     }
 
     private func stepScrollStreak(_ session: CursorSessionState, now: TimeInterval) {
-        if now < session.scrollStreakEnabledUntil, Int.random(in: 0..<2) == 0 {
+        if now < session.scrollStreakEnabledUntil, Int.random(in: 0 ..< 2) == 0 {
             session.effects.append(
                 .chevronStreak(
                     origin: session.scrollStreakOrigin,
@@ -1401,7 +1492,8 @@ final class CursorCoordinator {
             // the cursor. Otherwise the overlay would paint over an unrelated app.
             guard session.attachedWindowNumber != nil,
                   session.attachmentIsLive,
-                  session.attachmentIsExposed else {
+                  session.attachmentIsExposed
+            else {
                 continue
             }
 
@@ -1480,7 +1572,8 @@ final class CursorCoordinator {
     private func purgeExpiredSessions(now: TimeInterval) {
         let expiredSessionIDs = sessionsByID.values.compactMap { session -> String? in
             guard session.activity(at: now).isActive == false,
-                  now - session.lastActivityAt >= CursorPresenceTiming.idleExpireDelay else {
+                  now - session.lastActivityAt >= CursorPresenceTiming.idleExpireDelay
+            else {
                 return nil
             }
             return session.id
@@ -1715,6 +1808,18 @@ enum CursorRuntime {
         }
     }
 
+    static func scheduleSemanticClickChoreography(
+        cursorID: String,
+        afterApproach approachDuration: TimeInterval
+    ) {
+        runOnMain {
+            CursorCoordinator.shared.scheduleSemanticClickChoreography(
+                cursorID: cursorID,
+                afterApproach: approachDuration
+            )
+        }
+    }
+
     static func beginActionFeedback(cursorID: String, attachedWindowNumber: Int? = nil) {
         runOnMain {
             CursorCoordinator.shared.beginActionFeedback(
@@ -1808,19 +1913,23 @@ enum CursorRuntime {
         }
     }
 
-    static func prepareTypeText(to point: CGPoint, attachedWindowNumber: Int, cursorID: String) -> TimeInterval {
-        runOnMain {
-            CursorCoordinator.shared.prepareTypeText(
-                to: point,
-                attachedWindowNumber: attachedWindowNumber,
-                cursorID: cursorID
-            )
-        }
-    }
-
     static func finishTypeText(cursorID: String, text: String) {
         runOnMain {
             CursorCoordinator.shared.finishTypeText(cursorID: cursorID, text: text)
+        }
+    }
+
+    static func scheduleTypeTextChoreography(
+        cursorID: String,
+        text: String,
+        afterApproach approachDuration: TimeInterval
+    ) {
+        runOnMain {
+            CursorCoordinator.shared.scheduleTypeTextChoreography(
+                cursorID: cursorID,
+                text: text,
+                afterApproach: approachDuration
+            )
         }
     }
 

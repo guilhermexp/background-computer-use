@@ -49,6 +49,16 @@ private struct ClickSemanticOutcome {
     let verification: ClickVerificationEvidenceDTO?
 }
 
+private struct ClickPostDispatchSample {
+    let capture: AXActionStateCapture?
+    let windowImage: CGImage?
+    let regionEvidence: ClickTargetRegion.Evidence
+}
+
+private enum ClickRouteTiming {
+    @TaskLocal static var startedAtNanoseconds: UInt64?
+}
+
 struct ClickFocusEvidence {
     let changed: Bool?
     let diagnostic: String?
@@ -211,12 +221,18 @@ struct ClickRouteService {
     }
 
     func click(request: ClickRequest) throws -> ClickResponse {
+        try ClickRouteTiming.$startedAtNanoseconds.withValue(DispatchTime.now().uptimeNanoseconds) {
+            try measuredClick(request: request)
+        }
+    }
+
+    private func measuredClick(request: ClickRequest) throws -> ClickResponse {
         let requestedTarget = requestedTargetDTO(request)
         let mouseButton = request.mouseButton ?? .left
         let frontmostBefore = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let notes = [
             "click uses the production waterfall: semantic AX for eligible targets, then target-derived or direct coordinate dispatch through native target-only SLPS/SLEvent background click transport.",
-            "perform_secondary_action remains a separate semantic route; click does not hide secondary/default-action fallbacks as pointer clicks."
+            "perform_secondary_action remains a separate semantic route; click does not hide secondary/default-action fallbacks as pointer clicks.",
         ]
 
         let capture = try targetResolver.capture(
@@ -567,6 +583,38 @@ struct ClickRouteService {
                 modelHeight: Double(modelSize.height)
             )
             : nil
+        if let plan = coordinatePlan(
+            x: Double(anchor.x),
+            y: Double(anchor.y),
+            modelSize: modelSize,
+            window: window,
+            source: "ocr_anchor_center"
+        ), let semanticTarget = semanticTargetForOCRAnchor(
+            anchor,
+            pointAppKit: plan.appKitPoint,
+            capture: capture
+        ) {
+            let semantic = attemptSemanticAX(
+                request: request,
+                capture: capture,
+                target: semanticTarget,
+                clickCount: clickCount,
+                mouseButton: mouseButton,
+                warnings: warnings,
+                notes: notes + [
+                    "The OCR anchor uniquely matched a pressable AX node at the same visual point; the route used semantic AX without coordinate duplication.",
+                ]
+            )
+            return semanticResponse(
+                semantic,
+                request: request,
+                capture: capture,
+                target: semanticTarget,
+                clickCount: clickCount,
+                mouseButton: mouseButton,
+                frontmostBefore: frontmostBefore
+            )
+        }
         let outcome = executeCoordinateClick(
             request: request,
             capture: capture,
@@ -676,6 +724,41 @@ struct ClickRouteService {
             verification: verification,
             postScreenshot: postScreenshot(from: outcome.postCapture)
         )
+    }
+
+    private func semanticTargetForOCRAnchor(
+        _ anchor: OCRAnchorDTO,
+        pointAppKit: CGPoint,
+        capture: AXActionStateCapture
+    ) -> AXActionTargetSnapshot? {
+        let matches = capture.envelope.response.tree.nodes.filter { node in
+            guard node.interactionTraits?.supportsPress == true,
+                  OCRSemanticPromotionPolicy.labelsMatch(
+                      anchor: anchor.text,
+                      candidate: node.title ?? node.description
+                  ),
+                  let frame = node.frameAppKit
+            else {
+                return false
+            }
+            return CGRect(
+                x: frame.x,
+                y: frame.y,
+                width: frame.width,
+                height: frame.height
+            ).contains(pointAppKit)
+        }
+        guard matches.count == 1, let node = matches.first else { return nil }
+        let requestTarget: ActionTargetRequestDTO?
+        if let nodeID = node.nodeID {
+            requestTarget = try? .nodeID(nodeID)
+        } else if let displayIndex = node.displayIndex {
+            requestTarget = try? .displayIndex(displayIndex)
+        } else {
+            requestTarget = nil
+        }
+        guard let requestTarget else { return nil }
+        return targetResolver.resolveTarget(requestTarget, in: capture, kind: .click)?.target
     }
 
     private func ocrFailureResponse(
@@ -853,7 +936,7 @@ struct ClickRouteService {
 
         let target = candidate.target
         let safetyDecision = RuntimeSafetyPolicy.evaluateLabel(
-            [target.title, target.description, target.displayRole].compactMap { $0 }.joined(separator: " "),
+            [target.title, target.description, target.displayRole].compactMap(\.self).joined(separator: " "),
             confirmed: request.confirm == true
         )
         if safetyDecision.blocked {
@@ -1044,14 +1127,13 @@ struct ClickRouteService {
 
         let plan = planSemanticAXClick(target: target, liveElement: liveElement.element)
         guard plan.dispatches else {
-            let summary: String
-            switch plan.attempt {
+            let summary = switch plan.attempt {
             case .coordinateRequired:
-                summary = "The target requires a target-derived pointer click; no exact semantic AX primary-click strategy applied."
+                "The target requires a target-derived pointer click; no exact semantic AX primary-click strategy applied."
             case .ambiguousDescendantClick:
-                summary = "The element contained multiple possible primary-click descendants, so semantic AX retargeting was rejected."
+                "The element contained multiple possible primary-click descendants, so semantic AX retargeting was rejected."
             default:
-                summary = "No generic semantic AX primary-click strategy applied to the target."
+                "No generic semantic AX primary-click strategy applied to the target."
             }
             return ClickSemanticOutcome(
                 classification: .effectNotVerified,
@@ -1079,7 +1161,7 @@ struct ClickRouteService {
             )
         }
 
-        let cursor = AXCursorTargeting.prepareClick(
+        let cursor = AXCursorTargeting.prepareSemanticClick(
             requested: request.cursor,
             target: target,
             window: capture.envelope.response.window,
@@ -1091,31 +1173,58 @@ struct ClickRouteService {
             pointAppKit: AXCursorTargeting.targetPoint(for: target, window: capture.envelope.response.window).point,
             windowFrameAppKit: capture.envelope.response.window.frameAppKit
         )
-        let beforeWindowImage = CGWindowCaptureService.captureImage(
-            window: capture.envelope.response.window,
-            attachedSurfaces: capture.envelope.response.attachedSurfaces
+        let requiresPixelEvidence = ClickFastVerificationPolicy.requiresPixelEvidence(
+            imageMode: request.imageMode ?? .omit,
+            projectionProfile: capture.envelope.response.tree.profile
         )
-        let webAreaBaseline = sampleWebAreaTextBaseline(before: capture)
+        let beforeWindowImage: CGImage? = requiresPixelEvidence
+            ? CGWindowCaptureService.captureImage(
+                window: capture.envelope.response.window,
+                attachedSurfaces: capture.envelope.response.attachedSurfaces
+            )
+            : nil
+        let webAreaBaseline = sampleWebAreaTextBaseline(
+            before: capture,
+            suppliedStateToken: request.stateToken
+        )
         let frontmostBeforeDispatch = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let dispatch = dispatchSemanticPlan(plan)
         let rawStatus = dispatch.rawStatus
-        AXCursorTargeting.finishClick(cursor: cursor)
-        sleepRunLoop(settleDelay)
 
-        let postCapture: AXActionStateCapture?
+        var postCapture: AXActionStateCapture?
         do {
             postCapture = try targetResolver.reread(after: capture, imageMode: request.imageMode ?? .omit)
         } catch {
             postCapture = nil
             warnings.append("Post-click reread failed after semantic AX dispatch: \(error).")
         }
+        if ClickFastVerificationPolicy.shouldContinueWaiting(
+            preStateToken: capture.envelope.response.stateToken,
+            postStateToken: postCapture?.envelope.response.stateToken,
+            dispatchSucceeded: dispatch.success
+        ) {
+            let waited = ConditionedActionWait.poll(
+                intervalMs: 25,
+                deadlineMs: Int((settleDelay * 1000).rounded()),
+                sample: { try? targetResolver.reread(after: capture, imageMode: request.imageMode ?? .omit) },
+                isSatisfied: { candidate in
+                    candidate?.envelope.response.stateToken != capture.envelope.response.stateToken
+                }
+            )
+            if let waitedCapture = waited.sample {
+                postCapture = waitedCapture
+            }
+        }
         let refreshed = postCapture.flatMap {
             targetResolver.locateRefreshedTarget(in: $0, prior: target, kind: .click)
         }
-        let afterWindowImage = CGWindowCaptureService.captureImage(
-            window: postCapture?.envelope.response.window ?? capture.envelope.response.window,
-            attachedSurfaces: postCapture?.envelope.response.attachedSurfaces ?? capture.envelope.response.attachedSurfaces
-        )
+        let afterWindowImage: CGImage? = requiresPixelEvidence
+            ? CGWindowCaptureService.captureImage(
+                window: postCapture?.envelope.response.window ?? capture.envelope.response.window,
+                attachedSurfaces: postCapture?.envelope.response.attachedSurfaces ?? capture.envelope.response.attachedSurfaces
+            )
+            : nil
+        let frontmostAfter = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let verification = verifyClick(
             before: capture,
             after: postCapture,
@@ -1123,7 +1232,7 @@ struct ClickRouteService {
             refreshedTarget: refreshed?.target,
             refreshedTargetStrategy: refreshed?.strategy,
             foregroundBeforeDispatch: frontmostBeforeDispatch,
-            foregroundAfter: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            foregroundAfter: frontmostAfter,
             dispatchSuccess: dispatch.success,
             webAreaBaseline: webAreaBaseline,
             region: ClickTargetRegion.evidence(
@@ -1173,7 +1282,7 @@ struct ClickRouteService {
             refreshedTargetStrategy: refreshed?.strategy,
             cursor: cursor,
             frontmostBundleBeforeDispatch: frontmostBeforeDispatch,
-            frontmostBundleAfter: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            frontmostBundleAfter: frontmostAfter,
             warnings: warnings,
             notes: notes,
             verification: verification
@@ -1196,7 +1305,7 @@ struct ClickRouteService {
             let cursor = AXCursorTargeting.notAttempted(
                 requested: request.cursor,
                 reason: "Cursor movement was not attempted because the target had no stable element-derived coordinate.",
-                    options: executionOptions
+                options: executionOptions
             )
             return ClickCoordinateOutcome(
                 classification: .verifierAmbiguous,
@@ -1263,7 +1372,7 @@ struct ClickRouteService {
             let cursor = AXCursorTargeting.notAttempted(
                 requested: request.cursor,
                 reason: "Cursor movement was not attempted because the model-facing coordinate was invalid or outside the current window screenshot bounds.",
-                    options: executionOptions
+                options: executionOptions
             )
             return ClickCoordinateOutcome(
                 classification: .verifierAmbiguous,
@@ -1311,7 +1420,7 @@ struct ClickRouteService {
         mouseButton: MouseButtonDTO,
         finalRoute: ClickFinalRouteDTO,
         fallbackReason: ClickFallbackReasonDTO,
-        source: String,
+        source _: String,
         inheritedTransports: [ClickTransportAttemptDTO],
         inheritedSteps: [ClickRouteStepDTO],
         warnings: [String],
@@ -1421,7 +1530,7 @@ struct ClickRouteService {
                         verificationSuccess: false,
                         intentSuccess: false,
                         note: "Coordinate transport failed before dispatch."
-                    )
+                    ),
                 ],
                 postCapture: nil,
                 cursor: cursor,
@@ -1434,13 +1543,17 @@ struct ClickRouteService {
         }
 
         AXCursorTargeting.finishClick(cursor: cursor)
-        sleepRunLoop(settleDelay)
-        var postCapture: AXActionStateCapture?
-        do {
-            postCapture = try targetResolver.reread(after: capture, imageMode: postImageMode ?? request.imageMode ?? .omit)
-        } catch {
-            postCapture = nil
-            warnings.append("Post-click reread failed after coordinate dispatch: \(error).")
+        let settledCoordinate = waitForPostDispatchEvidence(
+            after: capture,
+            baselineStateToken: verificationBaseline?.envelope.response.stateToken
+                ?? capture.envelope.response.stateToken,
+            imageMode: postImageMode ?? request.imageMode ?? .omit,
+            region: region,
+            beforeImage: beforeWindowImage
+        )
+        var postCapture = settledCoordinate.sample.capture
+        if postCapture == nil {
+            warnings.append("Post-click reread failed after coordinate dispatch.")
         }
         let refreshed = target.flatMap { prior in
             postCapture.flatMap {
@@ -1448,15 +1561,8 @@ struct ClickRouteService {
             }
         }
         let frontmostAfter = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        let afterWindowImage = CGWindowCaptureService.captureImage(
-            window: postCapture?.envelope.response.window ?? capture.envelope.response.window,
-            attachedSurfaces: postCapture?.envelope.response.attachedSurfaces ?? capture.envelope.response.attachedSurfaces
-        )
-        let regionEvidence = ClickTargetRegion.evidence(
-            region: region,
-            before: beforeWindowImage,
-            after: afterWindowImage
-        )
+        let afterWindowImage = settledCoordinate.sample.windowImage
+        let regionEvidence = settledCoordinate.sample.regionEvidence
         let comparisonBaseline = verificationBaseline ?? capture
         let stateBaselineAvailable = verificationBaseline != nil
         let coordinateStateChanges = ClickCoordinateVerificationStateComparator.compare(
@@ -1513,13 +1619,28 @@ struct ClickRouteService {
         }
         let escalation = ClickVerificationGate.performEscalation(
             decision: coordinateDecision,
-            none: AXPointPressOutcome.none,
+            none: AXPointPressOutcome.none("coordinate escalation was not requested"),
             action: {
-                pressAXElement(
-                underPointTopLeft: plan.eventTapPointTopLeft,
-                pid: Int32(capture.envelope.response.window.pid),
-                confirmed: request.confirm == true
-                )
+                var lastUnavailable = AXPointPressOutcome.none("AX point press was unavailable")
+                return ClickHitTestRetry.firstAvailable(
+                    maximumAttempts: 12,
+                    sleep: { sleepRunLoop(0.05) },
+                    action: {
+                        let refreshedCapture = try? targetResolver.reread(after: capture, imageMode: .omit)
+                        let outcome = pressAXElement(
+                            underPointTopLeft: plan.eventTapPointTopLeft,
+                            pointAppKit: plan.appKitPoint,
+                            pid: Int32(capture.envelope.response.window.pid),
+                            confirmed: request.confirm == true,
+                            capturedState: refreshedCapture ?? postCapture
+                        )
+                        if case .none = outcome {
+                            lastUnavailable = outcome
+                            return nil
+                        }
+                        return outcome
+                    }
+                ) ?? lastUnavailable
             }
         )
 
@@ -1528,25 +1649,21 @@ struct ClickRouteService {
                 "The coordinate dispatch proved no effect and the accessibility element under the point was not pressed: \(reason)"
             )
         }
+        if case let .none(diagnostic) = escalation, coordinateDecision.shouldEscalate {
+            warnings.append("ax_point_press_unavailable: \(diagnostic)")
+        }
 
         if case let .pressed(press) = escalation {
-            sleepRunLoop(settleDelay)
-            let escalatedCapture = try? targetResolver.reread(
-                after: capture,
-                imageMode: postImageMode ?? request.imageMode ?? .omit
-            )
-            let escalatedWindow = escalatedCapture?.envelope.response.window
-                ?? postCapture?.envelope.response.window
-                ?? capture.envelope.response.window
-            let escalatedRegion = ClickTargetRegion.evidence(
+            let escalationBaselineCapture = postCapture ?? capture
+            let settledEscalation = waitForPostDispatchEvidence(
+                after: escalationBaselineCapture,
+                baselineStateToken: escalationBaselineCapture.envelope.response.stateToken,
+                imageMode: postImageMode ?? request.imageMode ?? .omit,
                 region: region,
-                before: afterWindowImage,
-                after: CGWindowCaptureService.captureImage(
-                    window: escalatedWindow,
-                    attachedSurfaces: escalatedCapture?.envelope.response.attachedSurfaces
-                        ?? capture.envelope.response.attachedSurfaces
-                )
+                beforeImage: afterWindowImage
             )
+            let escalatedCapture = settledEscalation.sample.capture
+            let escalatedRegion = settledEscalation.sample.regionEvidence
             let escalationTarget = refreshed?.target
             let escalatedRefreshed = escalationTarget.flatMap { prior in
                 escalatedCapture.flatMap {
@@ -1577,7 +1694,7 @@ struct ClickRouteService {
                 webAreaBaseline: escalationWebAreaBaseline,
                 region: escalatedRegion,
                 extraNotes: [
-                    "Coordinate dispatch proved no effect; pressed the accessibility element under the same point (role=\(press.role ?? "unknown"), label=\(press.label.isEmpty ? "none" : press.label), AXPress status=\(press.status.rawValue))."
+                    "Coordinate dispatch proved no effect; pressed the accessibility element under the same point (role=\(press.role ?? "unknown"), label=\(press.label.isEmpty ? "none" : press.label), AXPress status=\(press.status.rawValue)).",
                 ]
             )
             let escalationVerified = press.succeeded && effectVerified(escalatedVerification)
@@ -1598,7 +1715,7 @@ struct ClickRouteService {
                 liveElementResolution: "ax_hit_test_at_click_point",
                 notes: [
                     "Hit-tested element role=\(press.role ?? "unknown") label=\(press.label.isEmpty ? "none" : press.label) frame=\(press.frameTopLeft).",
-                    "Coordinate injection is not honored by every renderer; the accessibility action addresses the same point."
+                    "Coordinate injection is not honored by every renderer; the accessibility action addresses the same point.",
                 ]
             )
             escalationStep = ClickRouteStepDTO(
@@ -1628,7 +1745,7 @@ struct ClickRouteService {
         let failureDomain: ActionFailureDomainDTO? = verified
             ? nil
             : (transportResult.dispatchSuccess ? .appSpecificSemantics : .transport)
-        if transportResult.dispatchSuccess && verified == false {
+        if transportResult.dispatchSuccess, verified == false {
             let diagnostic = capture.envelope.response.tree.profile == AXProjectionProfile.richWeb.rawValue
                 ? "renderer_ignores_coordinate_injection"
                 : "coordinate_dispatch_effect_unconfirmed"
@@ -1710,7 +1827,7 @@ struct ClickRouteService {
             let cursor = AXCursorTargeting.notAttempted(
                 requested: request.cursor,
                 reason: "Cursor movement was not attempted because the target had no stable element-derived coordinate.",
-                    options: executionOptions
+                options: executionOptions
             )
             return ClickCoordinateOutcome(
                 classification: .verifierAmbiguous,
@@ -1727,7 +1844,7 @@ struct ClickRouteService {
                         verificationSuccess: false,
                         intentSuccess: false,
                         note: "Explicit element multi-click could not resolve a stable pointer coordinate."
-                    )
+                    ),
                 ],
                 postCapture: nil,
                 cursor: cursor,
@@ -1785,7 +1902,8 @@ struct ClickRouteService {
         }
 
         if let row = rowElement(startingAt: liveElement),
-           isInsideWebArea(row) == false {
+           isInsideWebArea(row) == false
+        {
             if let container = selectableRowsContainer(for: row) {
                 return SemanticPlan(
                     attempt: .setContainerSelectedRows,
@@ -1939,7 +2057,8 @@ struct ClickRouteService {
             let role = AXActionRuntimeSupport.stringAttribute(candidate, attribute: kAXRoleAttribute as CFString)
             let subrole = AXActionRuntimeSupport.stringAttribute(candidate, attribute: kAXSubroleAttribute as CFString)
             if ["AXRow", "AXOutlineRow", "AXTableRow"].contains(role ?? "") ||
-                ["AXOutlineRow", "AXTableRow"].contains(subrole ?? "") {
+                ["AXOutlineRow", "AXTableRow"].contains(subrole ?? "")
+            {
                 return candidate
             }
         }
@@ -1956,7 +2075,8 @@ struct ClickRouteService {
         for candidate in AXActionRuntimeSupport.walkAncestors(startingAt: row, maxDepth: 10).dropFirst() {
             let role = AXActionRuntimeSupport.stringAttribute(candidate, attribute: kAXRoleAttribute as CFString)
             if ["AXOutline", "AXTable", "AXList", "AXBrowser"].contains(role ?? ""),
-               AXActionRuntimeSupport.isAttributeSettable(candidate, attribute: "AXSelectedRows" as CFString) {
+               AXActionRuntimeSupport.isAttributeSettable(candidate, attribute: "AXSelectedRows" as CFString)
+            {
                 return candidate
             }
         }
@@ -2016,7 +2136,8 @@ struct ClickRouteService {
             let enabled = AXActionRuntimeSupport.boolAttribute(candidate, attribute: kAXEnabledAttribute as CFString)
             if actions.contains(kAXPressAction as String),
                ["AXLink", "AXButton", "AXCheckBox", "AXRadioButton", "AXGroup"].contains(role ?? ""),
-               enabled != false {
+               enabled != false
+            {
                 results.append(candidate)
             }
             if depth < 5 {
@@ -2033,7 +2154,9 @@ struct ClickRouteService {
         let frameTopLeft: CGRect
         let status: AXError
 
-        var succeeded: Bool { status == .success }
+        var succeeded: Bool {
+            status == .success
+        }
     }
 
     /// What the escalation did, or why it refused to act.
@@ -2041,7 +2164,7 @@ struct ClickRouteService {
         case pressed(AXPointPressResult)
         /// A pressable element under the point carries destructive wording.
         case requiresConfirmation(String)
-        case none
+        case none(String)
     }
 
     /// Presses the accessibility element under `pointTopLeft`.
@@ -2058,26 +2181,85 @@ struct ClickRouteService {
     /// never presses destructive wording without `confirm=true`.
     private func pressAXElement(
         underPointTopLeft pointTopLeft: CGPoint,
+        pointAppKit: CGPoint,
         pid: Int32,
-        confirmed: Bool
+        confirmed: Bool,
+        capturedState: AXActionStateCapture?
     ) -> AXPointPressOutcome {
         let appElement = AXHelpers.applicationElement(pid: pid)
-        guard let hit = AXActionRuntimeSupport.hitTest(appElement, point: pointTopLeft)
-            ?? AXActionRuntimeSupport.hitTest(AXUIElementCreateSystemWide(), point: pointTopLeft) else {
-            return .none
+        var diagnostics: [String] = []
+        if let hit = AXActionRuntimeSupport.hitTest(appElement, point: pointTopLeft)
+            ?? AXActionRuntimeSupport.hitTest(AXUIElementCreateSystemWide(), point: pointTopLeft),
+            let outcome = pressEligibleElement(
+                startingAt: hit,
+                pointTopLeft: pointTopLeft,
+                pid: pid,
+                confirmed: confirmed
+            )
+        {
+            return outcome
+        } else {
+            diagnostics.append("AX hit-test found no eligible target-process element")
         }
 
-        // The system-wide fallback hit-tests every on-screen window, so it can return
-        // an element of another process (an open menu, a notification banner, another
-        // app's window over the same point). Acting on it would silently break the
-        // "act on the window I named" contract.
-        var hitPID: pid_t = 0
-        guard AXUIElementGetPid(hit, &hitPID) == .success, hitPID == pid else {
-            return .none
+        let capturedCandidates = (capturedState?.envelope.response.tree.nodes ?? [])
+            .filter { node in
+                guard node.interactionTraits?.supportsPress == true,
+                      let frame = node.frameAppKit
+                else {
+                    return false
+                }
+                return CGRect(
+                    x: frame.x,
+                    y: frame.y,
+                    width: frame.width,
+                    height: frame.height
+                ).contains(pointAppKit)
+            }
+            .sorted { left, right in
+                let leftArea = (left.frameAppKit?.width ?? 0) * (left.frameAppKit?.height ?? 0)
+                let rightArea = (right.frameAppKit?.width ?? 0) * (right.frameAppKit?.height ?? 0)
+                if leftArea != rightArea {
+                    return leftArea < rightArea
+                }
+                return left.depth > right.depth
+            }
+        for node in capturedCandidates {
+            guard let element = capturedState?.liveElementsByCanonicalIndex[node.primaryCanonicalIndex] else {
+                diagnostics.append("captured candidate \(node.primaryCanonicalIndex) had no live AX element")
+                continue
+            }
+            guard
+                let outcome = pressEligibleElement(
+                    startingAt: element,
+                    pointTopLeft: pointTopLeft,
+                    pid: pid,
+                    confirmed: confirmed
+                )
+            else {
+                diagnostics.append("captured candidate \(node.primaryCanonicalIndex) failed live eligibility")
+                continue
+            }
+            return outcome
         }
-        AXHelpers.setMessagingTimeout(hit, seconds: 1.0)
+        diagnostics.append(
+            "captured nodes=\(capturedState?.envelope.response.tree.nodes.count ?? 0) point-matching pressables=\(capturedCandidates.count)"
+        )
+        return .none(diagnostics.joined(separator: "; "))
+    }
 
-        for candidate in AXActionRuntimeSupport.walkAncestors(startingAt: hit, maxDepth: 4) {
+    private func pressEligibleElement(
+        startingAt element: AXUIElement,
+        pointTopLeft: CGPoint,
+        pid: Int32,
+        confirmed: Bool
+    ) -> AXPointPressOutcome? {
+        var elementPID: pid_t = 0
+        guard AXUIElementGetPid(element, &elementPID) == .success, elementPID == pid else {
+            return nil
+        }
+        AXHelpers.setMessagingTimeout(element, seconds: 1.0)
+        for candidate in AXActionRuntimeSupport.walkAncestors(startingAt: element, maxDepth: 4) {
             let frame = AXActionRuntimeSupport.rectAttribute(candidate, attribute: "AXFrame" as CFString)
             guard AXPointPressEligibility.isEligible(
                 actions: AXActionRuntimeSupport.actionNames(candidate),
@@ -2103,7 +2285,7 @@ struct ClickRouteService {
                 )
             )
         }
-        return .none
+        return nil
     }
 
     private func isSafeDescendantRetargetContainer(_ element: AXUIElement) -> Bool {
@@ -2115,7 +2297,7 @@ struct ClickRouteService {
             return false
         }
         let area = max(frame.width, 0) * max(frame.height, 0)
-        return frame.width > 1 && frame.height > 1 && area <= 500_000 && frame.width <= 1_200 && frame.height <= 320
+        return frame.width > 1 && frame.height > 1 && area <= 500_000 && frame.width <= 1200 && frame.height <= 320
     }
 
     private func label(for element: AXUIElement) -> String {
@@ -2125,7 +2307,7 @@ struct ClickRouteService {
             AXActionRuntimeSupport.stringAttribute(element, attribute: kAXDescriptionAttribute as CFString),
             AXActionRuntimeSupport.stringAttribute(element, attribute: kAXHelpAttribute as CFString),
         ]
-        .compactMap { $0 }
+        .compactMap(\.self)
         .joined(separator: " ")
     }
 
@@ -2351,7 +2533,8 @@ struct ClickRouteService {
               modelSize.width > 0, modelSize.height > 0,
               x >= -0.5, y >= -0.5,
               x <= Double(modelSize.width) + 0.5,
-              y <= Double(modelSize.height) + 0.5 else {
+              y <= Double(modelSize.height) + 0.5
+        else {
             return nil
         }
         let frame = rect(from: window.frameAppKit).standardized
@@ -2421,10 +2604,10 @@ struct ClickRouteService {
         return AXCursorTargeting.targetPoint(for: target, window: window).point != nil
     }
 
-
     private func modelFacingImage(from capture: AXActionStateCapture) -> CGImage? {
         guard let path = capture.envelope.response.screenshot.image?.imagePath,
-              let image = NSImage(contentsOfFile: path) else {
+              let image = NSImage(contentsOfFile: path)
+        else {
             return nil
         }
         return image.cgImage(forProposedRect: nil, context: nil, hints: nil)
@@ -2473,11 +2656,11 @@ struct ClickRouteService {
     private func explicitClickCount(from mode: ClickModeDTO?) -> Int? {
         switch mode {
         case .single:
-            return 1
+            1
         case .double:
-            return 2
+            2
         case nil:
-            return nil
+            nil
         }
     }
 
@@ -2511,7 +2694,7 @@ struct ClickRouteService {
             cursor: AXCursorTargeting.notAttempted(
                 requested: request.cursor,
                 reason: "Cursor movement was not attempted because the request click count was invalid.",
-                    options: executionOptions
+                options: executionOptions
             ),
             frontmostBundleBefore: frontmostBefore,
             frontmostBundleBeforeDispatch: nil,
@@ -2672,6 +2855,17 @@ struct ClickRouteService {
             frontmostBundleAfter: frontmostBundleAfter,
             warnings: warnings,
             notes: notes,
+            performance: ClickRouteTiming.startedAtNanoseconds.map { started in
+                ActionPerformanceDTO(
+                    resolveMs: nil,
+                    captureMs: nil,
+                    preparationMs: nil,
+                    transportMs: nil,
+                    settleMs: nil,
+                    verificationMs: nil,
+                    totalMs: Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
+                )
+            },
             verification: verification,
             postScreenshot: postScreenshot
         )
@@ -2679,7 +2873,8 @@ struct ClickRouteService {
 
     private func postScreenshot(from capture: AXActionStateCapture?) -> ScreenshotDTO? {
         guard let screenshot = capture?.envelope.response.screenshot,
-              screenshot.status != "omitted" else {
+              screenshot.status != "omitted"
+        else {
             return nil
         }
         return screenshot
@@ -2693,7 +2888,7 @@ struct ClickRouteService {
                 verificationSuccess: semantic.verificationSuccess,
                 intentSuccess: semantic.intentSuccess,
                 note: "semantic AX attempt \(semantic.axAttempt.rawValue)"
-            )
+            ),
         ]
     }
 
@@ -2707,11 +2902,20 @@ struct ClickRouteService {
         )
     }
 
-    private func sampleWebAreaTextBaseline(before capture: AXActionStateCapture) -> WebAreaTextBaseline {
+    private func sampleWebAreaTextBaseline(
+        before capture: AXActionStateCapture,
+        suppliedStateToken: String? = nil
+    ) -> WebAreaTextBaseline {
         guard capture.envelope.response.tree.profile == AXProjectionProfile.richWeb.rawValue else {
             return .notApplicable
         }
         let firstSample = WebAreaTextSnapshot.canonicalText(in: capture.envelope.response.tree.nodes)
+        if ClickFastVerificationPolicy.canReuseCallerSample(
+            suppliedStateToken: suppliedStateToken,
+            liveStateToken: capture.envelope.response.stateToken
+        ) {
+            return WebAreaTextBaseline(firstSample: firstSample, secondSample: firstSample)
+        }
         do {
             let secondCapture = try targetResolver.reread(after: capture, imageMode: .omit)
             let secondSample = WebAreaTextSnapshot.canonicalText(in: secondCapture.envelope.response.tree.nodes)
@@ -2721,6 +2925,44 @@ struct ClickRouteService {
                 unavailableDiagnostic: "The second pre-dispatch web-area text sample failed: \(error)."
             )
         }
+    }
+
+    private func waitForPostDispatchEvidence(
+        after baselineCapture: AXActionStateCapture,
+        baselineStateToken: String,
+        imageMode: ImageMode,
+        region: CGRect?,
+        beforeImage: CGImage?
+    ) -> ConditionedActionWaitResult<ClickPostDispatchSample> {
+        ConditionedActionWait.poll(
+            intervalMs: 25,
+            deadlineMs: Int((settleDelay * 1000).rounded()),
+            sample: {
+                let capture = try? targetResolver.reread(after: baselineCapture, imageMode: imageMode)
+                let image = CGWindowCaptureService.captureImage(
+                    window: capture?.envelope.response.window ?? baselineCapture.envelope.response.window,
+                    attachedSurfaces: capture?.envelope.response.attachedSurfaces
+                        ?? baselineCapture.envelope.response.attachedSurfaces
+                )
+                return ClickPostDispatchSample(
+                    capture: capture,
+                    windowImage: image,
+                    regionEvidence: ClickTargetRegion.evidence(
+                        region: region,
+                        before: beforeImage,
+                        after: image
+                    )
+                )
+            },
+            isSatisfied: { sample in
+                ClickFastVerificationPolicy.postDispatchEvidenceChanged(
+                    baselineStateToken: baselineStateToken,
+                    observedStateToken: sample.capture?.envelope.response.stateToken,
+                    targetRegionChangeRatio: sample.regionEvidence.targetRegionChangeRatio,
+                    targetRegionThreshold: ClickIntentVerifier.targetRegionChangeThreshold
+                )
+            }
+        )
     }
 
     private func focusBaseline(from capture: AXActionStateCapture) -> ClickFocusBaseline {
@@ -2841,7 +3083,7 @@ struct ClickDialogEffectProbe: Hashable, Sendable {
             node.rawSubrole,
             node.description,
             node.identifier,
-        ].compactMap { $0 }
+        ].compactMap(\.self)
         signatureSignals = [
             node.displayRole,
             node.rawRole,
@@ -2850,7 +3092,7 @@ struct ClickDialogEffectProbe: Hashable, Sendable {
             node.description,
             node.identifier,
             frameSignature,
-        ].compactMap { $0 }
+        ].compactMap(\.self)
         metadataSignals = node.flags + node.dialogMetadataSignals + node.transformNotes
     }
 }
@@ -2867,7 +3109,7 @@ private extension AXPipelineV2SurfaceNodeDTO {
                 affordance.sourceTitle,
                 affordance.sourceURL,
                 affordance.rawAction,
-            ].compactMap { $0 }
+            ].compactMap(\.self)
         }
         let actionSignals = (availableActions ?? []).flatMap { action in
             [
@@ -2875,7 +3117,7 @@ private extension AXPipelineV2SurfaceNodeDTO {
                 action.label,
                 action.description,
                 Optional(action.category),
-            ].compactMap { $0 }
+            ].compactMap(\.self)
         }
         return affordanceSignals + actionSignals
     }
@@ -2886,8 +3128,8 @@ private enum ClickClickCountError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .invalid(let message):
-            return message
+        case let .invalid(message):
+            message
         }
     }
 }

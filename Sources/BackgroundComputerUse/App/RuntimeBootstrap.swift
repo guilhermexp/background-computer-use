@@ -10,11 +10,11 @@ final class RuntimeBootstrap: @unchecked Sendable {
     private let server: LoopbackServer
     private let auth: RuntimeAuth
 
-    init(auth: RuntimeAuth? = nil) throws {
+    init(auth: RuntimeAuth? = nil, controlRequired: Bool = false) throws {
         let resolvedAuth = try auth ?? RuntimeAuth.generateRequired()
         try ScriptAuditLogger().prepare()
         self.auth = resolvedAuth
-        server = LoopbackServer(auth: resolvedAuth)
+        server = LoopbackServer(auth: resolvedAuth, controlRequired: controlRequired)
     }
 
     func start() async throws -> RuntimeBootState {

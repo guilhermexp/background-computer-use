@@ -35,6 +35,10 @@ public final class BackgroundComputerUseRuntime {
         try services.listWindows(request)
     }
 
+    public func launchApp(_ request: LaunchAppRequest) throws -> LaunchAppResponse {
+        try services.launchApp(request)
+    }
+
     public func getWindowState(_ request: GetWindowStateRequest) throws -> GetWindowStateResponse {
         try services.getWindowState(request)
     }
@@ -73,6 +77,10 @@ public final class BackgroundComputerUseRuntime {
 
     public func typeText(_ request: TypeTextRequest) throws -> TypeTextResponse {
         try services.typeText(request)
+    }
+
+    public func paste(_ request: PasteRequest) throws -> PasteResponse {
+        try services.paste(request)
     }
 
     public func pressKey(_ request: PressKeyRequest) throws -> PressKeyResponse {

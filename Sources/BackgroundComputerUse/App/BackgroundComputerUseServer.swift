@@ -1,12 +1,12 @@
 import Foundation
 
 package enum BackgroundComputerUseServer {
-    package static func run() {
+    package static func run(controlRequired: Bool = false) {
         AppKitRuntimeBootstrap.startIfNeeded()
 
         let bootstrap: RuntimeBootstrap
         do {
-            bootstrap = try RuntimeBootstrap()
+            bootstrap = try RuntimeBootstrap(controlRequired: controlRequired)
         } catch {
             fputs("BackgroundComputerUse failed to start: \(error)\n", stderr)
             Foundation.exit(1)
@@ -17,7 +17,7 @@ package enum BackgroundComputerUseServer {
 
         Task.detached {
             do {
-                resultBox.result = .success(try await bootstrap.start())
+                resultBox.result = try await .success(bootstrap.start())
             } catch {
                 resultBox.result = .failure(error)
             }
@@ -43,9 +43,9 @@ private final class RuntimeBootResultBox: @unchecked Sendable {
 
     func unwrapped() throws -> RuntimeBootState {
         switch result {
-        case .success(let state):
+        case let .success(state):
             return state
-        case .failure(let error):
+        case let .failure(error):
             throw error
         case .none:
             throw RuntimeBootResultError.missingResult

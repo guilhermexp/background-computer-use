@@ -36,6 +36,14 @@ def text_result_is_background_safe(payload: dict) -> bool:
     )
 
 
+def safari_adaptive_type_strategy_is_valid(payload: dict) -> bool:
+    strategies = payload.get("strategiesAttempted", [])
+    return (
+        payload.get("fallbackReason") == "unchanged_ax_noop"
+        and strategies == ["ax_value", "ax_text_operation"]
+    )
+
+
 def attempted_ax_escalation(click: dict) -> bool:
     if str(click.get("finalRoute")) == "coordinate_then_ax_hit_test" or str(
         click.get("fallbackReason")
@@ -112,6 +120,7 @@ class Smoke:
         self.safari_fixture_opened = False
         self.safari_was_running = False
         self.original_frontmost_bundle: Optional[str] = None
+        self.original_frontmost_pid: Optional[int] = None
 
     def pass_(self, name: str, detail: str = "") -> None:
         self.results.append({"name": name, "status": "pass", "detail": detail})
@@ -456,6 +465,9 @@ class Smoke:
             f" ambientOnlySignals={verification.get('ambientOnlySignals')}"
             f" targetRegionChangeRatio={verification.get('targetRegionChangeRatio')}"
             f" ocrAnchorDisappeared={verification.get('ocrAnchorDisappeared')}"
+            f" warnings={click.get('warnings')}"
+            f" routeSteps={click.get('routeSteps')}"
+            f" transports={click.get('transports')}"
         )
 
         self.check_verification_honesty("chrome-ocr-click-honesty", click)
@@ -634,9 +646,22 @@ class Smoke:
     value=""
     oninput="document.getElementById('input-status').textContent='Input: '+this.value">
   <p id="input-status">Input: empty</p>
+  <label for="bcu-ignored-ax-input">Ignored AX input</label>
+  <input
+    id="bcu-ignored-ax-input"
+    aria-label="bcu-ignored-ax-input"
+    placeholder="Ignored AX input"
+    oninput="document.getElementById('ignored-status').textContent='Ignored: '+this.value">
+  <p id="ignored-status">Ignored: empty</p>
+  <label for="bcu-paste-input">Paste input</label>
+  <input
+    id="bcu-paste-input"
+    aria-label="bcu-paste-input"
+    placeholder="Paste input"
+    value="">
   <button
     id="bcu-smoke-button"
-    onclick="document.getElementById('click-status').textContent='Button clicked'">
+    onclick="this.dataset.count=String(Number(this.dataset.count||0)+1);document.getElementById('click-status').textContent='Button clicked '+this.dataset.count">
     BCU Smoke Button
   </button>
   <p id="click-status">Button not clicked</p>
@@ -688,7 +713,19 @@ class Smoke:
         if apps_before is None:
             return
         frontmost = apps_before.get("frontmostApp") or {}
+        if frontmost.get("bundleID") in {None, "com.apple.Safari"}:
+            preferred_bundles = ["dev.21st.agents", "com.openai.codex", "com.apple.finder"]
+            candidates = [
+                app for app in apps_before.get("runningApps", [])
+                if app.get("bundleID") in preferred_bundles and isinstance(app.get("pid"), int)
+            ]
+            candidates.sort(
+                key=lambda app: preferred_bundles.index(app.get("bundleID"))
+            )
+            if candidates:
+                frontmost = candidates[0]
         self.original_frontmost_bundle = frontmost.get("bundleID")
+        self.original_frontmost_pid = frontmost.get("pid") if isinstance(frontmost.get("pid"), int) else None
         self.safari_was_running = any(
             app.get("bundleID") == "com.apple.Safari"
             for app in apps_before.get("runningApps", [])
@@ -714,13 +751,8 @@ class Smoke:
             self.fail("safari-window", f"fixture window was unavailable for pid={safari_pid}")
             return
 
-        if self.original_frontmost_bundle:
-            subprocess.run(
-                ["/usr/bin/open", "-b", self.original_frontmost_bundle],
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+        if self.original_frontmost_pid is not None:
+            self.activate_pid(self.original_frontmost_pid)
         foreground_before = self.wait_for_frontmost_pid(excluding=safari_pid)
         if foreground_before is None:
             self.fail("safari-background-setup", "could not place another application in foreground")
@@ -778,6 +810,115 @@ class Smoke:
         else:
             self.fail("safari-background-type", detail)
 
+        self.exercise_safari_adaptive_type_and_paste(
+            window_id=window_id,
+            foreground_pid=foreground_before,
+        )
+
+    def exercise_safari_adaptive_type_and_paste(
+        self,
+        window_id: str,
+        foreground_pid: int,
+    ) -> None:
+        status, found = self.call(
+            "safari-find-ignored-ax-input",
+            "POST",
+            "/v1/find_elements",
+            {"window": window_id, "role": "textField", "includeMenuBar": False},
+        )
+        ignored = next(
+            (
+                match for match in found.get("matches", [])
+                if match.get("domIdentifier") == "bcu-ignored-ax-input"
+            ),
+            None,
+        ) if status == 200 else None
+        if ignored is None or not ignored.get("nodeID"):
+            self.fail("safari-find-ignored-ax-input", f"HTTP {status}: {found}")
+            return
+
+        status, adaptive = self.call(
+            "safari-adaptive-background-type",
+            "POST",
+            "/v1/type_text",
+            {
+                "window": window_id,
+                "stateToken": found.get("stateToken"),
+                "target": {"kind": "node_id", "value": ignored["nodeID"]},
+                "text": "bcu-adaptive-safe",
+                "includeMenuBar": False,
+            },
+        )
+        adaptive_detail = (
+            f"HTTP {status} classification={adaptive.get('classification')} "
+            f"summary={adaptive.get('summary')} "
+            f"strategies={adaptive.get('strategiesAttempted')} "
+            f"fallback={adaptive.get('fallbackReason')} "
+            f"performance={adaptive.get('performance')} "
+            f"verification={adaptive.get('verification')} "
+            f"warnings={adaptive.get('warnings')}"
+        )
+        if (
+            status == 200
+            and text_result_is_background_safe(adaptive)
+            and safari_adaptive_type_strategy_is_valid(adaptive)
+            and self.frontmost_pid() == foreground_pid
+        ):
+            self.pass_("safari-adaptive-background-type", adaptive_detail)
+        else:
+            self.fail("safari-adaptive-background-type", adaptive_detail)
+
+        status, paste_found = self.call(
+            "safari-find-paste-input",
+            "POST",
+            "/v1/find_elements",
+            {"window": window_id, "role": "textField", "includeMenuBar": False},
+        )
+        paste_target = next(
+            (
+                match for match in paste_found.get("matches", [])
+                if match.get("domIdentifier") == "bcu-paste-input"
+            ),
+            None,
+        ) if status == 200 else None
+        if paste_target is None or not paste_target.get("nodeID"):
+            self.fail("safari-find-paste-input", f"HTTP {status}: {paste_found}")
+            return
+
+        status, pasted = self.call(
+            "safari-background-paste",
+            "POST",
+            "/v1/paste",
+            {
+                "window": window_id,
+                "stateToken": paste_found.get("stateToken"),
+                "target": {"kind": "node_id", "value": paste_target["nodeID"]},
+                "content": "<strong>Paste</strong> ok",
+                "format": "html",
+                "includeMenuBar": False,
+            },
+        )
+        paste_detail = (
+            f"HTTP {status} classification={pasted.get('classification')} "
+            f"summary={pasted.get('summary')} "
+            f"primitive={pasted.get('dispatchPrimitive')} "
+            f"restored={pasted.get('pasteboardRestored')} "
+            f"verification={pasted.get('verification')} "
+            f"notes={pasted.get('notes')} "
+            f"warnings={pasted.get('warnings')}"
+        )
+        if (
+            status == 200
+            and pasted.get("classification") == "success"
+            and pasted.get("pasteboardRestored") is True
+            and pasted.get("backgroundSafety", {}).get("foregroundPreserved") is True
+            and pasted.get("verification", {}).get("exactValueMatch") is True
+            and self.frontmost_pid() == foreground_pid
+        ):
+            self.pass_("safari-background-paste", paste_detail)
+        else:
+            self.fail("safari-background-paste", paste_detail)
+
     def list_apps_payload(self) -> Optional[dict]:
         try:
             status, payload = self.client.request("POST", "/v1/list_apps", {})
@@ -815,6 +956,18 @@ class Smoke:
             time.sleep(0.2)
         return None
 
+    def activate_pid(self, pid: int) -> bool:
+        source = (
+            'tell application "System Events" to set frontmost of '
+            f'(first application process whose unix id is {pid}) to true'
+        )
+        return subprocess.run(
+            ["/usr/bin/osascript", "-e", source],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode == 0
+
     def cleanup_fixture(self) -> None:
         if self.safari_fixture_opened:
             close_script = (
@@ -833,13 +986,8 @@ class Smoke:
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
-        if self.original_frontmost_bundle:
-            subprocess.run(
-                ["/usr/bin/open", "-b", self.original_frontmost_bundle],
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+        if self.original_frontmost_pid is not None:
+            self.activate_pid(self.original_frontmost_pid)
         if self.chrome_process is not None and self.chrome_process.poll() is None:
             self.chrome_process.terminate()
             try:

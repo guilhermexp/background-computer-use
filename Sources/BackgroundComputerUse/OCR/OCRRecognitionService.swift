@@ -18,7 +18,7 @@ struct OCRRecognitionService: Sendable {
 
     func recognize(
         imagePath: String,
-        interactionToken: String = "legacy",
+        interactionToken: String,
         deadline: TimeInterval = defaultDeadline
     ) -> OCRAnchorSummaryDTO {
         measure(
@@ -30,7 +30,7 @@ struct OCRRecognitionService: Sendable {
 
     func measure(
         imagePath: String,
-        interactionToken: String = "legacy",
+        interactionToken: String,
         deadline: TimeInterval = defaultDeadline
     ) -> OCRRecognitionOutcome {
         client.recognize(

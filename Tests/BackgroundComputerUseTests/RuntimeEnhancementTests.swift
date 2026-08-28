@@ -1,12 +1,11 @@
 import AppKit
+@testable import BackgroundComputerUse
 import Foundation
 import Testing
-@testable import BackgroundComputerUse
 
-@Suite
 struct RuntimeEnhancementTests {
     @Test
-    func safetyPolicyRequiresConfirmationForDestructiveLabels() throws {
+    func safetyPolicyRequiresConfirmationForDestructiveLabels() {
         let decision = RuntimeSafetyPolicy.evaluateLabel("Delete deployment", confirmed: false)
 
         #expect(decision.blocked)
@@ -281,12 +280,12 @@ struct RuntimeEnhancementTests {
             coordinateSpace: .modelFacingScreenshot,
             captureKind: "test"
         )
-        let mark = WindowAnnotationMarkDTO(
+        let mark = try WindowAnnotationMarkDTO(
             markID: 1,
             displayIndex: 4,
             nodeID: nil,
             refetchFingerprint: nil,
-            target: try .displayIndex(4),
+            target: .displayIndex(4),
             role: "button",
             title: "Deploy",
             description: nil,
@@ -365,6 +364,7 @@ struct RuntimeEnhancementTests {
                 .init(text: "x", confidence: 0.99, box: .init(x: 1, y: 1, width: 5, height: 5)),
                 .init(text: "Logs", confidence: 0.93, box: .init(x: 90, y: 20, width: 40, height: 20)),
             ],
+            interactionToken: "it_summary_filter",
             maxAnchors: 2
         )
 
@@ -374,7 +374,7 @@ struct RuntimeEnhancementTests {
 
     @Test
     func ocrAnchorSummaryDefaultIncludesContentBelowBrowserChrome() {
-        let browserChrome = (0..<10).map { index in
+        let browserChrome = (0 ..< 10).map { index in
             OCRLineDTO(
                 text: "Browser item \(index)",
                 confidence: 0.99,
@@ -388,7 +388,8 @@ struct RuntimeEnhancementTests {
                     confidence: 0.99,
                     box: .init(x: 20, y: 180, width: 120, height: 20)
                 ),
-            ]
+            ],
+            interactionToken: "it_browser_content"
         )
 
         #expect(summary.anchors.contains { $0.text == "Smoke input" })
@@ -449,7 +450,7 @@ struct RuntimeEnhancementTests {
             title: "Clock 10:00",
             frame: RectDTO(x: 20, y: 40, width: 120, height: 32),
             point: PointDTO(x: 80, y: 56),
-            refetchFingerprint: "button|Clock 10:00",
+            refetchFingerprint: "button|Clock 10:00"
         )
         let secondNode = annotationNode(
             displayIndex: 1,
@@ -457,7 +458,7 @@ struct RuntimeEnhancementTests {
             title: "Clock 10:01",
             frame: RectDTO(x: 20, y: 40, width: 120, height: 32),
             point: PointDTO(x: 80, y: 56),
-            refetchFingerprint: "button|Clock 10:01",
+            refetchFingerprint: "button|Clock 10:01"
         )
         let movedNode = annotationNode(
             displayIndex: 1,
@@ -465,7 +466,7 @@ struct RuntimeEnhancementTests {
             title: "Clock 10:01",
             frame: RectDTO(x: 28, y: 40, width: 120, height: 32),
             point: PointDTO(x: 88, y: 56),
-            refetchFingerprint: "button|Clock 10:01",
+            refetchFingerprint: "button|Clock 10:01"
         )
         let tree: (AXPipelineV2SurfaceNodeDTO, String) -> AXPipelineV2TreeDTO = { node, renderedText in
             AXPipelineV2TreeDTO(

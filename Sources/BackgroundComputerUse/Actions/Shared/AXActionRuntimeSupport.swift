@@ -35,6 +35,7 @@ enum AXActionCoercionError: Error, CustomStringConvertible {
         }
     }
 }
+
 enum AXActionCoercedValue {
     case string(String)
     case bool(Bool)
@@ -196,13 +197,15 @@ enum AXActionRuntimeSupport {
 
     static func rectAttribute(_ element: AXUIElement, attribute: CFString) -> CGRect? {
         guard let value = copyAttributeValue(element, attribute: attribute),
-              CFGetTypeID(value) == AXValueGetTypeID() else {
+              CFGetTypeID(value) == AXValueGetTypeID()
+        else {
             return nil
         }
         let axValue = unsafeDowncast(value, to: AXValue.self)
         var rect = CGRect.zero
         guard AXValueGetType(axValue) == .cgRect,
-              AXValueGetValue(axValue, .cgRect, &rect) else {
+              AXValueGetValue(axValue, .cgRect, &rect)
+        else {
             return nil
         }
         return rect
@@ -210,7 +213,8 @@ enum AXActionRuntimeSupport {
 
     static func elementAttribute(_ element: AXUIElement, attribute: CFString) -> AXUIElement? {
         guard let value = copyAttributeValue(element, attribute: attribute),
-              CFGetTypeID(value) == AXUIElementGetTypeID() else {
+              CFGetTypeID(value) == AXUIElementGetTypeID()
+        else {
             return nil
         }
         return unsafeDowncast(value, to: AXUIElement.self)
@@ -224,14 +228,16 @@ enum AXActionRuntimeSupport {
         let visibleChildren = elementArrayAttribute(element, attribute: "AXVisibleChildren" as CFString)
         if visibleChildren.isEmpty == false {
             if visibleChildren.count >= AXDenseCollectionSupport.windowingThreshold,
-               let visibleRows = denseVisibleRowsIfAvailable(for: element) {
+               let visibleRows = denseVisibleRowsIfAvailable(for: element)
+            {
                 return visibleRows
             }
             return visibleChildren
         }
         let children = elementArrayAttribute(element, attribute: kAXChildrenAttribute as CFString)
         if children.count >= AXDenseCollectionSupport.windowingThreshold,
-           let visibleRows = denseVisibleRowsIfAvailable(for: element) {
+           let visibleRows = denseVisibleRowsIfAvailable(for: element)
+        {
             return visibleRows
         }
         return children
@@ -256,7 +262,7 @@ enum AXActionRuntimeSupport {
         return visibleRows
     }
 
-    static func descendants(of root: AXUIElement, limit: Int = 2_000) -> [AXUIElement] {
+    static func descendants(of root: AXUIElement, limit: Int = 2000) -> [AXUIElement] {
         var queue = [root]
         var results: [AXUIElement] = []
         var index = 0
@@ -309,6 +315,20 @@ enum AXActionRuntimeSupport {
         )
     }
 
+    static func performParameterizedAttribute(
+        _ attribute: String,
+        on element: AXUIElement,
+        parameter: CFTypeRef
+    ) -> AXError {
+        var value: CFTypeRef?
+        return AXUIElementCopyParameterizedAttributeValue(
+            element,
+            attribute as CFString,
+            parameter,
+            &value
+        )
+    }
+
     static func hitTest(_ root: AXUIElement, point: CGPoint) -> AXUIElement? {
         var hitElement: AXUIElement?
         guard AXUIElementCopyElementAtPosition(root, Float(point.x), Float(point.y), &hitElement) == .success else {
@@ -351,7 +371,8 @@ enum AXActionRuntimeSupport {
 
     static func selectedTextRange(_ element: AXUIElement) -> TypeTextSelectionRangeDTO? {
         guard let value = copyAttributeValue(element, attribute: kAXSelectedTextRangeAttribute as CFString),
-              CFGetTypeID(value) == AXValueGetTypeID() else {
+              CFGetTypeID(value) == AXValueGetTypeID()
+        else {
             return nil
         }
         let axValue = unsafeDowncast(value, to: AXValue.self)
@@ -367,7 +388,8 @@ enum AXActionRuntimeSupport {
 
     static func visibleCharacterRange(_ element: AXUIElement) -> CFRange? {
         guard let value = copyAttributeValue(element, attribute: "AXVisibleCharacterRange" as CFString),
-              CFGetTypeID(value) == AXValueGetTypeID() else {
+              CFGetTypeID(value) == AXValueGetTypeID()
+        else {
             return nil
         }
         let axValue = unsafeDowncast(value, to: AXValue.self)
@@ -379,7 +401,8 @@ enum AXActionRuntimeSupport {
               range.location >= 0,
               range.length >= 0,
               range.location < Int.max / 4,
-              range.length < Int.max / 4 else {
+              range.length < Int.max / 4
+        else {
             return nil
         }
         return range
@@ -428,7 +451,8 @@ enum AXActionRuntimeSupport {
         }
 
         if CFGetTypeID(rawValue) == CFNumberGetTypeID(),
-           let number = rawValue as? NSNumber {
+           let number = rawValue as? NSNumber
+        {
             let cfNumber = number as CFNumber
             switch CFNumberGetType(cfNumber) {
             case .charType,
@@ -495,7 +519,8 @@ enum AXActionRuntimeSupport {
         for character in text {
             let utf16 = Array(String(character).utf16)
             guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
-                  let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else {
+                  let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
+            else {
                 return false
             }
 

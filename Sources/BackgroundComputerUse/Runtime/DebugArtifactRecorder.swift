@@ -82,7 +82,8 @@ struct DebugArtifactRecorder: Sendable {
 
     private func normalizedJSON(_ data: Data) -> Data {
         guard let object = try? JSONSerialization.jsonObject(with: data),
-              let normalized = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]) else {
+              let normalized = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+        else {
             return data
         }
         return normalized
@@ -96,7 +97,7 @@ struct DebugArtifactRecorder: Sendable {
         guard var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             guard sensitiveKeys.isEmpty else {
                 return normalizedJSON([
-                    "body": "<redacted malformed request body len=\(data.count)>"
+                    "body": "<redacted malformed request body len=\(data.count)>",
                 ])
             }
             return normalizedJSON(data)
@@ -114,6 +115,8 @@ struct DebugArtifactRecorder: Sendable {
         switch routeID {
         case RouteID.typeText.rawValue, RouteID.selectText.rawValue:
             return ["text"]
+        case RouteID.paste.rawValue:
+            return ["content"]
         case RouteID.setValue.rawValue:
             return ["value"]
         case RouteID.pressKey.rawValue:
@@ -126,7 +129,8 @@ struct DebugArtifactRecorder: Sendable {
     private func redactedResponseBody(_ data: Data, routeID: String) -> Data {
         guard rawArtifactsEnabled == false,
               routeID == RouteID.readText.rawValue,
-              let object = try? JSONSerialization.jsonObject(with: data) else {
+              let object = try? JSONSerialization.jsonObject(with: data)
+        else {
             return normalizedJSON(data)
         }
         return normalizedJSON(redactingTextFields(in: object))

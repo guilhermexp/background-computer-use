@@ -18,7 +18,7 @@ enum AXPointPressEligibility {
     /// Ancestors are always larger than the point, so without a ceiling the walk
     /// would happily press a group spanning half the window. Mirrors the bound the
     /// repo already uses for safe descendant retargeting.
-    static let maximumWidth: CGFloat = 1_200
+    static let maximumWidth: CGFloat = 1200
     static let maximumHeight: CGFloat = 320
 
     static func isEligible(
@@ -39,7 +39,8 @@ enum AXPointPressEligibility {
               frame.width >= minimumDimension,
               frame.height >= minimumDimension,
               frame.width <= maximumWidth,
-              frame.height <= maximumHeight else {
+              frame.height <= maximumHeight
+        else {
             return false
         }
         return frame.insetBy(dx: -frameTolerance, dy: -frameTolerance).contains(pointTopLeft)

@@ -4,6 +4,7 @@ struct RuntimeServices {
     private let coordinator = RuntimeCoordinator()
     private let runningAppService = RunningAppService()
     private let windowListService = WindowListService()
+    private let launchAppRouteService: LaunchAppRouteService
     private let windowStateService: WindowStateService
     private let findElementsRouteService: FindElementsRouteService
     private let scriptRouteService: ScriptRouteService
@@ -12,6 +13,7 @@ struct RuntimeServices {
     private let setWindowFrameRouteService: SetWindowFrameRouteService
     private let setValueRouteService: SetValueRouteService
     private let typeTextRouteService: TypeTextRouteService
+    private let pasteRouteService: PasteRouteService
     private let pressKeyRouteService: PressKeyRouteService
     private let scrollRouteService: ScrollRouteService
     private let secondaryActionRouteService: SecondaryActionRouteService
@@ -26,6 +28,7 @@ struct RuntimeServices {
         scriptAuditLogger: ScriptAuditLogger = ScriptAuditLogger()
     ) {
         windowStateService = WindowStateService(executionOptions: executionOptions)
+        launchAppRouteService = LaunchAppRouteService(authorizer: ControlAuthorizationCenter.shared)
         findElementsRouteService = FindElementsRouteService(executionOptions: executionOptions)
         scriptRouteService = ScriptRouteService(auditLogger: scriptAuditLogger)
         windowDragRouteService = WindowDragRouteService(executionOptions: executionOptions)
@@ -33,6 +36,7 @@ struct RuntimeServices {
         setWindowFrameRouteService = SetWindowFrameRouteService(executionOptions: executionOptions)
         setValueRouteService = SetValueRouteService(executionOptions: executionOptions)
         typeTextRouteService = TypeTextRouteService(executionOptions: executionOptions)
+        pasteRouteService = PasteRouteService(executionOptions: executionOptions)
         pressKeyRouteService = PressKeyRouteService(executionOptions: executionOptions)
         scrollRouteService = ScrollRouteService(executionOptions: executionOptions)
         secondaryActionRouteService = SecondaryActionRouteService(executionOptions: executionOptions)
@@ -59,6 +63,12 @@ struct RuntimeServices {
             target: RouteTargetSummaryDTO(kind: .appPID, pid: request.pid, windowID: nil)
         ) {
             try windowListService.listWindows(pid: request.pid)
+        }
+    }
+
+    func launchApp(_ request: LaunchAppRequest) throws -> LaunchAppResponse {
+        try execute(routeID: .launchApp, target: .shared) {
+            try launchAppRouteService.launchApp(request: request)
         }
     }
 
@@ -125,6 +135,12 @@ struct RuntimeServices {
     func typeText(_ request: TypeTextRequest) throws -> TypeTextResponse {
         try execute(routeID: .typeText, target: windowTarget(request.window)) {
             try typeTextRouteService.typeText(request: request)
+        }
+    }
+
+    func paste(_ request: PasteRequest) throws -> PasteResponse {
+        try execute(routeID: .paste, target: windowTarget(request.window)) {
+            try pasteRouteService.paste(request: request)
         }
     }
 

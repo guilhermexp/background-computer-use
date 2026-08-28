@@ -137,6 +137,13 @@ struct AXActionTargetResolver {
     ) throws -> AXActionStateCapture {
         let shouldIncludeCursorOverlay = includeCursorOverlay ?? executionOptions.visualCursorEnabled
         let resolved = try windowResolver.resolve(windowID: windowID)
+        RendererAccessibilityBootstrap.prepare(
+            application: resolved.appElement,
+            pid: resolved.app.processIdentifier,
+            launchDate: resolved.launchDate,
+            bundleID: resolved.bundleID,
+            bundleURL: resolved.app.bundleURL
+        )
         let capture = try statePipeline.captureResolvedWindow(
             resolved: resolved,
             includeMenuBar: includeMenuBar,
@@ -179,14 +186,15 @@ struct AXActionTargetResolver {
 
     func stateTokenWarnings(suppliedStateToken: String?, liveStateToken: String) -> [String] {
         guard let suppliedStateToken,
-              suppliedStateToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+              suppliedStateToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        else {
             return []
         }
         guard suppliedStateToken != liveStateToken else {
             return []
         }
         return [
-            "Supplied stateToken did not match the live pre-action recapture; targeting continued against the current AXPipelineV2 state."
+            "Supplied stateToken did not match the live pre-action recapture; targeting continued against the current AXPipelineV2 state.",
         ]
     }
 
@@ -201,7 +209,7 @@ struct AXActionTargetResolver {
         let target = makeTargetSnapshot(surfaceNode: surfaceNode, capture: capture)
         let semantic = semanticSuitability(for: target, kind: kind)
         return AXActionCandidate(
-            score: 10_000,
+            score: 10000,
             semanticAppropriate: semantic.appropriate,
             semanticReasons: semantic.reasons,
             target: target
@@ -372,7 +380,8 @@ struct AXActionTargetResolver {
             }
             guard target.isTextEntry == true ||
                 target.rawRole == "AXTextArea" ||
-                target.displayRole == "text entry area" else {
+                target.displayRole == "text entry area"
+            else {
                 return nil
             }
 
@@ -407,7 +416,8 @@ struct AXActionTargetResolver {
         kind: AXActionTargetKind
     ) -> (target: AXActionTargetSnapshot?, strategy: String?) {
         if let nodeID = prior.nodeID,
-           let matched = capture.envelope.response.tree.nodes.first(where: { $0.nodeID == nodeID }) {
+           let matched = capture.envelope.response.tree.nodes.first(where: { $0.nodeID == nodeID })
+        {
             return (makeTargetSnapshot(surfaceNode: matched, capture: capture), "node_id")
         }
 
@@ -426,12 +436,14 @@ struct AXActionTargetResolver {
         if let displayIndex = prior.displayIndex,
            let mapping = capture.envelope.response.tree.lineMappings.first(where: { $0.displayIndex == displayIndex }),
            let matched = surfaceNode(projectedIndex: mapping.projectedIndex, in: capture),
-           refreshedSimilarityScore(matched, prior: prior, kind: kind) >= 80 {
+           refreshedSimilarityScore(matched, prior: prior, kind: kind) >= 80
+        {
             return (makeTargetSnapshot(surfaceNode: matched, capture: capture), "display_index_signature")
         }
 
         if let matched = surfaceNode(projectedIndex: prior.projectedIndex, in: capture),
-           refreshedSimilarityScore(matched, prior: prior, kind: kind) >= 100 {
+           refreshedSimilarityScore(matched, prior: prior, kind: kind) >= 100
+        {
             return (makeTargetSnapshot(surfaceNode: matched, capture: capture), "projected_index_signature")
         }
 
@@ -445,12 +457,14 @@ struct AXActionTargetResolver {
         let appElement = AXUIElementCreateApplication(capture.envelope.response.window.pid)
         AXUIElementSetMessagingTimeout(appElement, 1.0)
         if isMenuTarget(target),
-           let matched = resolveMenuLiveElement(for: target, appElement: appElement) {
+           let matched = resolveMenuLiveElement(for: target, appElement: appElement)
+        {
             return matched
         }
 
         if target.rawRole != String(kAXWindowRole),
-           let captured = resolveCapturedLiveElement(for: target, in: capture) {
+           let captured = resolveCapturedLiveElement(for: target, in: capture)
+        {
             return captured
         }
 
@@ -463,7 +477,8 @@ struct AXActionTargetResolver {
         }
 
         if let locator = target.refetchLocator,
-           let matched = resolveByLocator(locator, under: windowElement, target: target) {
+           let matched = resolveByLocator(locator, under: windowElement, target: target)
+        {
             return AXActionResolvedLiveElement(element: matched, resolution: "refetch_locator")
         }
 
@@ -506,7 +521,8 @@ struct AXActionTargetResolver {
                String(kAXMenuBarItemRole),
                String(kAXMenuRole),
                String(kAXMenuItemRole)
-           ].contains(role) {
+           ].contains(role)
+        {
             return true
         }
         if target.refetchLocator?.rolePath.contains(where: {
@@ -514,7 +530,7 @@ struct AXActionTargetResolver {
                 String(kAXMenuBarRole),
                 String(kAXMenuBarItemRole),
                 String(kAXMenuRole),
-                String(kAXMenuItemRole)
+                String(kAXMenuItemRole),
             ].contains($0)
         }) == true {
             return true
@@ -635,7 +651,8 @@ struct AXActionTargetResolver {
 
     private func surfaceNode(displayIndex: Int, in capture: AXActionStateCapture) -> AXPipelineV2SurfaceNodeDTO? {
         if let mapping = capture.envelope.response.tree.lineMappings.first(where: { $0.displayIndex == displayIndex }),
-           let matched = surfaceNode(projectedIndex: mapping.projectedIndex, in: capture) {
+           let matched = surfaceNode(projectedIndex: mapping.projectedIndex, in: capture)
+        {
             return matched
         }
 
@@ -776,11 +793,13 @@ struct AXActionTargetResolver {
         if attributes.title == target.title {
             score += 200
         } else if target.title.isEmpty == false,
-                  attributes.title.contains(target.title) || target.title.contains(attributes.title) {
+                  attributes.title.contains(target.title) || target.title.contains(attributes.title)
+        {
             score += 120
         }
         if let frame = attributes.frame,
-           approximatelyEqual(frame, rect(from: target.frameAppKit), tolerance: 3) {
+           approximatelyEqual(frame, rect(from: target.frameAppKit), tolerance: 3)
+        {
             score += 80
         }
         if attributes.isMain {
@@ -888,12 +907,14 @@ struct AXActionTargetResolver {
             }
         }
         if targetValue.isEmpty == false,
-           AXActionRuntimeSupport.normalize(liveValue) == targetValue {
+           AXActionRuntimeSupport.normalize(liveValue) == targetValue
+        {
             score += 220
         }
         if let frame = AXActionRuntimeSupport.rectAttribute(element, attribute: "AXFrame" as CFString),
            let targetFrame = target.frameAppKit.map(rect(from:)),
-           approximatelyEqual(frame, targetFrame, tolerance: 4) {
+           approximatelyEqual(frame, targetFrame, tolerance: 4)
+        {
             score += 120
         }
         return score
@@ -924,7 +945,8 @@ struct AXActionTargetResolver {
                 score += 160
             }
             if let frame, let targetFrame = target.frameAppKit.map(rect(from:)),
-               approximatelyEqual(frame, targetFrame, tolerance: 4) {
+               approximatelyEqual(frame, targetFrame, tolerance: 4)
+            {
                 score += 120
             }
 
@@ -1060,7 +1082,7 @@ struct AXActionTargetResolver {
     }
 
     private func scrollSemanticSuitability(for target: AXActionTargetSnapshot) -> (appropriate: Bool, reasons: [String]) {
-        var reasons: [String] = ["scroll_route_uses_requested_node_plus_ranked_ancestors"]
+        var reasons = ["scroll_route_uses_requested_node_plus_ranked_ancestors"]
         let actionNames = Set(target.parameterizedAttributes)
 
         if actionNames.contains("AXScrollToShowDescendant") {
@@ -1126,19 +1148,23 @@ struct AXActionTargetResolver {
             score += 20
         }
         if AXActionRuntimeSupport.normalize(lhs.title) == AXActionRuntimeSupport.normalize(rhs.title),
-           AXActionRuntimeSupport.normalize(lhs.title).isEmpty == false {
+           AXActionRuntimeSupport.normalize(lhs.title).isEmpty == false
+        {
             score += 40
         }
         if AXActionRuntimeSupport.normalize(lhs.identifier) == AXActionRuntimeSupport.normalize(rhs.identifier),
-           AXActionRuntimeSupport.normalize(lhs.identifier).isEmpty == false {
+           AXActionRuntimeSupport.normalize(lhs.identifier).isEmpty == false
+        {
             score += 40
         }
         if AXActionRuntimeSupport.normalize(lhs.description) == AXActionRuntimeSupport.normalize(rhs.description),
-           AXActionRuntimeSupport.normalize(lhs.description).isEmpty == false {
+           AXActionRuntimeSupport.normalize(lhs.description).isEmpty == false
+        {
             score += 20
         }
         if AXActionRuntimeSupport.normalize(lhs.urlHost) == AXActionRuntimeSupport.normalize(rhs.urlHost),
-           AXActionRuntimeSupport.normalize(lhs.urlHost).isEmpty == false {
+           AXActionRuntimeSupport.normalize(lhs.urlHost).isEmpty == false
+        {
             score += 15
         }
         return score
@@ -1184,7 +1210,8 @@ struct AXActionTargetResolver {
         }
         if let frame = AXActionRuntimeSupport.rectAttribute(element, attribute: "AXFrame" as CFString),
            let targetFrame = target.frameAppKit.map(rect(from:)),
-           approximatelyEqual(frame, targetFrame, tolerance: 8) {
+           approximatelyEqual(frame, targetFrame, tolerance: 8)
+        {
             score += 20
         }
         if actions.contains("AXConfirm") || actions.contains("AXShowMenu") || target.isTextEntry == true {

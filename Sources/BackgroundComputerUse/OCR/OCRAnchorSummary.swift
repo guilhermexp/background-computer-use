@@ -1,5 +1,5 @@
-import Foundation
 import CryptoKit
+import Foundation
 
 public struct OCRBoxDTO: Codable, Equatable, Sendable {
     public let x: Double
@@ -64,7 +64,7 @@ public struct OCRAnchorSummaryDTO: Codable, Equatable, Sendable {
 enum OCRAnchorSummaryBuilder {
     static func summary(
         lines: [OCRLineDTO],
-        interactionToken: String = "legacy",
+        interactionToken: String,
         maxAnchors: Int = 24
     ) -> OCRAnchorSummaryDTO {
         var occurrences: [String: Int] = [:]

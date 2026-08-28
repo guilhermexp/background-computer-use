@@ -41,7 +41,9 @@ enum ClickIntentVerifier {
         let ambientOnlySignals: [String]
         let notes: [String]
 
-        var verified: Bool { intentSignals.isEmpty == false }
+        var verified: Bool {
+            intentSignals.isEmpty == false
+        }
     }
 
     static func assess(
@@ -107,14 +109,16 @@ enum ClickIntentVerifier {
         if webRendererSurface,
            dispatchSuccess,
            webAreaBaselineStable == true,
-           observedWebAreaTextChanged == true {
+           observedWebAreaTextChanged == true
+        {
             intent.append(IntentSignal.webAreaTextChanged.rawValue)
         }
 
         var ambient: [String] = []
         if webRendererSurface,
            webAreaBaselineStable != true,
-           observedWebAreaTextChanged == true {
+           observedWebAreaTextChanged == true
+        {
             ambient.append(AmbientSignal.webAreaTextChanged.rawValue)
         }
         if intent.isEmpty {
@@ -137,7 +141,8 @@ enum ClickIntentVerifier {
         } else if webRendererSurface,
                   webAreaBaselineStable == true,
                   webAreaTextBefore != nil,
-                  observedWebAreaTextChanged == nil {
+                  observedWebAreaTextChanged == nil
+        {
             notes.append(missingPostWebAreaSampleNote)
         }
         if intent.isEmpty {

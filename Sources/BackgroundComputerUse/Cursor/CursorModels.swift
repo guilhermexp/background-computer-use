@@ -228,23 +228,23 @@ enum CursorMotionPlanner {
     }
 
     static func edgeEntrancePoint(for screen: CGRect) -> CGPoint {
-        let edge = Int.random(in: 0..<4)
+        let edge = Int.random(in: 0 ..< 4)
         let inset: CGFloat = 120
         switch edge {
         case 0:
-            return CGPoint(x: CGFloat.random(in: screen.minX...screen.maxX), y: screen.maxY + inset)
+            return CGPoint(x: CGFloat.random(in: screen.minX ... screen.maxX), y: screen.maxY + inset)
         case 1:
-            return CGPoint(x: CGFloat.random(in: screen.minX...screen.maxX), y: screen.minY - inset)
+            return CGPoint(x: CGFloat.random(in: screen.minX ... screen.maxX), y: screen.minY - inset)
         case 2:
-            return CGPoint(x: screen.minX - inset, y: CGFloat.random(in: screen.minY...screen.maxY))
+            return CGPoint(x: screen.minX - inset, y: CGFloat.random(in: screen.minY ... screen.maxY))
         default:
-            return CGPoint(x: screen.maxX + inset, y: CGFloat.random(in: screen.minY...screen.maxY))
+            return CGPoint(x: screen.maxX + inset, y: CGFloat.random(in: screen.minY ... screen.maxY))
         }
     }
 }
 
 enum MotionPacing {
-    static let pressLead: TimeInterval = 0.08
+    static let pressLead: TimeInterval = 0.055
     static let releaseHold: TimeInterval = 0.50
 
     static func transitDuration(
@@ -419,7 +419,7 @@ struct CursorFeedbackState: Sendable {
     }
 
     func snapshot(at now: TimeInterval) -> CursorFeedbackSnapshot? {
-        guard isActive(at: now), (message != nil || state == .pointing) else {
+        guard isActive(at: now), message != nil || state == .pointing else {
             return nil
         }
         return CursorFeedbackSnapshot(
@@ -605,24 +605,24 @@ enum CursorVisualEffect {
 
     var lifetime: TimeInterval {
         switch self {
-        case .ripple(_, _, _, _, let lifetime, _),
-             .doubleRipple(_, _, let lifetime, _),
-             .chevronStreak(_, _, _, _, _, let lifetime, _),
-             .puff(_, _, _, _, let lifetime, _),
-             .glowPulse(_, _, let lifetime, _),
-             .sparkRing(_, _, _, let lifetime, _, _):
+        case let .ripple(_, _, _, _, lifetime, _),
+             let .doubleRipple(_, _, lifetime, _),
+             let .chevronStreak(_, _, _, _, _, lifetime, _),
+             let .puff(_, _, _, _, lifetime, _),
+             let .glowPulse(_, _, lifetime, _),
+             let .sparkRing(_, _, _, lifetime, _, _):
             return lifetime
         }
     }
 
     var age: TimeInterval {
         switch self {
-        case .ripple(_, _, _, _, _, let age),
-             .doubleRipple(_, _, _, let age),
-             .chevronStreak(_, _, _, _, _, _, let age),
-             .puff(_, _, _, _, _, let age),
-             .glowPulse(_, _, _, let age),
-             .sparkRing(_, _, _, _, let age, _):
+        case let .ripple(_, _, _, _, _, age),
+             let .doubleRipple(_, _, _, age),
+             let .chevronStreak(_, _, _, _, _, _, age),
+             let .puff(_, _, _, _, _, age),
+             let .glowPulse(_, _, _, age),
+             let .sparkRing(_, _, _, _, age, _):
             return age
         }
     }

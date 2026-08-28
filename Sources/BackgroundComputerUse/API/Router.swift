@@ -1,8 +1,36 @@
+import BackgroundComputerUseControlShared
 import Foundation
 
 struct RouterContext {
     let baseURL: URL?
     let startedAt: Date?
+}
+
+struct RouterControlPolicy: Sendable {
+    let readAllowed: @Sendable () -> Bool
+    let mutationAllowed: @Sendable () -> Bool
+    let arbitraryScriptAllowed: @Sendable () -> Bool
+    let authorizeWindow: @Sendable (String, String) -> AppPolicyDecision?
+
+    static func live(required: Bool) -> RouterControlPolicy {
+        RouterControlPolicy(
+            readAllowed: {
+                BackgroundComputerUseControlBridge.readAllowed(required: required)
+            },
+            mutationAllowed: {
+                BackgroundComputerUseControlBridge.mutationAllowed(required: required)
+            },
+            arbitraryScriptAllowed: {
+                BackgroundComputerUseControlBridge.arbitraryScriptAllowed(required: required)
+            },
+            authorizeWindow: { windowID, sessionID in
+                BackgroundComputerUseControlBridge.authorizeWindow(
+                    windowID: windowID,
+                    sessionID: sessionID
+                ) ?? (required ? .deny : nil)
+            }
+        )
+    }
 }
 
 struct Router {
@@ -11,17 +39,21 @@ struct Router {
     private let debugArtifactRecorder: DebugArtifactRecorder
     private let sessionLimiter: RuntimeSessionLimiter
     private let scriptAuditLogger: ScriptAuditLogger
+    private let controlPolicy: RouterControlPolicy
 
     init(
         auth: RuntimeAuth,
         debugArtifactRecorder: DebugArtifactRecorder = DebugArtifactRecorder(),
         sessionLimiter: RuntimeSessionLimiter = RuntimeSessionLimiter(),
-        scriptAuditLogger: ScriptAuditLogger = ScriptAuditLogger()
+        scriptAuditLogger: ScriptAuditLogger = ScriptAuditLogger(),
+        controlRequired: Bool = false,
+        controlPolicy: RouterControlPolicy? = nil
     ) {
         self.auth = auth
         self.debugArtifactRecorder = debugArtifactRecorder
         self.sessionLimiter = sessionLimiter
         self.scriptAuditLogger = scriptAuditLogger
+        self.controlPolicy = controlPolicy ?? .live(required: controlRequired)
         services = RuntimeServices(scriptAuditLogger: scriptAuditLogger)
         self.sessionLimiter.configure(
             maxActionsPerSecond: ProcessInfo.processInfo.environment["BACKGROUND_COMPUTER_USE_MAX_ACTIONS_PER_SECOND"]
@@ -35,6 +67,15 @@ struct Router {
         }
         guard request.path == "/health" || auth.isAuthorized(request: request) else {
             return unauthorizedResponse()
+        }
+        if request.path.hasPrefix("/v1/"), controlPolicy.readAllowed() == false {
+            return runtimeBusyResponse(
+                error: "control_stopped",
+                message: "BCU Control stopped this runtime session.",
+                statusCode: 423,
+                reasonPhrase: "Locked",
+                requestID: UUID().uuidString
+            )
         }
 
         switch (request.method, request.path) {
@@ -88,6 +129,16 @@ struct Router {
                 from: request,
                 work: { payload in
                     try services.listWindows(payload)
+                }
+            )
+
+        case (.post, "/v1/launch_app"):
+            return decodeAndExecute(
+                LaunchAppRequest.self,
+                routeID: .launchApp,
+                from: request,
+                work: { payload in
+                    try services.launchApp(payload)
                 }
             )
 
@@ -211,6 +262,16 @@ struct Router {
                 }
             )
 
+        case (.post, "/v1/paste"):
+            return decodeAndExecute(
+                PasteRequest.self,
+                routeID: .paste,
+                from: request,
+                work: { payload in
+                    try services.paste(payload)
+                }
+            )
+
         case (.post, "/v1/press_key"):
             return decodeAndExecute(
                 PressKeyRequest.self,
@@ -269,7 +330,7 @@ struct Router {
                     requestID: UUID().uuidString,
                     recovery: [
                         "Call GET /v1/routes and use one of the advertised method/path pairs.",
-                        "Check that the request uses the documented HTTP method."
+                        "Check that the request uses the documented HTTP method.",
                     ]
                 ),
                 statusCode: 404,
@@ -278,11 +339,11 @@ struct Router {
         }
     }
 
-    private func decodeAndExecute<Request: Decodable, Response: Encodable>(
-        _ type: Request.Type,
+    private func decodeAndExecute<Request: Decodable>(
+        _: Request.Type,
         routeID: RouteID,
         from request: HTTPRequest,
-        work: (Request) throws -> Response
+        work: (Request) throws -> some Encodable
     ) -> HTTPResponse {
         let requestID = UUID().uuidString
         if let unknownFields = unknownTopLevelFields(routeID: routeID, body: request.body) {
@@ -305,6 +366,51 @@ struct Router {
         }
 
         if isActionRoute(routeID) {
+            guard controlPolicy.mutationAllowed() else {
+                let response = runtimeBusyResponse(
+                    error: "control_paused",
+                    message: "BCU Control paused or stopped new mutations.",
+                    statusCode: 423,
+                    reasonPhrase: "Locked",
+                    requestID: requestID
+                )
+                recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
+                return response
+            }
+            if routeID == .runScript,
+               controlPolicy.arbitraryScriptAllowed() == false
+            {
+                let response = runtimeBusyResponse(
+                    error: "control_policy_required",
+                    message: "BCU Control blocks arbitrary Apple Events source because it cannot bind the script to one approved app identity.",
+                    statusCode: 403,
+                    reasonPhrase: "Forbidden",
+                    requestID: requestID
+                )
+                recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
+                return response
+            }
+            if routeID != .launchApp,
+               let requestObject = try? JSONSerialization.jsonObject(with: request.body) as? [String: Any],
+               let windowID = requestObject["window"] as? String
+            {
+                let taskSessionID = request.headerValue(named: "X-Background-Computer-Use-Session") ?? "default"
+                if let decision = controlPolicy.authorizeWindow(windowID, taskSessionID),
+                   decision != .allowOnce, decision != .alwaysAllow
+                {
+                    let response = runtimeBusyResponse(
+                        error: "control_denied",
+                        message: decision == .ask
+                            ? "BCU Control approval is required for this app."
+                            : "BCU Control denied this app.",
+                        statusCode: 403,
+                        reasonPhrase: "Forbidden",
+                        requestID: requestID
+                    )
+                    recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
+                    return response
+                }
+            }
             let throttleDecision = sessionLimiter.beforeAction()
             guard throttleDecision.allowed else {
                 if let auditFailure = rejectedScriptAuditFailureResponse(
@@ -364,10 +470,11 @@ struct Router {
 
         do {
             let payload = try JSONSupport.decoder.decode(Request.self, from: request.body)
-            let response = HTTPResponse.json(
-                try work(payload),
+            let response = try HTTPResponse.json(
+                work(payload),
                 includeDebugNotes: includeDebugNotes(for: routeID, payload: payload)
             )
+            publishControlActivity(routeID: routeID, request: request, response: response)
             recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
             return response
         } catch {
@@ -392,6 +499,40 @@ struct Router {
         }
     }
 
+    private func publishControlActivity(
+        routeID: RouteID,
+        request: HTTPRequest,
+        response: HTTPResponse
+    ) {
+        guard isActionRoute(routeID),
+              let responseObject = try? JSONSerialization.jsonObject(with: response.body) as? [String: Any]
+        else {
+            return
+        }
+        let requestObject = (try? JSONSerialization.jsonObject(with: request.body)) as? [String: Any]
+        let sessionID = request.headerValue(named: "X-Background-Computer-Use-Session") ?? "default"
+        let windowID = requestObject?["window"] as? String
+        let window = responseObject["window"] as? [String: Any]
+        let identity = responseObject["identity"] as? [String: Any]
+        let appBundleID = (window?["bundleID"] as? String) ?? (identity?["bundleID"] as? String)
+        let verdict = (responseObject["classification"] as? String)
+            ?? ((responseObject["ok"] as? Bool) == true ? "success" : "failed")
+        let summary = responseObject["summary"] as? String ?? routeID.rawValue
+        let screenshot = (responseObject["postScreenshot"] as? [String: Any])
+            ?? (responseObject["screenshot"] as? [String: Any])
+        let screenshotImage = screenshot?["image"] as? [String: Any]
+        let screenshotPath = screenshotImage?["imagePath"] as? String
+        BackgroundComputerUseControlBridge.publishActivity(
+            sessionID: sessionID,
+            action: routeID.rawValue,
+            appBundleID: appBundleID,
+            windowID: windowID,
+            verdict: verdict,
+            summary: summary,
+            screenshotPath: screenshotPath
+        )
+    }
+
     private func runtimeBusyResponse(
         error: String,
         message: String,
@@ -406,7 +547,7 @@ struct Router {
                 requestID: requestID,
                 recovery: [
                     "Retry after the current action completes.",
-                    "Use X-Background-Computer-Use-Session to coordinate exclusive action batches."
+                    "Use X-Background-Computer-Use-Session to coordinate exclusive action batches.",
                 ]
             ),
             statusCode: statusCode,
@@ -441,7 +582,8 @@ struct Router {
         requestID: String
     ) -> HTTPResponse? {
         guard routeID == .runScript,
-              let request = decodedScriptAttempt(from: body) else {
+              let request = decodedScriptAttempt(from: body)
+        else {
             return nil
         }
         let effectiveTimeoutMs = request.timeoutMs.flatMap { timeout in
@@ -465,7 +607,7 @@ struct Router {
                     requestID: requestID,
                     recovery: [
                         "Confirm $TMPDIR/background-computer-use/audit is writable by the runtime user.",
-                        "Restart the runtime after restoring owner-only directory and file permissions."
+                        "Restart the runtime after restoring owner-only directory and file permissions.",
                     ]
                 ),
                 statusCode: 500,
@@ -479,16 +621,16 @@ struct Router {
             return request
         }
         guard let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
-              let source = object["source"] as? String else {
+              let source = object["source"] as? String
+        else {
             return nil
         }
-        let language: String
-        if let suppliedLanguage = object["language"] as? String {
-            language = suppliedLanguage
+        let language: String = if let suppliedLanguage = object["language"] as? String {
+            suppliedLanguage
         } else if object.keys.contains("language") {
-            language = "<invalid>"
+            "<invalid>"
         } else {
-            language = "<missing>"
+            "<missing>"
         }
         let timeoutMs = (object["timeoutMs"] as? NSNumber)?.intValue
         return RunScriptRequest(language: language, source: source, timeoutMs: timeoutMs)
@@ -496,7 +638,7 @@ struct Router {
 
     private func redactedScriptArtifactBody(_ body: Data, label: String) -> Data {
         let redacted = [
-            "body": "<redacted run_script \(label) len=\(body.count)>"
+            "body": "<redacted run_script \(label) len=\(body.count)>",
         ]
         return (try? JSONSerialization.data(withJSONObject: redacted)) ?? Data("{}".utf8)
     }
@@ -509,7 +651,7 @@ struct Router {
                 requestID: UUID().uuidString,
                 recovery: [
                     "Read the local runtime manifest at $TMPDIR/background-computer-use/runtime-manifest.json.",
-                    "Send the manifest authToken value as the \(RuntimeAuth.headerName) header for all /v1 requests."
+                    "Send the manifest authToken value as the \(RuntimeAuth.headerName) header for all /v1 requests.",
                 ]
             ),
             statusCode: 401,
@@ -525,7 +667,7 @@ struct Router {
                 requestID: UUID().uuidString,
                 recovery: [
                     "Use baseURL from the runtime manifest without replacing its host.",
-                    "Send a Host header beginning with 127.0.0.1 or localhost."
+                    "Send a Host header beginning with 127.0.0.1 or localhost.",
                 ]
             ),
             statusCode: 403,
@@ -536,7 +678,8 @@ struct Router {
     private func isLoopbackHost(_ host: String?) -> Bool {
         guard let normalized = host?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased() else {
+            .lowercased()
+        else {
             return false
         }
         return normalized == "127.0.0.1"
@@ -545,9 +688,10 @@ struct Router {
             || normalized.hasPrefix("localhost:")
     }
 
-    private func includeDebugNotes<Request>(for routeID: RouteID, payload: Request) -> Bool {
+    private func includeDebugNotes(for routeID: RouteID, payload: some Any) -> Bool {
         guard isActionRoute(routeID),
-              let debugRequest = payload as? DebugNotesRequest else {
+              let debugRequest = payload as? DebugNotesRequest
+        else {
             return true
         }
         return debugRequest.debug == true
@@ -555,16 +699,17 @@ struct Router {
 
     private func isActionRoute(_ routeID: RouteID) -> Bool {
         switch routeID {
-        case .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .pressKey, .setValue, .selectText, .runScript:
-            return true
+        case .launchApp, .click, .scroll, .performSecondaryAction, .drag, .resize, .setWindowFrame, .typeText, .paste, .pressKey, .setValue, .selectText, .runScript:
+            true
         default:
-            return false
+            false
         }
     }
 
     private func unknownTopLevelFields(routeID: RouteID, body: Data) -> [String]? {
         guard let object = try? JSONSerialization.jsonObject(with: body),
-              let dictionary = object as? [String: Any] else {
+              let dictionary = object as? [String: Any]
+        else {
             return nil
         }
         let allowed = Set(RouteRegistry.requestFieldNames(for: routeID))
@@ -588,7 +733,7 @@ struct Router {
                 recovery: [
                     "Remove the unknown field(s) \(unknownList) or correct the spelling against the route schema.",
                     "Call GET /v1/routes and inspect route '\(routeID.rawValue)' request.fields for the accepted fields.",
-                    "Send Content-Type: application/json with a JSON object body for POST routes."
+                    "Send Content-Type: application/json with a JSON object body for POST routes.",
                 ]
             ),
             statusCode: 400,
@@ -609,7 +754,7 @@ struct Router {
                 recovery: [
                     "Call GET /v1/routes and inspect route '\(routeID.rawValue)' request.fields.",
                     "Include all required fields and match enum values exactly.",
-                    "Send Content-Type: application/json with a JSON object body for POST routes."
+                    "Send Content-Type: application/json with a JSON object body for POST routes.",
                 ]
             ),
             statusCode: 400,
@@ -628,13 +773,13 @@ struct Router {
 
     private func decodingDetail(for error: Error) -> String {
         switch error {
-        case DecodingError.typeMismatch(let type, let context):
+        case let DecodingError.typeMismatch(type, context):
             return "Expected \(type) at '\(codingPathDescription(context.codingPath))'. \(context.debugDescription)"
-        case DecodingError.valueNotFound(let type, let context):
+        case let DecodingError.valueNotFound(type, context):
             return "Missing value for \(type) at '\(codingPathDescription(context.codingPath))'. \(context.debugDescription)"
-        case DecodingError.dataCorrupted(let context):
+        case let DecodingError.dataCorrupted(context):
             return "Invalid value at '\(codingPathDescription(context.codingPath))'. \(context.debugDescription)"
-        case DecodingError.keyNotFound(let key, let context):
+        case let DecodingError.keyNotFound(key, context):
             let path = codingPathDescription(context.codingPath + [key])
             return "Missing required field '\(path)'."
         default:
@@ -650,14 +795,14 @@ struct Router {
     func errorResponse(for error: Error, routeID: RouteID, requestID: String) -> HTTPResponse {
         switch error {
         case let screenshotError as CGWindowCaptureError:
-            return .json(
+            .json(
                 ErrorResponse(
                     error: "screenshot_failed",
                     message: "Screenshot capture failed for \(routeID.rawValue): \(String(describing: screenshotError))",
                     requestID: requestID,
                     recovery: [
                         "Confirm Screen Recording permission is granted to the signed BackgroundComputerUse app.",
-                        "Retry after confirming the target window is still visible and captureable."
+                        "Retry after confirming the target window is still visible and captureable.",
                     ]
                 ),
                 statusCode: 500,
@@ -665,14 +810,14 @@ struct Router {
             )
 
         case let captureError as StatePipelineExperimentError:
-            return .json(
+            .json(
                 ErrorResponse(
                     error: "capture_failed",
                     message: "State capture failed for \(routeID.rawValue): \(String(describing: captureError))",
                     requestID: requestID,
                     recovery: [
                         "Retry once if the target UI was changing during capture.",
-                        "Keep this requestID and inspect debug artifacts if the failure repeats."
+                        "Keep this requestID and inspect debug artifacts if the failure repeats.",
                     ]
                 ),
                 statusCode: 500,
@@ -680,97 +825,97 @@ struct Router {
             )
 
         case DiscoveryError.accessibilityDenied:
-            return .json(
+            .json(
                 ErrorResponse(
                     error: "accessibility_denied",
                     message: "Accessibility permission is required for \(routeID.rawValue).",
                     requestID: requestID,
                     recovery: [
                         "Grant Accessibility permission to BackgroundComputerUse in System Settings > Privacy & Security > Accessibility.",
-                        "Quit and relaunch the signed app bundle through script/start.sh or script/build_and_run.sh run."
+                        "Quit and relaunch the signed app bundle through script/start.sh or script/build_and_run.sh run.",
                     ]
                 ),
                 statusCode: 403,
                 reasonPhrase: "Forbidden"
             )
 
-        case DiscoveryError.appNotFound(let query):
-            return .json(
+        case let DiscoveryError.appNotFound(query):
+            .json(
                 ErrorResponse(
                     error: "app_not_found",
                     message: "No targetable app matched query '\(query)'.",
                     requestID: requestID,
                     recovery: [
                         "Call POST /v1/list_apps and retry with a current pid.",
-                        "Confirm the app is running and has at least one targetable process."
+                        "Confirm the app is running and has at least one targetable process.",
                     ]
                 ),
                 statusCode: 404,
                 reasonPhrase: "Not Found"
             )
 
-        case DiscoveryError.windowNotFound(let windowID):
-            return .json(
+        case let DiscoveryError.windowNotFound(windowID):
+            .json(
                 ErrorResponse(
                     error: "window_not_found",
                     message: "No live window matched window ID '\(windowID)'.",
                     requestID: requestID,
                     recovery: [
                         "Call POST /v1/list_windows again and use a current windowID.",
-                        "Confirm the target window has not closed, minimized, or moved to a non-targetable state."
+                        "Confirm the target window has not closed, minimized, or moved to a non-targetable state.",
                     ]
                 ),
                 statusCode: 404,
                 reasonPhrase: "Not Found"
             )
 
-        case ScriptRouteError.auditFailed(let message):
-            return .json(
+        case let ScriptRouteError.auditFailed(message):
+            .json(
                 ErrorResponse(
                     error: "audit_failed",
                     message: message,
                     requestID: requestID,
                     recovery: [
                         "Confirm $TMPDIR/background-computer-use/audit is writable by the runtime user.",
-                        "Restart the runtime after restoring owner-only directory and file permissions."
+                        "Restart the runtime after restoring owner-only directory and file permissions.",
                     ]
                 ),
                 statusCode: 500,
                 reasonPhrase: "Internal Server Error"
             )
 
-        case ScriptRouteError.invalidRequest(let message):
-            return .json(
+        case let ScriptRouteError.invalidRequest(message):
+            .json(
                 ErrorResponse(
                     error: "invalid_request",
                     message: message,
                     requestID: requestID,
                     recovery: [
                         "Use language applescript or javascript, a non-empty source, and timeoutMs greater than zero.",
-                        "Call GET /v1/routes and inspect run_script request.fields."
+                        "Call GET /v1/routes and inspect run_script request.fields.",
                     ]
                 ),
                 statusCode: 400,
                 reasonPhrase: "Bad Request"
             )
 
-        case FindElementsRouteError.invalidRequest(let message):
-            return .json(
+        case let FindElementsRouteError.invalidRequest(message):
+            .json(
                 ErrorResponse(
                     error: "invalid_request",
                     message: message,
                     requestID: requestID,
                     recovery: [
                         "Supply a non-empty role, text, or both.",
-                        "Call GET /v1/routes and inspect find_elements request.fields."
+                        "Call GET /v1/routes and inspect find_elements request.fields.",
                     ]
                 ),
                 statusCode: 400,
                 reasonPhrase: "Bad Request"
             )
 
-        case WaitForRouteError.invalidRequest(let message):
-            return .json(
+        case let WaitForRouteError.invalidRequest(message):
+            .json(
                 ErrorResponse(
                     error: "invalid_request",
                     message: message,
@@ -778,7 +923,7 @@ struct Router {
                     recovery: [
                         "Call GET /v1/routes and inspect route '\(routeID.rawValue)' request.fields.",
                         "Use windowTitleContains with gone=true for title disappearance waits.",
-                        "Use windowTitleChanged=true only for waiting until the title differs from the first observed title."
+                        "Use windowTitleChanged=true only for waiting until the title differs from the first observed title.",
                     ]
                 ),
                 statusCode: 400,
@@ -786,14 +931,14 @@ struct Router {
             )
 
         default:
-            return .json(
+            .json(
                 ErrorResponse(
                     error: "internal_error",
                     message: "Route \(routeID.rawValue) failed: \(String(describing: error))",
                     requestID: requestID,
                     recovery: [
                         "Retry once if the target UI was changing.",
-                        "If the route supports it, retry with debug=true and keep the requestID for logs."
+                        "If the route supports it, retry with debug=true and keep the requestID for logs.",
                     ]
                 ),
                 statusCode: 500,
