@@ -33,6 +33,8 @@ def text_result_is_background_safe(payload: dict) -> bool:
     return (
         payload.get("classification") == "success"
         and payload.get("backgroundSafety", {}).get("foregroundPreserved") is True
+        and payload.get("foregroundFallbackUsed") is False
+        and type_text_retry_contract_is_valid(payload)
     )
 
 
@@ -42,6 +44,41 @@ def safari_adaptive_type_strategy_is_valid(payload: dict) -> bool:
         payload.get("fallbackReason") == "unchanged_ax_noop"
         and strategies == ["ax_value", "ax_text_operation"]
     )
+
+
+def type_text_retry_contract_is_valid(payload: dict) -> bool:
+    if "strategiesAttempted" not in payload:
+        return False
+    attempted = payload["strategiesAttempted"]
+    retry_safe = payload.get("retrySafe")
+    dispatch_succeeded = payload.get("dispatchSucceeded")
+    if not isinstance(retry_safe, bool):
+        return False
+    if (
+        "dispatchSucceeded" in payload
+        and dispatch_succeeded is not None
+        and not isinstance(dispatch_succeeded, bool)
+    ):
+        return False
+    if not isinstance(attempted, list) or not all(
+        isinstance(strategy, str) and bool(strategy.strip()) for strategy in attempted
+    ):
+        return False
+    if not attempted:
+        return dispatch_succeeded is not True and retry_safe
+    return not retry_safe
+
+
+def controlled_type_fallback_is_valid(payload: dict) -> bool:
+    if (
+        payload.get("foregroundFallbackUsed") is not True
+        or payload.get("dispatchSucceeded") is not True
+        or not type_text_retry_contract_is_valid(payload)
+    ):
+        return False
+    if payload.get("classification") == "success":
+        return payload.get("verification", {}).get("exactValueMatch") is True
+    return payload.get("classification") == "verifier_ambiguous"
 
 
 def attempted_ax_escalation(click: dict) -> bool:
@@ -798,6 +835,11 @@ class Smoke:
         foreground_after = self.frontmost_pid()
         detail = (
             f"HTTP {status} classification={typed.get('classification')} "
+            f"dispatchSucceeded={typed.get('dispatchSucceeded')} "
+            f"strategies={typed.get('strategiesAttempted')} "
+            f"retrySafe={typed.get('retrySafe')} "
+            f"foregroundFallbackUsed={typed.get('foregroundFallbackUsed')} "
+            f"foregroundRestored={typed.get('foregroundRestored')} "
             f"backgroundSafety={typed.get('backgroundSafety')} "
             f"frontmostBefore={foreground_before} frontmostAfter={foreground_after}"
         )
@@ -852,7 +894,11 @@ class Smoke:
         adaptive_detail = (
             f"HTTP {status} classification={adaptive.get('classification')} "
             f"summary={adaptive.get('summary')} "
+            f"dispatchSucceeded={adaptive.get('dispatchSucceeded')} "
             f"strategies={adaptive.get('strategiesAttempted')} "
+            f"retrySafe={adaptive.get('retrySafe')} "
+            f"foregroundFallbackUsed={adaptive.get('foregroundFallbackUsed')} "
+            f"foregroundRestored={adaptive.get('foregroundRestored')} "
             f"fallback={adaptive.get('fallbackReason')} "
             f"performance={adaptive.get('performance')} "
             f"verification={adaptive.get('verification')} "

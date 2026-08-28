@@ -123,7 +123,9 @@ struct LaunchAppRouteService {
     private let authorizer: any LaunchAppAuthorizing
     private let launcher: any LaunchAppTransporting
     private let windowProvider: (pid_t) -> [String]
-    private let foregroundPID: () -> pid_t?
+    private let foregroundPID: @Sendable () -> pid_t?
+    private let foregroundCoordinator: ForegroundFallbackCoordinator
+    private let controlPID: pid_t
 
     init(
         resolver: any LaunchAppResolving = WorkspaceLaunchAppResolver(),
@@ -132,25 +134,48 @@ struct LaunchAppRouteService {
         windowProvider: @escaping (pid_t) -> [String] = { pid in
             (try? WindowListService().listWindows(pid: pid).windows.map(\.windowID)) ?? []
         },
-        foregroundPID: @escaping () -> pid_t? = {
+        foregroundPID: @escaping @Sendable () -> pid_t? = {
             NSWorkspace.shared.frontmostApplication?.processIdentifier
-        }
+        },
+        activatePID: @escaping @Sendable (pid_t) -> Bool = {
+            ForegroundApplicationSnapshot.activate(pid: $0)
+        },
+        controlPID: pid_t = getpid()
     ) {
         self.resolver = resolver
         self.authorizer = authorizer
         self.launcher = launcher
         self.windowProvider = windowProvider
         self.foregroundPID = foregroundPID
+        self.controlPID = controlPID
+        foregroundCoordinator = ForegroundFallbackCoordinator(
+            foregroundApplication: {
+                foregroundPID().map {
+                    ForegroundApplicationSnapshot(pid: $0, bundleID: nil)
+                }
+            },
+            activateApplication: activatePID
+        )
     }
 
     func launchApp(request: LaunchAppRequest) throws -> LaunchAppResponse {
         let foregroundBefore = foregroundPID()
+        var foregroundObservation = LaunchForegroundObservation(
+            originalPID: foregroundBefore,
+            controlPID: controlPID
+        )
+        func observeForeground(targetPID: pid_t?) {
+            foregroundObservation.record(currentPID: foregroundPID(), targetPID: targetPID)
+        }
+
         let candidate = try resolver.resolve(request: request)
+        observeForeground(targetPID: candidate.existingPID)
         let decision = authorizer.authorize(
             identity: candidate.identity,
             pid: candidate.existingPID,
             sessionID: request.sessionID
         )
+        observeForeground(targetPID: candidate.existingPID)
         guard decision == .allowOnce || decision == .alwaysAllow else {
             let foregroundAfter = foregroundPID()
             return LaunchAppResponse(
@@ -169,7 +194,9 @@ struct LaunchAppRouteService {
                 activates: false,
                 foregroundPIDBefore: foregroundBefore,
                 foregroundPIDAfter: foregroundAfter,
-                foregroundPreserved: foregroundBefore == foregroundAfter
+                foregroundPreserved: foregroundBefore == foregroundAfter,
+                foregroundFallbackUsed: false,
+                foregroundRestored: false
             )
         }
 
@@ -182,26 +209,68 @@ struct LaunchAppRouteService {
             launchState = .launched
             pid = try launcher.launch(url: candidate.url, activates: false)
         }
+        observeForeground(targetPID: pid)
+        let sampleWindows = {
+            observeForeground(targetPID: pid)
+            let windows = windowProvider(pid)
+            observeForeground(targetPID: pid)
+            return windows
+        }
         let windows: [String] = if case .launched = launchState {
             ConditionedActionWait.poll(
                 intervalMs: 50,
                 deadlineMs: 1000,
-                sample: { windowProvider(pid) },
+                sample: sampleWindows,
                 isSatisfied: { $0.isEmpty == false }
             ).sample
         } else {
-            windowProvider(pid)
+            sampleWindows()
         }
+        observeForeground(targetPID: pid)
+        let foregroundFallbackUsed = foregroundObservation.targetBecameForeground
+        let restorationPID = foregroundObservation.latestNonTransientPID
+        let restorationSourcePID: pid_t? = if foregroundObservation.currentPID == pid,
+                                              foregroundFallbackUsed
+        {
+            pid
+        } else if foregroundObservation.currentPID == controlPID {
+            controlPID
+        } else {
+            nil
+        }
+        let foregroundSelectionRestored = if let restorationSourcePID {
+            foregroundCoordinator.restore(
+                original: restorationPID.map {
+                    ForegroundApplicationSnapshot(pid: $0, bundleID: nil)
+                },
+                targetPID: restorationSourcePID,
+                fallbackUsed: true
+            )
+        } else {
+            false
+        }
+        let foregroundRestored = foregroundSelectionRestored && restorationPID == foregroundBefore
         let foregroundAfter = foregroundPID()
         let foregroundPreserved = foregroundBefore == foregroundAfter
+        let summary = if foregroundRestored {
+            "The authorized app is running and BCU restored the previous foreground application."
+        } else if foregroundSelectionRestored {
+            "The authorized app is running and BCU restored the newer foreground selection."
+        } else if foregroundPreserved {
+            "The authorized app is running and the foreground application is unchanged."
+        } else if foregroundAfter == restorationPID {
+            "The authorized app is running and the latest foreground selection is active."
+        } else if foregroundFallbackUsed {
+            "The authorized app is running, but the previous foreground application was not restored."
+        } else {
+            "The authorized app is running and an unrelated foreground change was preserved."
+        }
         return LaunchAppResponse(
             contractVersion: ContractVersion.current,
-            ok: foregroundPreserved,
-            classification: foregroundPreserved ? .success : .effectNotVerified,
-            failureDomain: foregroundPreserved ? nil : .backgroundSafety,
-            summary: foregroundPreserved
-                ? "The authorized app is running without foreground activation."
-                : "The app launched, but the foreground application changed.",
+            ok: true,
+            classification: .success,
+            failureDomain: nil,
+            summary: summary,
             identity: candidate.identity,
             policyDecision: decision,
             pid: pid,
@@ -210,7 +279,37 @@ struct LaunchAppRouteService {
             activates: false,
             foregroundPIDBefore: foregroundBefore,
             foregroundPIDAfter: foregroundAfter,
-            foregroundPreserved: foregroundPreserved
+            foregroundPreserved: foregroundPreserved,
+            foregroundFallbackUsed: foregroundFallbackUsed,
+            foregroundRestored: foregroundRestored
         )
+    }
+}
+
+private struct LaunchForegroundObservation {
+    let originalPID: pid_t?
+    let controlPID: pid_t
+    private(set) var targetBecameForeground = false
+    private(set) var latestNonTransientPID: pid_t?
+    private(set) var currentPID: pid_t?
+
+    init(originalPID: pid_t?, controlPID: pid_t) {
+        self.originalPID = originalPID
+        self.controlPID = controlPID
+        latestNonTransientPID = originalPID
+        currentPID = originalPID
+    }
+
+    mutating func record(currentPID: pid_t?, targetPID: pid_t?) {
+        self.currentPID = currentPID
+        guard let currentPID else { return }
+        if let targetPID, currentPID == targetPID {
+            if originalPID != targetPID {
+                targetBecameForeground = true
+            }
+            return
+        }
+        guard currentPID != controlPID else { return }
+        latestNonTransientPID = currentPID
     }
 }

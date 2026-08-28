@@ -83,9 +83,31 @@ private struct ActivityPiPView: View {
 }
 
 @MainActor
+final class ActivityPanel: NSPanel {
+    override var canBecomeKey: Bool {
+        false
+    }
+
+    override var canBecomeMain: Bool {
+        false
+    }
+
+    static func make(frame: NSRect) -> ActivityPanel {
+        let panel = ActivityPanel(
+            contentRect: frame,
+            styleMask: [.nonactivatingPanel, .titled, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        panel.ignoresMouseEvents = true
+        return panel
+    }
+}
+
+@MainActor
 final class PiPWindowController {
     private struct Entry {
-        let panel: NSPanel
+        let panel: ActivityPanel
         let model: ActivityPiPModel
     }
 
@@ -121,12 +143,7 @@ final class PiPWindowController {
             return
         }
         let model = ActivityPiPModel(activity: activity)
-        let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 330, height: 130),
-            styleMask: [.nonactivatingPanel, .titled, .fullSizeContentView],
-            backing: .buffered,
-            defer: false
-        )
+        let panel = ActivityPanel.make(frame: NSRect(x: 0, y: 0, width: 330, height: 130))
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isMovableByWindowBackground = true

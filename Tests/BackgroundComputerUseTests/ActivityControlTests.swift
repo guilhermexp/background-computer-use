@@ -1,3 +1,4 @@
+import AppKit
 @testable import BackgroundComputerUse
 @testable import BackgroundComputerUseControl
 import BackgroundComputerUseControlShared
@@ -6,6 +7,16 @@ import Testing
 
 @Suite(.serialized)
 struct ActivityControlTests {
+    @Test @MainActor
+    func activityPanelCannotBecomeKeyOrMain() {
+        let panel = ActivityPanel.make(frame: NSRect(x: 0, y: 0, width: 330, height: 130))
+
+        #expect(panel.canBecomeKey == false)
+        #expect(panel.canBecomeMain == false)
+        #expect(panel.ignoresMouseEvents)
+        panel.close()
+    }
+
     @Test
     func newActivityReplacesPresentationFromAnotherWindow() throws {
         var presentation = ActivityPiPPresentationState()

@@ -14,6 +14,13 @@ struct ForegroundApplicationSnapshot: Equatable, Sendable {
             bundleID: app.bundleIdentifier
         )
     }
+
+    static func activate(pid: pid_t) -> Bool {
+        guard let app = NSRunningApplication(processIdentifier: pid) else {
+            return false
+        }
+        return app.activate(options: [])
+    }
 }
 
 enum TypeTextBackgroundSafety {

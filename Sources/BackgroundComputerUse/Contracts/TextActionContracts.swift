@@ -189,4 +189,7 @@ public struct TypeTextResponse: Encodable, Sendable {
     public let notes: [String]
     public let backgroundSafety: TypeTextBackgroundSafetyDTO?
     public let verification: TypeTextVerificationEvidenceDTO?
+    public var retrySafe = false
+    public var foregroundFallbackUsed = false
+    public var foregroundRestored = false
 }

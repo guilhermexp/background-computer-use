@@ -13,7 +13,21 @@ struct BackgroundTextPreparation: Sendable {
         prepareOperation = prepare
     }
 
-    func prepare(pid: pid_t, windowNumber: Int) -> NativeWindowServerPreparationResult {
+    func prepareUnicodeFallback(pid: pid_t, windowNumber: Int) -> NativeWindowServerPreparationResult {
         prepareOperation(pid, windowNumber)
+    }
+
+    static func foregroundAllowsTextDispatch(
+        original: ForegroundApplicationSnapshot?,
+        current: ForegroundApplicationSnapshot?,
+        targetPID: pid_t
+    ) -> Bool {
+        if current?.pid == targetPID {
+            return true
+        }
+        guard let original, let current else {
+            return false
+        }
+        return current == original
     }
 }

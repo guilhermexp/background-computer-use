@@ -779,6 +779,8 @@ enum RouteRegistry {
                 field("foregroundPIDBefore", "integer | null"),
                 field("foregroundPIDAfter", "integer | null"),
                 field("foregroundPreserved", "boolean", required: true),
+                field("foregroundFallbackUsed", "boolean", required: true, "Whether launch completion involved the target becoming foreground."),
+                field("foregroundRestored", "boolean", required: true, "Whether BCU restored the application that was frontmost before launch."),
             ])
         case RouteID.cursorFeedback.rawValue:
             return json([
@@ -1037,9 +1039,12 @@ enum RouteRegistry {
             fields.insert(field("dispatchPrimitive", "string | null"), at: 7)
             fields.insert(field("dispatchSucceeded", "boolean | null"), at: 8)
             fields.insert(field("strategiesAttempted", "string[]", required: true), at: 9)
-            fields.insert(field("fallbackReason", "string | null"), at: 10)
-            fields.insert(field("performance", "ActionPerformance | null"), at: 11)
-            fields.insert(field("backgroundSafety", "TypeTextBackgroundSafety | null"), at: 12)
+            fields.insert(field("retrySafe", "boolean", required: true, "False after any text transport attempt. Reread the target before continuing and never repeat the request blindly."), at: 10)
+            fields.insert(field("foregroundFallbackUsed", "boolean", required: true, "Whether text dispatch required or continued with the target in the foreground."), at: 11)
+            fields.insert(field("foregroundRestored", "boolean", required: true, "Whether BCU restored the application that was frontmost before the action."), at: 12)
+            fields.insert(field("fallbackReason", "string | null"), at: 13)
+            fields.insert(field("performance", "ActionPerformance | null"), at: 14)
+            fields.insert(field("backgroundSafety", "TypeTextBackgroundSafety | null"), at: 15)
         }
 
         return json(fields)

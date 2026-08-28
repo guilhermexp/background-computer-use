@@ -45,7 +45,18 @@ Use this skill to start or connect to the local macOS `BackgroundComputerUse` ru
 
 6. For visual tasks, request screenshots with `imageMode: "path"` and inspect the returned image files when useful.
 
-7. For action routes, reuse `stateToken` from the state you inspected. Reuse the same `cursor.id` when the user wants one continuous visible cursor. `type_text` prepares background input automatically and reports `strategiesAttempted`; `paste` supports text, Markdown, and HTML while preserving the complete clipboard. Read `backgroundSafety.foregroundPreserved` and never send the removed `focusAssistMode` field.
+7. For action routes, reuse `stateToken` from the state you inspected. Reuse the same `cursor.id` when the user wants one continuous visible cursor. `type_text` is background-first, prepares any controlled foreground fallback itself, and reports `strategiesAttempted`, `retrySafe`, `foregroundFallbackUsed`, and `foregroundRestored`; `paste` supports text, Markdown, and HTML while preserving the complete clipboard. Read `backgroundSafety.foregroundPreserved` and never send the removed `focusAssistMode` field.
+
+   After every `type_text`, follow its retry contract:
+   - If `retrySafe` is false, assume the target may already contain some or all of the text. Never
+     repeat the request blindly. Reread the exact window and continue from the observed value.
+   - A dispatched `verifier_ambiguous` result is not a no-op. Reread visually or through
+     Accessibility before pressing Return or issuing another text mutation.
+   - `retrySafe: true` only permits a new request after a fresh read; it does not authorize an
+     automatic retry against stale state.
+   - `foregroundFallbackUsed: true` is separate from text verification. BCU may temporarily elevate
+     the exact target and restores the prior app only while the target remains frontmost; a user's
+     switch to a third app wins.
 
    BCU Control binds policy to bundle ID + signer + designated requirement. HTTP 423
    `control_paused` means mutations are paused but read routes remain available. HTTP 423
@@ -54,8 +65,9 @@ Use this skill to start or connect to the local macOS `BackgroundComputerUse` ru
 
 8. When the visible cursor should explain work in real time, call `POST /v1/cursor_feedback` with public agent-facing text. Stream useful observations or visible response text; do not show route labels like "reading screen", tool names, product branding, or hidden chain-of-thought.
 
-   BCU Control shows at most one transient activity card. The user can disable it in
-   `Ajustes > Mostrar cartão de atividades`; activity history continues to be recorded.
+   BCU Control shows at most one transient activity card without making its panel key/main or
+   activating BCU Control. The user can disable it in `Ajustes > Mostrar cartão de atividades`;
+   activity history continues to be recorded.
 
 ## Find targeted elements before reading the full tree
 

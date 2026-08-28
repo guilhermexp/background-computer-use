@@ -80,6 +80,7 @@ enum APIDocumentation {
         responseReading: [
             "Transport errors use non-2xx HTTP status codes and the common error body: contractVersion, ok=false, error, message, requestID, and recovery.",
             "Action routes can return HTTP 200 with ok=false when the request was understood but the effect was unsupported, unresolved, unverified, or ambiguous. Read classification, failureDomain or issueBucket, summary, warnings, transports, and verification before retrying.",
+            "For type_text, retrySafe=false means a text transport may have changed the target. Reread the target before continuing and never repeat the request blindly.",
             "For visual tasks, trust screenshots over AX-only summaries when they disagree. AX trees and verifier summaries can lag or miss purely visual state.",
             "Verbose implementation notes are omitted from most action responses unless the request includes debug: true.",
         ],
@@ -144,7 +145,7 @@ enum APIDocumentation {
             return usage(
                 whenToUse: "Launch or resolve one exact signed macOS app without activating it.",
                 useAfter: ["Start a Control-owned task session and be ready to answer an explicit app approval."],
-                successSignals: ["ok=true, foregroundPreserved=true, activates=false, and pid identifies the authorized process."],
+                successSignals: ["ok=true, activates=false, and pid identifies the authorized process; foregroundPreserved, foregroundFallbackUsed, and foregroundRestored report foreground impact separately."],
                 nextSteps: ["Call list_windows with the returned pid, or use one of the returned window IDs."],
                 exampleRequest: #"{"bundleID":"com.apple.Safari","sessionID":"TASK_SESSION"}"#
             )
@@ -255,8 +256,8 @@ enum APIDocumentation {
             return usage(
                 whenToUse: "Insert text into a focused text entry or a specific text-entry element.",
                 useAfter: ["Call get_window_state and identify a text-entry target, or deliberately rely on the current focused element."],
-                successSignals: ["ok=true, backgroundSafety.foregroundPreserved=true, and verification exact value or selection evidence matches the requested text."],
-                nextSteps: ["Use press_key for explicit Return/Tab submission; type_text does not auto-submit."],
+                successSignals: ["ok=true and verification exact value or selection evidence matches the requested text; foregroundFallbackUsed and foregroundRestored report foreground impact separately."],
+                nextSteps: ["When retrySafe=false, reread the target and never repeat the request blindly.", "Use press_key for explicit Return/Tab submission; type_text does not auto-submit."],
                 exampleRequest: #"{"window":"WINDOW_ID","stateToken":"STATE_TOKEN","target":{"kind":"display_index","value":4},"text":"hello"}"#
             )
         case .paste:

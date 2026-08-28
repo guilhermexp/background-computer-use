@@ -65,6 +65,7 @@ struct AdaptiveTypeTextRouteTests {
     @Test
     func exactAXMutationStaysOnFastPath() {
         var unicodeCalls = 0
+        var unicodePreparationCalls = 0
         let result = AdaptiveTextDispatcher.dispatch(
             baseline: "",
             expected: "hello",
@@ -72,7 +73,10 @@ struct AdaptiveTypeTextRouteTests {
             writeAX: { .success },
             readValue: { "hello" },
             performTargetBoundFallback: { .unavailable },
-            prepareUnicodeFallback: { false },
+            prepareUnicodeFallback: {
+                unicodePreparationCalls += 1
+                return false
+            },
             postUnicode: {
                 unicodeCalls += 1
                 return true
@@ -80,9 +84,33 @@ struct AdaptiveTypeTextRouteTests {
         )
 
         #expect(unicodeCalls == 0)
+        #expect(unicodePreparationCalls == 0)
         #expect(result.transportSucceeded)
         #expect(result.strategiesAttempted == [.axValue])
         #expect(result.decision == .acceptAX)
+    }
+
+    @Test
+    func unicodeFallbackPostsAtMostOnce() {
+        var unicodeCalls = 0
+        var observedValues = ["", "", "hello"]
+        let result = AdaptiveTextDispatcher.dispatch(
+            baseline: "",
+            expected: "hello",
+            fallbackEligible: true,
+            writeAX: { .success },
+            readValue: { observedValues.removeFirst() },
+            performTargetBoundFallback: { .unavailable },
+            prepareUnicodeFallback: { true },
+            postUnicode: {
+                unicodeCalls += 1
+                return true
+            }
+        )
+
+        #expect(unicodeCalls == 1)
+        #expect(result.transportSucceeded)
+        #expect(result.strategiesAttempted == [.axValue, .pidUnicode])
     }
 
     @Test

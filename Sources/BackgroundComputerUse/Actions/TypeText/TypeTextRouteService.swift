@@ -6,6 +6,7 @@ struct TypeTextRouteService {
     private let targetResolver: AXActionTargetResolver
     private let backgroundTextPreparation: BackgroundTextPreparation
     private let foregroundApplication: @Sendable () -> ForegroundApplicationSnapshot?
+    private let foregroundFallbackCoordinator: ForegroundFallbackCoordinator
     private let dispatchPrimitive = "CGEvent.keyboardSetUnicodeString + postToPid"
     private let elementValueDispatchPrimitive = "AXUIElementSetAttributeValue(kAXValueAttribute) + AXUIElementSetAttributeValue(kAXSelectedTextRangeAttribute)"
     private let settleDelay: TimeInterval = 0.35
@@ -13,11 +14,14 @@ struct TypeTextRouteService {
     init(
         executionOptions: ActionExecutionOptions = .visualCursorEnabled,
         backgroundTextPreparation: BackgroundTextPreparation = .live,
-        foregroundApplication: @escaping @Sendable () -> ForegroundApplicationSnapshot? = ForegroundApplicationSnapshot.capture
+        foregroundApplication: @escaping @Sendable () -> ForegroundApplicationSnapshot? = ForegroundApplicationSnapshot.capture,
+        foregroundFallbackCoordinator: ForegroundFallbackCoordinator? = nil
     ) {
         self.executionOptions = executionOptions
         self.backgroundTextPreparation = backgroundTextPreparation
         self.foregroundApplication = foregroundApplication
+        self.foregroundFallbackCoordinator = foregroundFallbackCoordinator
+            ?? ForegroundFallbackCoordinator(foregroundApplication: foregroundApplication)
         targetResolver = AXActionTargetResolver(executionOptions: executionOptions)
     }
 
@@ -187,36 +191,29 @@ struct TypeTextRouteService {
         let resolveMs = elapsedMilliseconds(since: resolveStarted)
 
         let window = capture.envelope.response.window
-        let preparationStarted = DispatchTime.now().uptimeNanoseconds
-        let preparation = backgroundTextPreparation.prepare(
-            pid: window.pid,
-            windowNumber: window.windowNumber
-        )
-        let preparationMs = elapsedMilliseconds(since: preparationStarted)
-        notes.append(contentsOf: preparation.notes)
-        warnings.append(contentsOf: preparation.warnings)
-        let foregroundBeforeDispatch = foregroundApplication()
-        let preDispatchBackgroundSafety = TypeTextBackgroundSafety.evaluate(
-            before: foregroundBefore,
-            beforeDispatch: foregroundBeforeDispatch,
-            after: foregroundBeforeDispatch
-        )
-        guard preparation.preparedTargetWindow(requireKeyWindowRecords: true),
-              preDispatchBackgroundSafety.foregroundPreserved
-        else {
+        let preparedBeforeState = AXActionRuntimeSupport.readTextState(liveElement.element)
+        let expected = expectedOutcome(from: preparedBeforeState, text: request.text)
+        let foregroundAtDispatchStart = foregroundApplication()
+        guard BackgroundTextPreparation.foregroundAllowsTextDispatch(
+            original: foregroundBefore,
+            current: foregroundAtDispatchStart,
+            targetPID: window.pid
+        ) else {
             AXCursorTargeting.finishTypeText(cursor: cursor, text: request.text)
-            let preparationFailed = preparation.preparedTargetWindow(requireKeyWindowRecords: true) == false
+            let backgroundSafety = TypeTextBackgroundSafety.evaluate(
+                before: foregroundBefore,
+                beforeDispatch: foregroundAtDispatchStart,
+                after: foregroundAtDispatchStart
+            )
             return response(
                 classification: .effectNotVerified,
-                failureDomain: preparationFailed ? .transport : .backgroundSafety,
-                summary: preparationFailed
-                    ? "Text dispatch failed closed during target-window preparation."
-                    : "Text dispatch was blocked because target preparation changed the user's foreground application.",
+                failureDomain: .backgroundSafety,
+                summary: "Text dispatch was blocked because an unrelated foreground change occurred before transport.",
                 window: window,
                 target: target,
                 text: request.text,
                 dispatchPrimitive: nil,
-                dispatchSucceeded: false,
+                dispatchSucceeded: nil,
                 semanticAppropriate: semantic.appropriate,
                 semanticReasons: semantic.reasons,
                 liveElementResolution: liveElement.resolution,
@@ -226,12 +223,9 @@ struct TypeTextRouteService {
                 warnings: warnings,
                 notes: notes,
                 verification: nil,
-                backgroundSafety: preDispatchBackgroundSafety
+                backgroundSafety: backgroundSafety
             )
         }
-
-        let preparedBeforeState = AXActionRuntimeSupport.readTextState(liveElement.element)
-        let expected = expectedOutcome(from: preparedBeforeState, text: request.text)
 
         let transportStarted = DispatchTime.now().uptimeNanoseconds
         let dispatchResult = dispatchText(
@@ -240,17 +234,32 @@ struct TypeTextRouteService {
             expected: expected,
             to: liveElement.element,
             pid: window.pid,
+            windowNumber: window.windowNumber,
             foregroundBefore: foregroundBefore,
-            foregroundBeforeDispatch: foregroundBeforeDispatch,
+            foregroundAtDispatchStart: foregroundAtDispatchStart,
             warnings: &warnings,
             notes: &notes
         )
         let transportMs = elapsedMilliseconds(since: transportStarted)
-        if dispatchResult.succeeded == false {
+        if dispatchResult.succeeded == false,
+           dispatchResult.strategiesAttempted.isEmpty
+        {
             AXCursorTargeting.finishTypeText(cursor: cursor, text: request.text)
+            let attempt = TypeTextAttemptTelemetry(
+                dispatchSucceeded: false,
+                strategiesAttempted: []
+            )
+            let foregroundRestored = TypeTextOutcomePolicy.canRestoreForeground(
+                attempt: attempt,
+                verificationCompleted: false
+            ) && foregroundFallbackCoordinator.restore(
+                original: foregroundBefore,
+                targetPID: window.pid,
+                fallbackUsed: dispatchResult.foregroundFallbackUsed
+            )
             let backgroundSafety = TypeTextBackgroundSafety.evaluate(
                 before: foregroundBefore,
-                beforeDispatch: foregroundBeforeDispatch,
+                beforeDispatch: dispatchResult.foregroundBeforeDispatch,
                 after: foregroundApplication()
             )
             return response(
@@ -289,9 +298,11 @@ struct TypeTextRouteService {
                     beforeTargetFocused: target.isFocused,
                     afterTargetFocused: nil,
                     renderedTextChanged: false,
-                    verificationNotes: ["Transport failed before a reread could verify text insertion."]
+                    verificationNotes: ["Text transport was blocked before any strategy was attempted."]
                 ),
-                backgroundSafety: backgroundSafety
+                backgroundSafety: backgroundSafety,
+                foregroundFallbackUsed: dispatchResult.foregroundFallbackUsed,
+                foregroundRestored: foregroundRestored
             )
         }
 
@@ -380,16 +391,28 @@ struct TypeTextRouteService {
                 afterSameElementState: afterSameElementState
             )
         )
+        let attempt = TypeTextAttemptTelemetry(
+            dispatchSucceeded: dispatchResult.succeeded,
+            strategiesAttempted: dispatchResult.strategiesAttempted
+        )
+        let foregroundRestored = TypeTextOutcomePolicy.canRestoreForeground(
+            attempt: attempt,
+            verificationCompleted: true
+        ) && foregroundFallbackCoordinator.restore(
+            original: foregroundBefore,
+            targetPID: window.pid,
+            fallbackUsed: dispatchResult.foregroundFallbackUsed
+        )
         let backgroundSafety = TypeTextBackgroundSafety.evaluate(
             before: foregroundBefore,
-            beforeDispatch: foregroundBeforeDispatch,
+            beforeDispatch: dispatchResult.foregroundBeforeDispatch,
             after: foregroundApplication()
         )
         let verificationMs = elapsedMilliseconds(since: verificationStarted)
         let performance = ActionPerformanceDTO(
             resolveMs: resolveMs,
             captureMs: captureMs,
-            preparationMs: preparationMs,
+            preparationMs: dispatchResult.preparationMs,
             transportMs: transportMs,
             settleMs: Double(settle.elapsedMs),
             verificationMs: verificationMs,
@@ -413,7 +436,9 @@ struct TypeTextRouteService {
             warnings: warnings,
             notes: notes,
             verification: verification,
-            backgroundSafety: backgroundSafety
+            backgroundSafety: backgroundSafety,
+            foregroundFallbackUsed: dispatchResult.foregroundFallbackUsed,
+            foregroundRestored: foregroundRestored
         )
     }
 
@@ -422,6 +447,18 @@ struct TypeTextRouteService {
         let primitive: String
         let strategiesAttempted: [AdaptiveTextStrategy]
         let fallbackReason: AdaptiveTextDispatchFallbackReason?
+        let foregroundFallbackUsed: Bool
+        let foregroundBeforeDispatch: ForegroundApplicationSnapshot?
+        let preparationMs: Double
+    }
+
+    private struct PIDUnicodePreparationResult {
+        let permitted: Bool
+        let foregroundFallbackUsed: Bool
+        let foregroundBeforeDispatch: ForegroundApplicationSnapshot?
+        let elapsedMs: Double
+        let warnings: [String]
+        let notes: [String]
     }
 
     private func typeTextOnOpaqueFocusedSurface(
@@ -515,33 +552,28 @@ struct TypeTextRouteService {
             )
         }
 
-        let preparation = backgroundTextPreparation.prepare(
-            pid: dispatchWindow.pid,
-            windowNumber: dispatchWindow.windowNumber
+        let preparation = preparePIDUnicodeFallback(
+            originalForeground: foregroundBefore,
+            targetPID: dispatchWindow.pid,
+            windowNumber: dispatchWindow.windowNumber,
+            exactTarget: nil
         )
         notes.append(contentsOf: preparation.notes)
         warnings.append(contentsOf: preparation.warnings)
-        let foregroundBeforeDispatch = foregroundApplication()
+        let foregroundBeforeDispatch = preparation.foregroundBeforeDispatch
         let preDispatchBackgroundSafety = TypeTextBackgroundSafety.evaluate(
             before: foregroundBefore,
             beforeDispatch: foregroundBeforeDispatch,
             after: foregroundBeforeDispatch
         )
-        guard preparation.preparedTargetWindow(requireKeyWindowRecords: true),
-              preDispatchBackgroundSafety.foregroundPreserved
-        else {
-            let preparationFailed = preparation.preparedTargetWindow(requireKeyWindowRecords: true) == false
-            let preflightFailure = preparationFailed
-                ? "PID-scoped Unicode posting was not attempted because WindowServer could not establish the requested AX-opaque window as the key input recipient."
-                : "PID-scoped Unicode posting was not attempted because target preparation changed the user's foreground application."
+        guard preparation.permitted else {
+            let preflightFailure = "PID-scoped Unicode posting was not attempted because foreground preparation was blocked before dispatch."
             warnings.append(preflightFailure)
             notes.append(preflightFailure)
             return response(
                 classification: .effectNotVerified,
-                failureDomain: preparationFailed ? .transport : .backgroundSafety,
-                summary: preparationFailed
-                    ? "Opaque focused-surface typing failed closed during target-window preflight."
-                    : "Opaque focused-surface typing failed closed because foreground preservation was not proven.",
+                failureDomain: .backgroundSafety,
+                summary: "Opaque focused-surface typing was blocked before text dispatch.",
                 window: dispatchWindow,
                 target: nil,
                 text: request.text,
@@ -556,12 +588,16 @@ struct TypeTextRouteService {
                 warnings: warnings,
                 notes: notes,
                 verification: nil,
-                backgroundSafety: preDispatchBackgroundSafety
+                backgroundSafety: preDispatchBackgroundSafety,
+                foregroundFallbackUsed: preparation.foregroundFallbackUsed,
+                foregroundRestored: false
             )
         }
 
-        let dispatched = AXActionRuntimeSupport.postUnicodeText(request.text, to: dispatchWindow.pid)
-        guard dispatched else {
+        guard foregroundApplication() == foregroundBeforeDispatch else {
+            let warning = "PID-scoped Unicode posting was not attempted because the foreground application changed after preparation."
+            warnings.append(warning)
+            notes.append(warning)
             let backgroundSafety = TypeTextBackgroundSafety.evaluate(
                 before: foregroundBefore,
                 beforeDispatch: foregroundBeforeDispatch,
@@ -569,12 +605,12 @@ struct TypeTextRouteService {
             )
             return response(
                 classification: .effectNotVerified,
-                failureDomain: .transport,
-                summary: "PID-scoped Unicode posting failed for the AX-opaque focused surface.",
+                failureDomain: .backgroundSafety,
+                summary: "Opaque focused-surface typing was blocked before text dispatch.",
                 window: dispatchWindow,
                 target: nil,
                 text: request.text,
-                dispatchPrimitive: dispatchPrimitive,
+                dispatchPrimitive: nil,
                 dispatchSucceeded: false,
                 semanticAppropriate: nil,
                 semanticReasons: [],
@@ -585,10 +621,16 @@ struct TypeTextRouteService {
                 warnings: warnings,
                 notes: notes,
                 verification: nil,
-                backgroundSafety: backgroundSafety
+                backgroundSafety: backgroundSafety,
+                foregroundFallbackUsed: preparation.foregroundFallbackUsed,
+                foregroundRestored: false
             )
         }
 
+        let dispatched = AXActionRuntimeSupport.postUnicodeText(request.text, to: dispatchWindow.pid)
+        let foregroundFallbackUsed = preparation.foregroundFallbackUsed
+            || (foregroundBefore?.pid != dispatchWindow.pid
+                && foregroundApplication()?.pid == dispatchWindow.pid)
         let settled = ConditionedActionWait.poll(
             intervalMs: 25,
             deadlineMs: Int((settleDelay * 1000).rounded()),
@@ -601,26 +643,87 @@ struct TypeTextRouteService {
         if postCapture == nil {
             notes.append("Post-type reread failed for the AX-opaque target.")
         }
+        guard dispatched else {
+            let attempt = TypeTextAttemptTelemetry(
+                dispatchSucceeded: false,
+                strategiesAttempted: [.pidUnicode]
+            )
+            let foregroundRestored = TypeTextOutcomePolicy.canRestoreForeground(
+                attempt: attempt,
+                verificationCompleted: true
+            ) && foregroundFallbackCoordinator.restore(
+                original: foregroundBefore,
+                targetPID: dispatchWindow.pid,
+                fallbackUsed: foregroundFallbackUsed
+            )
+            let backgroundSafety = TypeTextBackgroundSafety.evaluate(
+                before: foregroundBefore,
+                beforeDispatch: foregroundBeforeDispatch,
+                after: foregroundApplication()
+            )
+            let decision = TypeTextOutcomePolicy.classifyOpaqueDispatch(
+                attempt: attempt,
+                foregroundPreserved: backgroundSafety.foregroundPreserved
+            )
+            return response(
+                classification: decision.classification,
+                failureDomain: decision.failureDomain,
+                summary: decision.summary,
+                window: dispatchWindow,
+                target: nil,
+                text: request.text,
+                dispatchPrimitive: dispatchPrimitive,
+                dispatchSucceeded: false,
+                strategiesAttempted: [AdaptiveTextStrategy.pidUnicode.rawValue],
+                semanticAppropriate: nil,
+                semanticReasons: [],
+                liveElementResolution: nil,
+                preStateToken: preDispatchCapture.envelope.response.stateToken,
+                postStateToken: postCapture?.envelope.response.stateToken,
+                cursor: cursor,
+                warnings: warnings,
+                notes: notes,
+                verification: nil,
+                backgroundSafety: backgroundSafety,
+                foregroundFallbackUsed: foregroundFallbackUsed,
+                foregroundRestored: foregroundRestored
+            )
+        }
+
         notes.append(
-            "Explicit opaque focused-surface fallback posted Unicode after successful target-window preflight; call get_window_state with imageMode path or base64 to verify the result before continuing."
+            "Explicit opaque focused-surface fallback posted Unicode after controlled foreground preparation; call get_window_state with imageMode path or base64 to verify the result before continuing."
+        )
+        let attempt = TypeTextAttemptTelemetry(
+            dispatchSucceeded: true,
+            strategiesAttempted: [.pidUnicode]
+        )
+        let foregroundRestored = TypeTextOutcomePolicy.canRestoreForeground(
+            attempt: attempt,
+            verificationCompleted: true
+        ) && foregroundFallbackCoordinator.restore(
+            original: foregroundBefore,
+            targetPID: dispatchWindow.pid,
+            fallbackUsed: foregroundFallbackUsed
         )
         let backgroundSafety = TypeTextBackgroundSafety.evaluate(
             before: foregroundBefore,
             beforeDispatch: foregroundBeforeDispatch,
             after: foregroundApplication()
         )
-        let foregroundPreserved = backgroundSafety.foregroundPreserved
+        let decision = TypeTextOutcomePolicy.classifyOpaqueDispatch(
+            attempt: attempt,
+            foregroundPreserved: backgroundSafety.foregroundPreserved
+        )
         return response(
-            classification: foregroundPreserved ? .verifierAmbiguous : .effectNotVerified,
-            failureDomain: foregroundPreserved ? .verification : .backgroundSafety,
-            summary: foregroundPreserved
-                ? "Text was dispatched to the AX-opaque focused surface; visual verification is required."
-                : "Text dispatch did not preserve the user's foreground application.",
+            classification: decision.classification,
+            failureDomain: decision.failureDomain,
+            summary: decision.summary,
             window: dispatchWindow,
             target: nil,
             text: request.text,
             dispatchPrimitive: dispatchPrimitive,
             dispatchSucceeded: true,
+            strategiesAttempted: [AdaptiveTextStrategy.pidUnicode.rawValue],
             semanticAppropriate: nil,
             semanticReasons: [],
             liveElementResolution: nil,
@@ -630,8 +733,130 @@ struct TypeTextRouteService {
             warnings: warnings,
             notes: notes,
             verification: nil,
-            backgroundSafety: backgroundSafety
+            backgroundSafety: backgroundSafety,
+            foregroundFallbackUsed: foregroundFallbackUsed,
+            foregroundRestored: foregroundRestored
         )
+    }
+
+    private func preparePIDUnicodeFallback(
+        originalForeground: ForegroundApplicationSnapshot?,
+        targetPID: pid_t,
+        windowNumber: Int,
+        exactTarget: AXUIElement?
+    ) -> PIDUnicodePreparationResult {
+        let started = DispatchTime.now().uptimeNanoseconds
+        let foregroundAtPreparationStart = foregroundApplication()
+        guard BackgroundTextPreparation.foregroundAllowsTextDispatch(
+            original: originalForeground,
+            current: foregroundAtPreparationStart,
+            targetPID: targetPID
+        ) else {
+            return PIDUnicodePreparationResult(
+                permitted: false,
+                foregroundFallbackUsed: false,
+                foregroundBeforeDispatch: foregroundAtPreparationStart,
+                elapsedMs: elapsedMilliseconds(since: started),
+                warnings: ["PID-scoped Unicode fallback was blocked before WindowServer or AX focus effects because an unrelated foreground change occurred."],
+                notes: []
+            )
+        }
+        let windowPreparation = backgroundTextPreparation.prepareUnicodeFallback(
+            pid: targetPID,
+            windowNumber: windowNumber
+        )
+        var warnings = windowPreparation.warnings
+        var notes = windowPreparation.notes
+        var backgroundPrepared = windowPreparation.preparedTargetWindow(
+            requireKeyWindowRecords: true
+        )
+
+        if let exactTarget {
+            if AXActionRuntimeSupport.readTextState(exactTarget).isFocused != true {
+                let focused = AXActionRuntimeSupport.isAttributeSettable(
+                    exactTarget,
+                    attribute: kAXFocusedAttribute as CFString
+                ) && AXActionRuntimeSupport.setBoolAttributeResult(
+                    exactTarget,
+                    attribute: kAXFocusedAttribute as CFString,
+                    value: true
+                ) == .success
+                if focused == false {
+                    warnings.append("Unicode fallback could not focus the exact AX target in the background.")
+                }
+            }
+            let focus = ConditionedActionWait.poll(
+                intervalMs: 25,
+                deadlineMs: 150,
+                sample: { AXActionRuntimeSupport.readTextState(exactTarget).isFocused },
+                isSatisfied: { $0 == true }
+            )
+            backgroundPrepared = backgroundPrepared && focus.sample == true
+            if focus.sample != true {
+                notes.append("Exact AX target focus was not verified before foreground coordination.")
+            }
+        }
+
+        let outcome = foregroundFallbackCoordinator.prepare(
+            original: originalForeground,
+            targetPID: targetPID,
+            backgroundPrepared: backgroundPrepared
+        )
+        var foregroundTargetPrepared = true
+        if outcome.mode == .foregroundFallback,
+           let exactTarget,
+           AXActionRuntimeSupport.readTextState(exactTarget).isFocused != true
+        {
+            let focused = AXActionRuntimeSupport.isAttributeSettable(
+                exactTarget,
+                attribute: kAXFocusedAttribute as CFString
+            ) && AXActionRuntimeSupport.setBoolAttributeResult(
+                exactTarget,
+                attribute: kAXFocusedAttribute as CFString,
+                value: true
+            ) == .success
+            let focus = ConditionedActionWait.poll(
+                intervalMs: 25,
+                deadlineMs: 150,
+                sample: { AXActionRuntimeSupport.readTextState(exactTarget).isFocused },
+                isSatisfied: { $0 == true }
+            )
+            foregroundTargetPrepared = focused && focus.sample == true
+            if foregroundTargetPrepared == false {
+                warnings.append("Unicode fallback could not focus the exact AX target after foreground activation.")
+            }
+        }
+        switch outcome.mode {
+        case .background:
+            return PIDUnicodePreparationResult(
+                permitted: true,
+                foregroundFallbackUsed: false,
+                foregroundBeforeDispatch: outcome.foregroundBeforeDispatch,
+                elapsedMs: elapsedMilliseconds(since: started),
+                warnings: warnings,
+                notes: notes
+            )
+        case .foregroundFallback:
+            notes.append("PID-scoped Unicode fallback continued with the exact target application in the foreground.")
+            return PIDUnicodePreparationResult(
+                permitted: foregroundTargetPrepared,
+                foregroundFallbackUsed: true,
+                foregroundBeforeDispatch: outcome.foregroundBeforeDispatch,
+                elapsedMs: elapsedMilliseconds(since: started),
+                warnings: warnings,
+                notes: notes
+            )
+        case .blockedByUserChange:
+            warnings.append("PID-scoped Unicode fallback was blocked before dispatch because foreground coordination did not preserve the current user choice.")
+            return PIDUnicodePreparationResult(
+                permitted: false,
+                foregroundFallbackUsed: false,
+                foregroundBeforeDispatch: outcome.foregroundBeforeDispatch,
+                elapsedMs: elapsedMilliseconds(since: started),
+                warnings: warnings,
+                notes: notes
+            )
+        }
     }
 
     private func dispatchText(
@@ -640,11 +865,15 @@ struct TypeTextRouteService {
         expected: TypeTextExpectedOutcomeDTO?,
         to element: AXUIElement,
         pid: pid_t,
+        windowNumber: Int,
         foregroundBefore: ForegroundApplicationSnapshot?,
-        foregroundBeforeDispatch: ForegroundApplicationSnapshot?,
+        foregroundAtDispatchStart: ForegroundApplicationSnapshot?,
         warnings: inout [String],
         notes: inout [String]
     ) -> TextDispatchResult {
+        var foregroundBeforeDispatch = foregroundAtDispatchStart
+        var foregroundFallbackUsed = false
+        var preparationMs = 0.0
         if let expectedValue = expected?.valueString,
            AXActionRuntimeSupport.isAttributeSettable(element, attribute: kAXValueAttribute as CFString)
         {
@@ -706,39 +935,19 @@ struct TypeTextRouteService {
                     return .attempted(succeeded: textOperationResult == .success)
                 },
                 prepareUnicodeFallback: {
-                    if AXActionRuntimeSupport.readTextState(element).isFocused != true {
-                        guard AXActionRuntimeSupport.isAttributeSettable(
-                            element,
-                            attribute: kAXFocusedAttribute as CFString
-                        ), AXActionRuntimeSupport.setBoolAttributeResult(
-                            element,
-                            attribute: kAXFocusedAttribute as CFString,
-                            value: true
-                        ) == .success
-                        else {
-                            fallbackDiagnostic = "Fallback was blocked because the exact target could not be focused."
-                            return false
-                        }
-                    }
-                    let focus = ConditionedActionWait.poll(
-                        intervalMs: 25,
-                        deadlineMs: 150,
-                        sample: { AXActionRuntimeSupport.readTextState(element).isFocused },
-                        isSatisfied: { $0 == true }
+                    let preparation = preparePIDUnicodeFallback(
+                        originalForeground: foregroundBefore,
+                        targetPID: pid,
+                        windowNumber: windowNumber,
+                        exactTarget: element
                     )
-                    let foregroundNow = foregroundApplication()
-                    let safety = TypeTextBackgroundSafety.evaluate(
-                        before: foregroundBefore,
-                        beforeDispatch: foregroundBeforeDispatch,
-                        after: foregroundNow
-                    )
-                    guard focus.sample == true, safety.foregroundPreserved
-                    else {
-                        if focus.sample != true {
-                            fallbackDiagnostic = "Fallback was blocked because exact target focus could not be verified."
-                        } else {
-                            fallbackDiagnostic = "Fallback was blocked because the foreground application changed."
-                        }
+                    notes.append(contentsOf: preparation.notes)
+                    warnings.append(contentsOf: preparation.warnings)
+                    foregroundBeforeDispatch = preparation.foregroundBeforeDispatch
+                    foregroundFallbackUsed = preparation.foregroundFallbackUsed
+                    preparationMs = preparation.elapsedMs
+                    guard preparation.permitted else {
+                        fallbackDiagnostic = "Unicode fallback was blocked before text dispatch."
                         return false
                     }
                     return true
@@ -749,14 +958,8 @@ struct TypeTextRouteService {
                         fallbackDiagnostic = "Unicode fallback was blocked because the exact target was not focused after the AX attempt."
                         return false
                     }
-                    let foregroundNow = foregroundApplication()
-                    let safety = TypeTextBackgroundSafety.evaluate(
-                        before: foregroundBefore,
-                        beforeDispatch: foregroundBeforeDispatch,
-                        after: foregroundNow
-                    )
-                    guard safety.foregroundPreserved else {
-                        fallbackDiagnostic = "Unicode fallback was blocked because foreground preservation was lost."
+                    guard foregroundApplication() == foregroundBeforeDispatch else {
+                        fallbackDiagnostic = "Unicode fallback was blocked because the foreground application changed after preparation."
                         return false
                     }
                     return AXActionRuntimeSupport.postUnicodeText(text, to: pid)
@@ -783,11 +986,21 @@ struct TypeTextRouteService {
                 primitives.append(dispatchPrimitive)
             }
             let primitive = primitives.joined(separator: " -> ")
+            if foregroundFallbackUsed == false,
+               foregroundBefore?.pid != pid,
+               foregroundApplication()?.pid == pid
+            {
+                foregroundFallbackUsed = true
+                notes.append("The exact target application became foreground during text transport; restoration remains conditional on it staying foreground through verification.")
+            }
             return TextDispatchResult(
                 succeeded: adaptive.transportSucceeded,
                 primitive: primitive,
                 strategiesAttempted: adaptive.strategiesAttempted,
-                fallbackReason: adaptive.fallbackReason
+                fallbackReason: adaptive.fallbackReason,
+                foregroundFallbackUsed: foregroundFallbackUsed,
+                foregroundBeforeDispatch: foregroundBeforeDispatch,
+                preparationMs: preparationMs
             )
         }
 
@@ -796,11 +1009,56 @@ struct TypeTextRouteService {
         } else {
             notes.append("Live AX value was not writable; type_text used PID-scoped Unicode posting.")
         }
+        let preparation = preparePIDUnicodeFallback(
+            originalForeground: foregroundBefore,
+            targetPID: pid,
+            windowNumber: windowNumber,
+            exactTarget: element
+        )
+        notes.append(contentsOf: preparation.notes)
+        warnings.append(contentsOf: preparation.warnings)
+        foregroundBeforeDispatch = preparation.foregroundBeforeDispatch
+        foregroundFallbackUsed = preparation.foregroundFallbackUsed
+        preparationMs = preparation.elapsedMs
+        guard preparation.permitted else {
+            return TextDispatchResult(
+                succeeded: false,
+                primitive: dispatchPrimitive,
+                strategiesAttempted: [],
+                fallbackReason: nil,
+                foregroundFallbackUsed: foregroundFallbackUsed,
+                foregroundBeforeDispatch: foregroundBeforeDispatch,
+                preparationMs: preparationMs
+            )
+        }
+        guard foregroundApplication() == foregroundBeforeDispatch else {
+            warnings.append("Unicode fallback was blocked because the foreground application changed after preparation.")
+            return TextDispatchResult(
+                succeeded: false,
+                primitive: dispatchPrimitive,
+                strategiesAttempted: [],
+                fallbackReason: nil,
+                foregroundFallbackUsed: foregroundFallbackUsed,
+                foregroundBeforeDispatch: foregroundBeforeDispatch,
+                preparationMs: preparationMs
+            )
+        }
+        let unicodeSucceeded = AXActionRuntimeSupport.postUnicodeText(text, to: pid)
+        if foregroundFallbackUsed == false,
+           foregroundBefore?.pid != pid,
+           foregroundApplication()?.pid == pid
+        {
+            foregroundFallbackUsed = true
+            notes.append("The target application became foreground during PID-scoped Unicode transport; restoration remains conditional on it staying foreground through verification.")
+        }
         return TextDispatchResult(
-            succeeded: AXActionRuntimeSupport.postUnicodeText(text, to: pid),
+            succeeded: unicodeSucceeded,
             primitive: dispatchPrimitive,
             strategiesAttempted: [.pidUnicode],
-            fallbackReason: nil
+            fallbackReason: nil,
+            foregroundFallbackUsed: foregroundFallbackUsed,
+            foregroundBeforeDispatch: foregroundBeforeDispatch,
+            preparationMs: preparationMs
         )
     }
 
@@ -821,116 +1079,21 @@ struct TypeTextRouteService {
         warnings: [String],
         notes: [String],
         verification: TypeTextVerificationEvidenceDTO,
-        backgroundSafety: TypeTextBackgroundSafetyDTO
+        backgroundSafety: TypeTextBackgroundSafetyDTO,
+        foregroundFallbackUsed: Bool,
+        foregroundRestored: Bool
     ) -> TypeTextResponse {
-        guard backgroundSafety.foregroundPreserved else {
-            return response(
-                classification: .effectNotVerified,
-                failureDomain: .backgroundSafety,
-                summary: "Text dispatch did not preserve the user's foreground application.",
-                window: window,
-                target: target,
-                text: request.text,
-                dispatchPrimitive: dispatchPrimitive,
-                dispatchSucceeded: dispatchSucceeded,
-                strategiesAttempted: strategiesAttempted,
-                fallbackReason: fallbackReason,
-                performance: performance,
-                semanticAppropriate: semantic.appropriate,
-                semanticReasons: semantic.reasons,
-                liveElementResolution: liveElementResolution,
-                preStateToken: preStateToken,
-                postStateToken: postStateToken,
-                cursor: cursor,
-                warnings: warnings,
-                notes: notes,
-                verification: verification,
-                backgroundSafety: backgroundSafety
-            )
-        }
-
-        if verification.exactValueMatch {
-            if verification.exactSelectionMatch == false {
-                return response(
-                    classification: .effectNotVerified,
-                    failureDomain: .verification,
-                    summary: "The text inserted exactly, but the expected caret or selection state did not verify.",
-                    window: window,
-                    target: target,
-                    text: request.text,
-                    dispatchPrimitive: dispatchPrimitive,
-                    dispatchSucceeded: dispatchSucceeded,
-                    strategiesAttempted: strategiesAttempted,
-                    fallbackReason: fallbackReason,
-                    performance: performance,
-                    semanticAppropriate: semantic.appropriate,
-                    semanticReasons: semantic.reasons,
-                    liveElementResolution: liveElementResolution,
-                    preStateToken: preStateToken,
-                    postStateToken: postStateToken,
-                    cursor: cursor,
-                    warnings: warnings,
-                    notes: notes,
-                    verification: verification,
-                    backgroundSafety: backgroundSafety
-                )
-            }
-
-            return response(
-                classification: .success,
-                failureDomain: nil,
-                summary: "The targeted text dispatch matched the expected inserted value after reread.",
-                window: window,
-                target: target,
-                text: request.text,
-                dispatchPrimitive: dispatchPrimitive,
-                dispatchSucceeded: dispatchSucceeded,
-                strategiesAttempted: strategiesAttempted,
-                fallbackReason: fallbackReason,
-                performance: performance,
-                semanticAppropriate: semantic.appropriate,
-                semanticReasons: semantic.reasons,
-                liveElementResolution: liveElementResolution,
-                preStateToken: preStateToken,
-                postStateToken: postStateToken,
-                cursor: cursor,
-                warnings: warnings,
-                notes: notes,
-                verification: verification,
-                backgroundSafety: backgroundSafety
-            )
-        }
-
-        if verification.targetRelocated == false || postStateToken == nil {
-            return response(
-                classification: .verifierAmbiguous,
-                failureDomain: .verification,
-                summary: "The text dispatch was attempted, but the route could not confidently relocate the target on reread.",
-                window: window,
-                target: target,
-                text: request.text,
-                dispatchPrimitive: dispatchPrimitive,
-                dispatchSucceeded: dispatchSucceeded,
-                strategiesAttempted: strategiesAttempted,
-                fallbackReason: fallbackReason,
-                performance: performance,
-                semanticAppropriate: semantic.appropriate,
-                semanticReasons: semantic.reasons,
-                liveElementResolution: liveElementResolution,
-                preStateToken: preStateToken,
-                postStateToken: postStateToken,
-                cursor: cursor,
-                warnings: warnings,
-                notes: notes,
-                verification: verification,
-                backgroundSafety: backgroundSafety
-            )
-        }
-
+        let decision = TypeTextOutcomePolicy.classifySemanticDispatch(
+            exactValueMatch: verification.exactValueMatch,
+            exactSelectionMatch: verification.exactSelectionMatch,
+            targetRelocated: verification.targetRelocated,
+            postStateTokenAvailable: postStateToken != nil,
+            foregroundPreserved: backgroundSafety.foregroundPreserved
+        )
         return response(
-            classification: .effectNotVerified,
-            failureDomain: .verification,
-            summary: "The text dispatch was attempted, but the refreshed target state did not match the expected inserted text.",
+            classification: decision.classification,
+            failureDomain: decision.failureDomain,
+            summary: decision.summary,
             window: window,
             target: target,
             text: request.text,
@@ -948,7 +1111,9 @@ struct TypeTextRouteService {
             warnings: warnings,
             notes: notes,
             verification: verification,
-            backgroundSafety: backgroundSafety
+            backgroundSafety: backgroundSafety,
+            foregroundFallbackUsed: foregroundFallbackUsed,
+            foregroundRestored: foregroundRestored
         )
     }
 
@@ -973,9 +1138,16 @@ struct TypeTextRouteService {
         warnings: [String],
         notes: [String],
         verification: TypeTextVerificationEvidenceDTO?,
-        backgroundSafety: TypeTextBackgroundSafetyDTO? = nil
+        backgroundSafety: TypeTextBackgroundSafetyDTO? = nil,
+        foregroundFallbackUsed: Bool = false,
+        foregroundRestored: Bool = false
     ) -> TypeTextResponse {
-        TypeTextResponse(
+        let strategies = strategiesAttempted.compactMap(AdaptiveTextStrategy.init(rawValue:))
+        let attempt = TypeTextAttemptTelemetry(
+            dispatchSucceeded: dispatchSucceeded,
+            strategiesAttempted: strategies
+        )
+        return TypeTextResponse(
             contractVersion: ContractVersion.current,
             ok: classification == .success,
             classification: classification,
@@ -998,7 +1170,10 @@ struct TypeTextRouteService {
             warnings: warnings,
             notes: notes,
             backgroundSafety: backgroundSafety,
-            verification: verification
+            verification: verification,
+            retrySafe: attempt.retrySafe,
+            foregroundFallbackUsed: foregroundFallbackUsed,
+            foregroundRestored: foregroundRestored
         )
     }
 

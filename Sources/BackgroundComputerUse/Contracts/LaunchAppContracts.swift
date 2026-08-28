@@ -34,4 +34,6 @@ public struct LaunchAppResponse: Encodable, Sendable {
     public let foregroundPIDBefore: pid_t?
     public let foregroundPIDAfter: pid_t?
     public let foregroundPreserved: Bool
+    public var foregroundFallbackUsed = false
+    public var foregroundRestored = false
 }

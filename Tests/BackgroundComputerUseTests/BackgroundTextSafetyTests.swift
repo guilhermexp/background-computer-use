@@ -4,7 +4,141 @@ import Testing
 
 struct BackgroundTextSafetyTests {
     @Test
-    func textSuccessRequiresTheSameForegroundProcessThroughout() {
+    func dispatchedOpaqueUnicodeIsNeverRetrySafe() {
+        let attempt = TypeTextAttemptTelemetry(
+            dispatchSucceeded: true,
+            strategiesAttempted: [.pidUnicode]
+        )
+
+        #expect(attempt.retrySafe == false)
+    }
+
+    @Test
+    func blockedBeforeAnyTransportRemainsRetrySafe() {
+        let attempt = TypeTextAttemptTelemetry(
+            dispatchSucceeded: nil,
+            strategiesAttempted: []
+        )
+
+        #expect(attempt.retrySafe)
+    }
+
+    @Test
+    func opaqueDispatchRemainsAmbiguousAfterForegroundFallback() {
+        let attempt = TypeTextAttemptTelemetry(
+            dispatchSucceeded: true,
+            strategiesAttempted: [.pidUnicode]
+        )
+
+        let decision = TypeTextOutcomePolicy.classifyOpaqueDispatch(
+            attempt: attempt,
+            foregroundPreserved: false
+        )
+
+        #expect(decision.classification == .verifierAmbiguous)
+        #expect(decision.failureDomain?.rawValue == "verification")
+        #expect(decision.summary.contains("reread before continuing"))
+        #expect(decision.summary.contains("do not retry blindly"))
+        #expect(attempt.strategiesAttempted == [.pidUnicode])
+        #expect(attempt.retrySafe == false)
+    }
+
+    @Test
+    func exactSemanticVerificationWinsAfterForegroundFallback() {
+        let decision = TypeTextOutcomePolicy.classifySemanticDispatch(
+            exactValueMatch: true,
+            exactSelectionMatch: true,
+            targetRelocated: false,
+            postStateTokenAvailable: false,
+            foregroundPreserved: false
+        )
+
+        #expect(decision.classification == .success)
+        #expect(decision.failureDomain == nil)
+    }
+
+    @Test
+    func opaqueUnicodeAttemptCannotBecomeRetrySafeWhenPostingFails() {
+        let attempt = TypeTextAttemptTelemetry(
+            dispatchSucceeded: false,
+            strategiesAttempted: [.pidUnicode]
+        )
+
+        #expect(attempt.retrySafe == false)
+    }
+
+    @Test
+    func unicodePreparationRejectsAnUnrelatedThirdAppBeforeWindowServerEffects() {
+        let original = ForegroundApplicationSnapshot(pid: 10, bundleID: "user")
+        let third = ForegroundApplicationSnapshot(pid: 30, bundleID: "third")
+
+        #expect(BackgroundTextPreparation.foregroundAllowsTextDispatch(
+            original: original,
+            current: third,
+            targetPID: 20
+        ) == false)
+    }
+
+    @Test
+    func unicodePreparationAllowsTheOriginalOrExactTargetForeground() {
+        let original = ForegroundApplicationSnapshot(pid: 10, bundleID: "user")
+        let target = ForegroundApplicationSnapshot(pid: 20, bundleID: "target")
+
+        #expect(BackgroundTextPreparation.foregroundAllowsTextDispatch(
+            original: original,
+            current: original,
+            targetPID: target.pid
+        ))
+        #expect(BackgroundTextPreparation.foregroundAllowsTextDispatch(
+            original: original,
+            current: target,
+            targetPID: target.pid
+        ))
+    }
+
+    @Test
+    func textDispatchRejectsMissingForegroundEvidence() {
+        let original = ForegroundApplicationSnapshot(pid: 10, bundleID: "user")
+
+        #expect(BackgroundTextPreparation.foregroundAllowsTextDispatch(
+            original: original,
+            current: nil,
+            targetPID: 20
+        ) == false)
+    }
+
+    @Test
+    func attemptedTransportCannotRestoreBeforeVerification() {
+        let attempt = TypeTextAttemptTelemetry(
+            dispatchSucceeded: false,
+            strategiesAttempted: [.pidUnicode]
+        )
+
+        #expect(TypeTextOutcomePolicy.canRestoreForeground(
+            attempt: attempt,
+            verificationCompleted: false
+        ) == false)
+        #expect(TypeTextOutcomePolicy.canRestoreForeground(
+            attempt: attempt,
+            verificationCompleted: true
+        ))
+    }
+
+    @Test
+    func blockedBeforeTransportMayRestoreWithoutVerification() {
+        let attempt = TypeTextAttemptTelemetry(
+            dispatchSucceeded: false,
+            strategiesAttempted: []
+        )
+
+        #expect(TypeTextOutcomePolicy.canRestoreForeground(
+            attempt: attempt,
+            verificationCompleted: false
+        ))
+    }
+
+    @Test
+    func backgroundSafetyReportsWhetherForegroundWasPreserved() {
         let userApp = ForegroundApplicationSnapshot(pid: 41, bundleID: "com.example.User")
         let targetApp = ForegroundApplicationSnapshot(pid: 52, bundleID: "com.example.Target")
 
@@ -58,6 +192,22 @@ struct BackgroundTextSafetyTests {
         #expect(responseFields.contains { $0.name == "strategiesAttempted" && $0.type == "string[]" })
         #expect(responseFields.contains { $0.name == "fallbackReason" && $0.type == "string | null" })
         #expect(responseFields.contains { $0.name == "performance" && $0.type == "ActionPerformance | null" })
+    }
+
+    @Test
+    func typeTextRouteDocumentsRetryAndForegroundFallback() throws {
+        let route = try #require(
+            RouteRegistry.publicRoutes().first { $0.id == RouteID.typeText.rawValue }
+        )
+        let fields = route.response.fields
+
+        #expect(fields.contains { $0.name == "retrySafe" && $0.type == "boolean" && $0.required })
+        #expect(fields.contains {
+            $0.name == "foregroundFallbackUsed" && $0.type == "boolean" && $0.required
+        })
+        #expect(fields.contains {
+            $0.name == "foregroundRestored" && $0.type == "boolean" && $0.required
+        })
     }
 
     @Test
