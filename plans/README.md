@@ -43,7 +43,7 @@ verifiable against real trees instead of hand-built ones.
 | 002 | CI gate + `script/verify.sh` reproducible evidence; remove wall-clock test asserts | P1 | S/M | — | DONE |
 | 003 | Docs/skill examples validated against `RouteRegistry`; route inventory from registry | P2 | S | — | DONE |
 | 004 | Real-app AX fixture corpus + recorded-tree regression tests + orchestration seam | P1 | L | 002 | DONE |
-| 005 | Live smoke honesty: Electron fixture app, strict oracles, Control ad-hoc lane, HTTP/OCR integration tests | P1 | M/L | 004 | DONE |
+| 005 | Live smoke honesty: Electron fixture app, strict oracles, Control ad-hoc lane, HTTP/OCR integration tests | P1 | M/L | 004 | BLOCKED — harness/gate landed and deterministic tests pass, but `verify.sh --live` reports `passed:false`: `ocr-anchor-click` returns `classification:success` with `clicked:false`, Chrome scroll is `unsupported`, Control launch loses foreground |
 | **Phase 1 — Correctness on real apps** | | | | | |
 | 006 | Settle before fallback in `paste` and `set_value` (double-dispatch class) | P1 | S/M | — | TODO |
 | 007 | `type_text` outcome honesty: foreground restore is part of the verdict; caret tri-state | P1 | M | — | TODO |
