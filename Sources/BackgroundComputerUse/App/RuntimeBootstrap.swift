@@ -39,6 +39,8 @@ final class RuntimeBootstrap: @unchecked Sendable {
             contractVersion: ContractVersion.current,
             baseURL: baseURL.absoluteString,
             startedAt: Time.iso8601String(from: startedAt),
+            build: RuntimeBuildIdentity.current,
+            pid: ProcessInfo.processInfo.processIdentifier,
             auth: auth.dto,
             authToken: auth.token,
             permissions: permissions,

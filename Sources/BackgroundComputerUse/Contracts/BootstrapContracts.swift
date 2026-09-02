@@ -1,9 +1,26 @@
 import Foundation
 
+public struct RuntimeBuildIdentityDTO: Encodable, Sendable {
+    public let identity: String
+    public let commit: String
+    public let dirty: Bool
+    public let sourcesSHA256: String
+
+    public init(identity: String, commit: String, dirty: Bool, sourcesSHA256: String) {
+        self.identity = identity
+        self.commit = commit
+        self.dirty = dirty
+        self.sourcesSHA256 = sourcesSHA256
+    }
+}
+
 public struct HealthResponse: Encodable, Sendable {
     public let ok: Bool
     public let contractVersion: String
     public let timestamp: String
+    public let build: RuntimeBuildIdentityDTO
+    public let pid: Int32
+    public let startedAt: String?
 }
 
 public struct BootstrapRouteDTO: Encodable, Sendable {
@@ -111,6 +128,8 @@ public struct RuntimeManifestDTO: Encodable, Sendable {
     public let contractVersion: String
     public let baseURL: String
     public let startedAt: String
+    public let build: RuntimeBuildIdentityDTO
+    public let pid: Int32
     public let auth: RuntimeAuthDTO
     public let authToken: String?
     public let permissions: RuntimePermissionsDTO

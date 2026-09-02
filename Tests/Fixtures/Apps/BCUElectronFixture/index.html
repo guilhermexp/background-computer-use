@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>BCU Electron Fixture</title>
+<style>body{font:16px -apple-system;padding:20px}textarea,button{font:inherit;padding:8px}.scroll{height:180px;overflow:auto;border:1px solid #777}.row{height:42px;padding:8px}</style></head>
+<body><h1>BCU Electron Fixture</h1><div id="deep-root"></div>
+<section id="controls" role="group" aria-label="fixture controls">
+<label for="composer">Composer</label><textarea id="composer" aria-label="Composer" rows="4"></textarea>
+<output id="value-marker" role="status" aria-live="polite">value:""</output>
+<output id="selection-marker" role="status" aria-live="polite">selection:0:0</output>
+<output id="input-count" role="status" aria-live="polite">input-events:0</output>
+<output id="event-log" role="log" aria-live="polite">events:[]</output>
+<button id="action-button" aria-label="BCU Fixture Button">BCU Fixture Button</button>
+<output id="click-marker" role="status" aria-live="polite">clicked:false</output>
+<div id="scroll-region" class="scroll" role="region" aria-label="BCU Scroll Region"><div id="rows"></div></div>
+<output id="scroll-marker" role="status" aria-live="polite">scroll-top:0</output>
+<output id="generation-marker" role="status" aria-live="polite">generation:1</output>
+</section><script>
+const composer=document.getElementById("composer"), events=[]; let inputCount=0;
+function renderText(){document.getElementById("value-marker").textContent=`value:${JSON.stringify(composer.value)}`;document.getElementById("selection-marker").textContent=`selection:${composer.selectionStart}:${composer.selectionEnd}`;document.getElementById("input-count").textContent=`input-events:${inputCount}`;document.getElementById("event-log").textContent=`events:${JSON.stringify(events)}`;}
+composer.addEventListener("input",e=>{const entry={type:"input",inputType:e.inputType||"unknown",value:composer.value};setTimeout(()=>{inputCount+=1;events.push(entry);renderText();},50);});
+composer.addEventListener("keydown",e=>{events.push({type:"keydown",key:e.key,meta:e.metaKey});setTimeout(renderText,50);});
+document.addEventListener("selectionchange",()=>setTimeout(renderText,50));
+document.getElementById("action-button").addEventListener("click",()=>{const marker=document.getElementById("click-marker");marker.textContent=marker.textContent==="clicked:false"?"clicked:true":"clicked:false";});
+const rows=document.getElementById("rows");for(let i=1;i<=80;i++){const row=document.createElement("div");row.className="row";row.textContent=`Row ${i}`;rows.appendChild(row);}
+const scroll=document.getElementById("scroll-region");scroll.addEventListener("scroll",()=>document.getElementById("scroll-marker").textContent=`scroll-top:${Math.round(scroll.scrollTop)}`);
+const generation=Number(sessionStorage.getItem("generation")||"0")+1;sessionStorage.setItem("generation",String(generation));document.getElementById("generation-marker").textContent=`generation:${generation}`;
+let parent=document.getElementById("deep-root");for(let i=1;i<=72;i++){const group=document.createElement("div");group.setAttribute("role","group");group.setAttribute("aria-label",`depth-${i}`);parent.appendChild(group);parent=group;}parent.appendChild(document.getElementById("controls"));renderText();
+</script></body></html>

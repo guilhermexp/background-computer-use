@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Swift 6.2.3 toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+          swift --version
+          echo "$(swift --version)" | grep -F "Apple Swift version 6.2.3"
+      - id: toolchain
+        name: Fingerprint toolchain
+        run: echo "hash=$(swift --version | shasum -a 256 | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-${{ runner.arch }}-swift-${{ steps.toolchain.outputs.hash }}-${{ hashFiles('Package.resolved') }}
+      - name: Build and test
+        run: ./script/verify.sh
+      - name: Upload verification result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verify-result
+          path: verify-result.json
+          if-no-files-found: error

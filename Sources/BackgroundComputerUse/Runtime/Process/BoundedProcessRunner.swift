@@ -102,7 +102,10 @@ struct BoundedProcessRunner {
         guard actionResults.allSatisfy({ $0 == 0 }) else {
             throw BoundedProcessRunnerError.spawnSetupFailed(actionResults.first(where: { $0 != 0 }) ?? EIO)
         }
-        guard posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP)) == 0,
+        // CLOEXEC_DEFAULT: the child receives only the three descriptors mapped above. Without
+        // it, a child spawned concurrently by another `run` inherits this call's pipe ends and
+        // holds them open, so reads never see EOF and the invocation runs into its deadline.
+        guard posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT)) == 0,
               posix_spawnattr_setpgroup(&attributes, 0) == 0 else {
             throw BoundedProcessRunnerError.spawnSetupFailed(errno)
         }
@@ -216,14 +219,17 @@ struct BoundedProcessRunner {
         return (descriptors[0], descriptors[1])
     }
 
+    // Pipe I/O runs on dedicated threads, not the shared GCD pool: when that pool is saturated
+    // by blocking work elsewhere in the process, the stdin write would not run before the
+    // child's deadline and every invocation would time out with empty output.
     private static func readToEnd(
         descriptor: Int32,
         into box: LockedByteBuffer,
         group: DispatchGroup
     ) {
-        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         group.enter()
-        DispatchQueue.global(qos: .utility).async {
+        Thread.detachNewThread {
+            let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
             while let data = try? handle.read(upToCount: 65_536), data.isEmpty == false {
                 box.append(data, limit: maximumCapturedOutputBytes)
             }
@@ -233,7 +239,7 @@ struct BoundedProcessRunner {
 
     private static func write(_ data: Data, descriptor: Int32, group: DispatchGroup) {
         group.enter()
-        DispatchQueue.global(qos: .utility).async {
+        Thread.detachNewThread {
             defer {
                 Darwin.close(descriptor)
                 group.leave()

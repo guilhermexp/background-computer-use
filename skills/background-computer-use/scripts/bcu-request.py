@@ -42,7 +42,7 @@ def darwin_user_temp_directory() -> str:
 
 
 def configured_timeout() -> float:
-    raw_value = os.environ.get("BCU_TIMEOUT", "30")
+    raw_value = os.environ.get("BCU_TIMEOUT", "60")
     try:
         value = float(raw_value)
     except ValueError as exc:
@@ -54,7 +54,9 @@ def configured_timeout() -> float:
 
 def request_timeout(route_path: str, body: object) -> float:
     timeout = configured_timeout()
-    if route_path == "/v1/wait_for" and isinstance(body, dict):
+    if not isinstance(body, dict):
+        return timeout
+    if route_path == "/v1/wait_for":
         wait_timeout = body.get("timeoutSeconds")
         if (
             isinstance(wait_timeout, (int, float))
@@ -62,30 +64,59 @@ def request_timeout(route_path: str, body: object) -> float:
             and math.isfinite(float(wait_timeout))
         ):
             timeout = max(timeout, float(wait_timeout) + 5.0)
+    if body.get("includeOCR") is True:
+        # Apple Vision's first recognition after boot can take tens of seconds; the runtime
+        # bounds the OCR worker itself, so the client must outlive that deadline.
+        timeout = max(timeout, 120.0)
     return timeout
 
 
-def base_url() -> str:
+def load_manifest() -> tuple[Path, dict]:
+    path = manifest_path()
+    try:
+        data = json.loads(path.read_text())
+    except Exception as exc:
+        raise SystemExit(f"Could not read runtime manifest {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise SystemExit(f"Invalid runtime manifest metadata in {path}: expected a JSON object")
+    return path, data
+
+
+def require_live_manifest_process(path: Path, data: dict) -> None:
+    guidance = (
+        "Run skills/background-computer-use/scripts/ensure-runtime.sh "
+        "to start or refresh the runtime."
+    )
+    pid = data.get("pid")
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        raise SystemExit(f"Invalid runtime manifest PID in {path}. {guidance}")
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError as exc:
+        raise SystemExit(f"Runtime manifest process {pid} is not running: {path}. {guidance}") from exc
+    except PermissionError:
+        pass
+    except OSError as exc:
+        raise SystemExit(f"Could not validate runtime manifest PID {pid} in {path}: {exc}. {guidance}") from exc
+
+
+def base_url(data: Optional[dict]) -> str:
     if os.environ.get("BCU_BASE_URL"):
         return os.environ["BCU_BASE_URL"].rstrip("/")
-    path = manifest_path()
     try:
-        data = json.loads(path.read_text())
+        assert data is not None
         return str(data["baseURL"]).rstrip("/")
     except Exception as exc:
-        raise SystemExit(f"Could not read baseURL from {path}: {exc}") from exc
+        raise SystemExit(f"Could not read baseURL from {manifest_path()}: {exc}") from exc
 
 
-def auth_token() -> Optional[str]:
+def auth_token(data: Optional[dict]) -> Optional[str]:
     if os.environ.get("BCU_AUTH_TOKEN"):
         return os.environ["BCU_AUTH_TOKEN"]
-    path = manifest_path()
-    try:
-        data = json.loads(path.read_text())
-        value = data.get("authToken")
-        return str(value) if value else None
-    except Exception:
+    if data is None:
         return None
+    value = data.get("authToken")
+    return str(value) if value else None
 
 
 def main(argv: list[str]) -> int:
@@ -97,10 +128,15 @@ def main(argv: list[str]) -> int:
     if not route_path.startswith("/"):
         route_path = "/" + route_path
 
+    manifest_data: Optional[dict] = None
+    if not os.environ.get("BCU_BASE_URL"):
+        path, manifest_data = load_manifest()
+        require_live_manifest_process(path, manifest_data)
+
     body = None
     parsed_body: object = None
     headers = {"accept": "application/json"}
-    token = auth_token()
+    token = auth_token(manifest_data)
     if token:
         headers["X-Background-Computer-Use-Token"] = token
     if len(argv) == 4:
@@ -112,7 +148,7 @@ def main(argv: list[str]) -> int:
         headers["content-type"] = "application/json"
 
     request = urllib.request.Request(
-        base_url() + route_path,
+        base_url(manifest_data) + route_path,
         data=body,
         method=method,
         headers=headers,

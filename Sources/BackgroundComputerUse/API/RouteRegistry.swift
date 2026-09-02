@@ -451,6 +451,13 @@ enum RouteRegistry {
         (requestSchema(for: routeID.rawValue)?.fields ?? []).map(\.name)
     }
 
+    /// Required top-level request field names for documentation validation.
+    static func requiredRequestFieldNames(for routeID: RouteID) -> [String] {
+        (requestSchema(for: routeID.rawValue)?.fields ?? [])
+            .filter(\.required)
+            .map(\.name)
+    }
+
     static func bootstrapRouteDescriptors(baseURL: URL) -> [BootstrapRouteDTO] {
         descriptors.map { descriptor in
             BootstrapRouteDTO(
@@ -732,6 +739,9 @@ enum RouteRegistry {
                 field("ok", "boolean", required: true),
                 field("contractVersion", "string", required: true),
                 field("timestamp", "string", required: true),
+                field("build", "RuntimeBuildIdentity", required: true, "Build provenance embedded in the running app."),
+                field("pid", "integer", required: true, "Process identifier for this runtime instance."),
+                field("startedAt", "string | null", required: true, "ISO-8601 process start time when available."),
             ])
         case RouteID.bootstrap.rawValue:
             return json([

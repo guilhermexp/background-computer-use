@@ -1,0 +1,8 @@
+{
+  "name": "bcu-electron-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": { "start": "electron ." },
+  "devDependencies": { "electron": "37.4.0" }
+}

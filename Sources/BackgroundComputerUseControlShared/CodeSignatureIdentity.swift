@@ -25,7 +25,8 @@ public enum CodeSignatureSignerID {
     public static func resolve(
         teamID: String?,
         platformIdentifier: NSNumber?,
-        certificateSHA256: String? = nil
+        certificateSHA256: String? = nil,
+        cdhash: String? = nil
     ) throws -> String {
         if let teamID, teamID.isEmpty == false {
             return teamID
@@ -35,6 +36,12 @@ public enum CodeSignatureSignerID {
         }
         if let certificateSHA256, certificateSHA256.isEmpty == false {
             return "certificate-sha256:\(certificateSHA256.lowercased())"
+        }
+        // Ad-hoc signed code (dev Electron/Tauri builds, `codesign -s -`) has no signer at all.
+        // The cdhash is the only stable identity left; it changes per build, so policy bound to
+        // it never outlives the binary it was granted for.
+        if let cdhash, cdhash.isEmpty == false {
+            return "adhoc-cdhash:\(cdhash.lowercased())"
         }
         throw CodeSignatureIdentityError.missingTeamID
     }
@@ -129,7 +136,10 @@ public struct CodeSignatureIdentity: CodeSignatureIdentityResolving {
         let teamID = try CodeSignatureSignerID.resolve(
             teamID: information[kSecCodeInfoTeamIdentifier as String] as? String,
             platformIdentifier: information[kSecCodeInfoPlatformIdentifier as String] as? NSNumber,
-            certificateSHA256: certificateDigest(from: information)
+            certificateSHA256: certificateDigest(from: information),
+            cdhash: (information[kSecCodeInfoUnique as String] as? Data)?
+                .map { String(format: "%02x", $0) }
+                .joined()
         )
         var requirement: SecRequirement?
         let designatedStatus = SecCodeCopyDesignatedRequirement(staticCode, [], &requirement)

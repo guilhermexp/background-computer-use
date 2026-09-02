@@ -1,9 +1,32 @@
 import ApplicationServices
 import Foundation
 
+struct TextDispatchResult {
+    let succeeded: Bool
+    let primitive: String
+    let strategiesAttempted: [AdaptiveTextStrategy]
+    let fallbackReason: AdaptiveTextDispatchFallbackReason?
+    let foregroundFallbackUsed: Bool
+    let foregroundBeforeDispatch: ForegroundApplicationSnapshot?
+    let preparationMs: Double
+}
+
+struct TypeTextActionRuntime {
+    let readTextState: (AXUIElement) -> TypeTextObservedStateDTO
+    let dispatchText: (() -> TextDispatchResult) -> TextDispatchResult
+
+    static var live: TypeTextActionRuntime {
+        TypeTextActionRuntime(
+            readTextState: AXActionRuntimeSupport.readTextState,
+            dispatchText: { operation in operation() }
+        )
+    }
+}
+
 struct TypeTextRouteService {
     private let executionOptions: ActionExecutionOptions
     private let targetResolver: AXActionTargetResolver
+    private let actionRuntime: TypeTextActionRuntime
     private let backgroundTextPreparation: BackgroundTextPreparation
     private let foregroundApplication: @Sendable () -> ForegroundApplicationSnapshot?
     private let foregroundFallbackCoordinator: ForegroundFallbackCoordinator
@@ -15,14 +38,18 @@ struct TypeTextRouteService {
         executionOptions: ActionExecutionOptions = .visualCursorEnabled,
         backgroundTextPreparation: BackgroundTextPreparation = .live,
         foregroundApplication: @escaping @Sendable () -> ForegroundApplicationSnapshot? = ForegroundApplicationSnapshot.capture,
-        foregroundFallbackCoordinator: ForegroundFallbackCoordinator? = nil
+        foregroundFallbackCoordinator: ForegroundFallbackCoordinator? = nil,
+        targetResolver: AXActionTargetResolver? = nil,
+        actionRuntime: TypeTextActionRuntime = .live
     ) {
         self.executionOptions = executionOptions
         self.backgroundTextPreparation = backgroundTextPreparation
         self.foregroundApplication = foregroundApplication
         self.foregroundFallbackCoordinator = foregroundFallbackCoordinator
             ?? ForegroundFallbackCoordinator(foregroundApplication: foregroundApplication)
-        targetResolver = AXActionTargetResolver(executionOptions: executionOptions)
+        self.targetResolver = targetResolver
+            ?? AXActionTargetResolver(executionOptions: executionOptions)
+        self.actionRuntime = actionRuntime
     }
 
     func typeText(request: TypeTextRequest) throws -> TypeTextResponse {
@@ -191,7 +218,7 @@ struct TypeTextRouteService {
         let resolveMs = elapsedMilliseconds(since: resolveStarted)
 
         let window = capture.envelope.response.window
-        let preparedBeforeState = AXActionRuntimeSupport.readTextState(liveElement.element)
+        let preparedBeforeState = actionRuntime.readTextState(liveElement.element)
         let expected = expectedOutcome(from: preparedBeforeState, text: request.text)
         let foregroundAtDispatchStart = foregroundApplication()
         guard BackgroundTextPreparation.foregroundAllowsTextDispatch(
@@ -228,18 +255,20 @@ struct TypeTextRouteService {
         }
 
         let transportStarted = DispatchTime.now().uptimeNanoseconds
-        let dispatchResult = dispatchText(
-            request.text,
-            baseline: preparedBeforeState,
-            expected: expected,
-            to: liveElement.element,
-            pid: window.pid,
-            windowNumber: window.windowNumber,
-            foregroundBefore: foregroundBefore,
-            foregroundAtDispatchStart: foregroundAtDispatchStart,
-            warnings: &warnings,
-            notes: &notes
-        )
+        let dispatchResult = actionRuntime.dispatchText {
+            self.dispatchText(
+                request.text,
+                baseline: preparedBeforeState,
+                expected: expected,
+                to: liveElement.element,
+                pid: window.pid,
+                windowNumber: window.windowNumber,
+                foregroundBefore: foregroundBefore,
+                foregroundAtDispatchStart: foregroundAtDispatchStart,
+                warnings: &warnings,
+                notes: &notes
+            )
+        }
         let transportMs = elapsedMilliseconds(since: transportStarted)
         if dispatchResult.succeeded == false,
            dispatchResult.strategiesAttempted.isEmpty
@@ -310,7 +339,7 @@ struct TypeTextRouteService {
         let settle = ConditionedActionWait.poll(
             intervalMs: 25,
             deadlineMs: Int((settleDelay * 1000).rounded()),
-            sample: { AXActionRuntimeSupport.readTextState(liveElement.element) },
+            sample: { actionRuntime.readTextState(liveElement.element) },
             isSatisfied: { state in
                 ExactTextSettlePolicy.isSatisfied(
                     expected: expected?.valueString,
@@ -328,6 +357,28 @@ struct TypeTextRouteService {
         ) {
             postCapture = nil
             notes.append("Exact same-element value and selection evidence made a second full projection capture unnecessary.")
+        } else if let expectedValue = expected?.valueString {
+            let projectionSettle = ConditionedActionWait.poll(
+                intervalMs: 25,
+                deadlineMs: Int((settleDelay * 1000).rounded()),
+                sample: { try? targetResolver.reread(after: capture) },
+                isSatisfied: { refreshedCapture in
+                    guard let refreshedCapture,
+                          let refreshedTarget = targetResolver.locateRefreshedTarget(
+                              in: refreshedCapture,
+                              prior: target,
+                              kind: .typeText
+                          ).target
+                    else {
+                        return false
+                    }
+                    return ExactTextSettlePolicy.isSatisfied(
+                        expected: expectedValue,
+                        observed: projectedTextState(from: refreshedTarget)?.valueString
+                    )
+                }
+            )
+            postCapture = projectionSettle.sample
         } else {
             do {
                 postCapture = try targetResolver.reread(after: capture)
@@ -347,7 +398,7 @@ struct TypeTextRouteService {
         if let postCapture, let refreshedTarget,
            let resolved = try? targetResolver.resolveLiveElement(for: refreshedTarget, in: postCapture)
         {
-            afterResolvedLiveState = AXActionRuntimeSupport.readTextState(resolved.element)
+            afterResolvedLiveState = actionRuntime.readTextState(resolved.element)
         }
 
         let afterProjectedState = projectedTextState(from: refreshedTarget)
@@ -442,15 +493,6 @@ struct TypeTextRouteService {
         )
     }
 
-    private struct TextDispatchResult {
-        let succeeded: Bool
-        let primitive: String
-        let strategiesAttempted: [AdaptiveTextStrategy]
-        let fallbackReason: AdaptiveTextDispatchFallbackReason?
-        let foregroundFallbackUsed: Bool
-        let foregroundBeforeDispatch: ForegroundApplicationSnapshot?
-        let preparationMs: Double
-    }
 
     private struct PIDUnicodePreparationResult {
         let permitted: Bool

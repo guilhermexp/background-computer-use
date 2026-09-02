@@ -176,10 +176,22 @@ struct APIDocumentationTests {
 
         let response = Router(auth: RuntimeAuth(token: "secret-token")).response(
             for: request,
-            context: RouterContext(baseURL: nil, startedAt: nil)
+            context: RouterContext(
+                baseURL: nil,
+                startedAt: Date(timeIntervalSince1970: 0)
+            )
         )
+        let json = try #require(JSONSerialization.jsonObject(with: response.body) as? [String: Any])
+        let build = try #require(json["build"] as? [String: Any])
 
         #expect(response.statusCode == 200)
+        #expect(build["identity"] is String)
+        #expect(build["commit"] is String)
+        #expect(build["dirty"] is Bool)
+        #expect(build["sourcesSHA256"] is String)
+        #expect((json["pid"] as? Int).map { $0 > 0 } == true)
+        #expect(json["startedAt"] is String)
+        #expect(json["authToken"] == nil)
     }
 
     private func makeRequest(

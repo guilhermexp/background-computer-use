@@ -36,6 +36,20 @@ struct AdaptiveTextDispatchResult: Equatable, Sendable {
     let finalObservedValue: String?
 }
 
+/// How long to let an accepted AX write land before judging it.
+///
+/// Chromium/Electron acknowledge `AXValue` set synchronously but apply it in the renderer and
+/// refresh the browser-side AX cache afterwards; immediate rereads return the baseline. Escalating
+/// on that stale read caused the text to be inserted twice (AX write + Unicode fallback).
+struct AdaptiveTextSettle: Sendable {
+    let maxReads: Int
+    let wait: @Sendable () -> Void
+
+    static let live = AdaptiveTextSettle(maxReads: 25, wait: { usleep(20_000) })
+    /// One read, no waiting: for tests that model the fallback chain, not the renderer lag.
+    static let immediate = AdaptiveTextSettle(maxReads: 1, wait: {})
+}
+
 enum AdaptiveTextDispatcher {
     static func dispatch(
         baseline: String?,
@@ -43,12 +57,21 @@ enum AdaptiveTextDispatcher {
         fallbackEligible: Bool,
         writeAX: () -> AdaptiveTextAXStatus,
         readValue: () -> String?,
+        settle: AdaptiveTextSettle = .live,
         performTargetBoundFallback: () -> AdaptiveTextTargetBoundAttempt,
         prepareUnicodeFallback: () -> Bool,
         postUnicode: () -> Bool
     ) -> AdaptiveTextDispatchResult {
         let axStatus = writeAX()
-        let immediateObservedValue = readValue()
+        var immediateObservedValue = readValue()
+        if axStatus == .success {
+            var reads = 1
+            while immediateObservedValue == baseline, immediateObservedValue != expected, reads < settle.maxReads {
+                settle.wait()
+                immediateObservedValue = readValue()
+                reads += 1
+            }
+        }
         let decision = AdaptiveTextFallback.decide(
             baseline: baseline,
             expected: expected,

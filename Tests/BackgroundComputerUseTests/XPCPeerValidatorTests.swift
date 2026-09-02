@@ -67,6 +67,14 @@ struct XPCPeerValidatorTests {
                 certificateSHA256: "abc123"
             ) == "certificate-sha256:abc123"
         )
+        #expect(
+            try CodeSignatureSignerID.resolve(
+                teamID: nil,
+                platformIdentifier: nil,
+                certificateSHA256: nil,
+                cdhash: "36E04F99"
+            ) == "adhoc-cdhash:36e04f99"
+        )
         #expect(throws: CodeSignatureIdentityError.missingTeamID) {
             _ = try CodeSignatureSignerID.resolve(teamID: nil, platformIdentifier: nil)
         }

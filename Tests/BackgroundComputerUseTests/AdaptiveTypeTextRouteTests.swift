@@ -19,6 +19,7 @@ struct AdaptiveTypeTextRouteTests {
                 trace.append("reread")
                 return observedValues.removeFirst()
             },
+            settle: .immediate,
             performTargetBoundFallback: {
                 trace.append("target_bound")
                 return .unavailable
@@ -49,6 +50,7 @@ struct AdaptiveTypeTextRouteTests {
             fallbackEligible: true,
             writeAX: { .success },
             readValue: { "hel" },
+            settle: .immediate,
             performTargetBoundFallback: { .unavailable },
             prepareUnicodeFallback: { false },
             postUnicode: {
@@ -72,6 +74,7 @@ struct AdaptiveTypeTextRouteTests {
             fallbackEligible: true,
             writeAX: { .success },
             readValue: { "hello" },
+            settle: .immediate,
             performTargetBoundFallback: { .unavailable },
             prepareUnicodeFallback: {
                 unicodePreparationCalls += 1
@@ -100,6 +103,7 @@ struct AdaptiveTypeTextRouteTests {
             fallbackEligible: true,
             writeAX: { .success },
             readValue: { observedValues.removeFirst() },
+            settle: .immediate,
             performTargetBoundFallback: { .unavailable },
             prepareUnicodeFallback: { true },
             postUnicode: {
@@ -121,6 +125,7 @@ struct AdaptiveTypeTextRouteTests {
             fallbackEligible: true,
             writeAX: { .success },
             readValue: { "" },
+            settle: .immediate,
             performTargetBoundFallback: { .unavailable },
             prepareUnicodeFallback: { true },
             postUnicode: { false }
@@ -140,6 +145,7 @@ struct AdaptiveTypeTextRouteTests {
             fallbackEligible: true,
             writeAX: { .success },
             readValue: { "" },
+            settle: .immediate,
             performTargetBoundFallback: { .unavailable },
             prepareUnicodeFallback: { false },
             postUnicode: {
@@ -165,6 +171,7 @@ struct AdaptiveTypeTextRouteTests {
             fallbackEligible: true,
             writeAX: { .success },
             readValue: { observedValues.removeFirst() },
+            settle: .immediate,
             performTargetBoundFallback: { .attempted(succeeded: true) },
             prepareUnicodeFallback: {
                 unicodePreparationCalls += 1
@@ -193,6 +200,7 @@ struct AdaptiveTypeTextRouteTests {
             fallbackEligible: true,
             writeAX: { .success },
             readValue: { observedValues.removeFirst() },
+            settle: .immediate,
             performTargetBoundFallback: { .attempted(succeeded: true) },
             prepareUnicodeFallback: {
                 unicodePreparationCalls += 1
@@ -215,6 +223,7 @@ struct AdaptiveTypeTextRouteTests {
             fallbackEligible: true,
             writeAX: { .success },
             readValue: { observedValues.removeFirst() },
+            settle: .immediate,
             performTargetBoundFallback: { .attempted(succeeded: false) },
             prepareUnicodeFallback: { true },
             postUnicode: { true }
@@ -235,6 +244,7 @@ struct AdaptiveTypeTextRouteTests {
             fallbackEligible: true,
             writeAX: { .success },
             readValue: { observedValues.removeFirst() },
+            settle: .immediate,
             performTargetBoundFallback: { .unavailable },
             prepareUnicodeFallback: { true },
             postUnicode: {
@@ -258,6 +268,7 @@ struct AdaptiveTypeTextRouteTests {
             fallbackEligible: true,
             writeAX: { .success },
             readValue: { observedValues.removeFirst() },
+            settle: .immediate,
             performTargetBoundFallback: { .unavailable },
             prepareUnicodeFallback: { true },
             postUnicode: {

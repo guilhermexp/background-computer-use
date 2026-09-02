@@ -1,0 +1,4735 @@
+{
+  "generatedAt" : "2026-09-02T18:23:03.785Z",
+  "includeMenuBar" : false,
+  "maxNodes" : 6500,
+  "menuMode" : "none",
+  "notes" : [
+    "<redacted>",
+    "<redacted>"
+  ],
+  "platformProfile" : {
+    "bundleID" : "com.apple.TextEdit",
+    "bundlePath" : "<redacted>",
+    "enablementAttempts" : [
+
+    ],
+    "frameworkHints" : [
+
+    ],
+    "helperAppHints" : [
+
+    ],
+    "isChromiumLike" : false,
+    "isElectronLike" : false,
+    "manualAccessibility" : {
+      "attempted" : false
+    },
+    "notes" : [
+
+    ]
+  },
+  "rawCapture" : {
+    "focusSelection" : {
+      "focusedCanonicalIndex" : 2,
+      "focusedNodeID" : "n:0.0.0",
+      "selectedCanonicalIndices" : [
+
+      ],
+      "selectedNodeIDs" : [
+
+      ],
+      "selectedTextSource" : "attributed-visible-range"
+    },
+    "focusedCanonicalIndex" : 2,
+    "nodes" : [
+      {
+        "availableActions" : [
+          {
+            "category" : "focus",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXRaise"
+          }
+        ],
+        "childCount" : 8,
+        "childIndices" : [
+          1,
+          21,
+          40,
+          41,
+          43,
+          44,
+          45,
+          46
+        ],
+        "childSource" : "children",
+        "depth" : 0,
+        "frameAppKit" : {
+          "height" : 488,
+          "width" : 586,
+          "x" : -2251,
+          "y" : 1089
+        },
+        "identifier" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0",
+          "path" : [
+            0
+          ],
+          "pathString" : "0",
+          "refetch" : {
+            "ancestorFingerprints" : [
+
+            ],
+            "fingerprint" : "5c1afa43eee9e5f581f6b3af",
+            "ordinalWithinParent" : 0,
+            "rolePath" : [
+              "AXWindow"
+            ],
+            "signature" : {
+              "identifier" : "<redacted>",
+              "role" : "AXWindow",
+              "roleDescription" : "<redacted>",
+              "subrole" : "AXStandardWindow",
+              "title" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "identifier" : "<redacted>",
+            "role" : "AXWindow",
+            "subrole" : "AXStandardWindow",
+            "title" : "<redacted>"
+          }
+        },
+        "index" : 0,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : true,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "relationships" : {
+
+        },
+        "role" : "AXWindow",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "Raise"
+        ],
+        "subrole" : "AXStandardWindow",
+        "title" : "<redacted>",
+        "value" : {
+          "truncated" : false
+        }
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "scroll",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXScrollLeftByPage"
+          },
+          {
+            "category" : "scroll",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXScrollRightByPage"
+          },
+          {
+            "category" : "scroll",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXScrollUpByPage"
+          },
+          {
+            "category" : "scroll",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXScrollDownByPage"
+          }
+        ],
+        "childCount" : 4,
+        "childIndices" : [
+          2,
+          3,
+          4,
+          5
+        ],
+        "childSource" : "children",
+        "depth" : 1,
+        "frameAppKit" : {
+          "height" : 420,
+          "width" : 586,
+          "x" : -2251,
+          "y" : 1089
+        },
+        "identifier" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.0",
+          "path" : [
+            0,
+            0
+          ],
+          "pathString" : "0.0",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af"
+            ],
+            "fingerprint" : "aeea479831a48e8484cbf21a",
+            "ordinalWithinParent" : 0,
+            "parentFingerprint" : "5c1afa43eee9e5f581f6b3af",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea"
+            ],
+            "signature" : {
+              "identifier" : "<redacted>",
+              "role" : "AXScrollArea",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "identifier" : "<redacted>",
+            "role" : "AXScrollArea"
+          }
+        },
+        "index" : 1,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : true,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : true,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText",
+          "AXScrollToShowDescendant"
+        ],
+        "parentIndex" : 0,
+        "relationships" : {
+
+        },
+        "role" : "AXScrollArea",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "Scroll Left",
+          "Scroll Right",
+          "Scroll Up",
+          "Scroll Down"
+        ],
+        "value" : {
+          "truncated" : false
+        }
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "menu",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXShowMenu"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 2,
+        "frameAppKit" : {
+          "height" : 382,
+          "width" : 586,
+          "x" : -2251,
+          "y" : 1095
+        },
+        "identifier" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.0.0",
+          "path" : [
+            0,
+            0,
+            0
+          ],
+          "pathString" : "0.0.0",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a"
+            ],
+            "fingerprint" : "0c34ab069e5a34f09838c51c",
+            "ordinalWithinParent" : 0,
+            "parentFingerprint" : "aeea479831a48e8484cbf21a",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXTextArea"
+            ],
+            "signature" : {
+              "identifier" : "<redacted>",
+              "role" : "AXTextArea",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "identifier" : "<redacted>",
+            "role" : "AXTextArea",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 2,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : true,
+          "isTextEntry" : true,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : true,
+          "supportsValueSet" : true
+        },
+        "isFocused" : true,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXAttributedStringForRange",
+          "AXBoundsForRange",
+          "AXLineForIndex",
+          "AXRTFForRange",
+          "AXRangeForIndex",
+          "AXRangeForLine",
+          "AXRangeForPosition",
+          "AXReplaceRangeWithText",
+          "AXSharedTextElementForIndex",
+          "AXStringForRange",
+          "AXStyleRangeForIndex"
+        ],
+        "parentIndex" : 1,
+        "relationships" : {
+
+        },
+        "role" : "AXTextArea",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "textExtraction" : {
+          "attributedText" : "<redacted>",
+          "availableModes" : [
+            "attributed-visible-text"
+          ],
+          "length" : 61,
+          "mode" : "attributed-visible-text",
+          "source" : "attributed-visible-range",
+          "supportedParameterizedAttributes" : [
+            "AXAttributedStringForRange",
+            "AXBoundsForRange",
+            "AXLineForIndex",
+            "AXRTFForRange",
+            "AXRangeForIndex",
+            "AXRangeForLine",
+            "AXRangeForPosition",
+            "AXReplaceRangeWithText",
+            "AXSharedTextElementForIndex",
+            "AXStringForRange",
+            "AXStyleRangeForIndex"
+          ],
+          "supportsTextMarkers" : false,
+          "text" : "<redacted>",
+          "truncated" : false
+        },
+        "value" : {
+          "kind" : "string",
+          "length" : 61,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "string"
+      },
+      {
+        "availableActions" : [
+
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 2,
+        "enabled" : false,
+        "frameAppKit" : {
+          "height" : 19,
+          "width" : 573,
+          "x" : -2244.5,
+          "y" : 1088
+        },
+        "identifier" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.0.1",
+          "path" : [
+            0,
+            0,
+            1
+          ],
+          "pathString" : "0.0.1",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a"
+            ],
+            "fingerprint" : "282a6af56e3b3080af6593d0",
+            "ordinalWithinParent" : 1,
+            "parentFingerprint" : "aeea479831a48e8484cbf21a",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXScrollBar"
+            ],
+            "signature" : {
+              "identifier" : "<redacted>",
+              "role" : "AXScrollBar",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "identifier" : "<redacted>",
+            "role" : "AXScrollBar",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 3,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : true,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 1,
+        "relationships" : {
+
+        },
+        "role" : "AXScrollBar",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 18,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 2,
+        "enabled" : false,
+        "frameAppKit" : {
+          "height" : 382.5,
+          "width" : 19,
+          "x" : -1683,
+          "y" : 1095.5
+        },
+        "identifier" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.0.2",
+          "path" : [
+            0,
+            0,
+            2
+          ],
+          "pathString" : "0.0.2",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a"
+            ],
+            "fingerprint" : "830d9e4b4602bb3a1b40563a",
+            "ordinalWithinParent" : 2,
+            "parentFingerprint" : "aeea479831a48e8484cbf21a",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXScrollBar"
+            ],
+            "signature" : {
+              "identifier" : "<redacted>",
+              "role" : "AXScrollBar",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "identifier" : "<redacted>",
+            "role" : "AXScrollBar",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 4,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : true,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 1,
+        "relationships" : {
+
+        },
+        "role" : "AXScrollBar",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 17,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 15,
+        "childIndices" : [
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20
+        ],
+        "childSource" : "children",
+        "depth" : 2,
+        "frameAppKit" : {
+          "height" : 32,
+          "width" : 586,
+          "x" : -2251,
+          "y" : 1477
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3",
+          "path" : [
+            0,
+            0,
+            3
+          ],
+          "pathString" : "0.0.3",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a"
+            ],
+            "fingerprint" : "671b4a5be411d349baf729c0",
+            "ordinalWithinParent" : 3,
+            "parentFingerprint" : "aeea479831a48e8484cbf21a",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler"
+            ],
+            "signature" : {
+              "role" : "AXRuler",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRuler"
+          }
+        },
+        "index" : 5,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 1,
+        "relationships" : {
+
+        },
+        "role" : "AXRuler",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "value" : {
+          "truncated" : false
+        }
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXDelete"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "frameAppKit" : {
+          "height" : 6,
+          "width" : 9,
+          "x" : -2250,
+          "y" : 1494
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3.0",
+          "path" : [
+            0,
+            0,
+            3,
+            0
+          ],
+          "pathString" : "0.0.3.0",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a",
+              "671b4a5be411d349baf729c0"
+            ],
+            "fingerprint" : "18d013fc1f4728f774e977b3",
+            "ordinalWithinParent" : 0,
+            "parentFingerprint" : "671b4a5be411d349baf729c0",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler",
+              "AXRulerMarker"
+            ],
+            "signature" : {
+              "role" : "AXRulerMarker",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRulerMarker",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 6,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 5,
+        "relationships" : {
+
+        },
+        "role" : "AXRulerMarker",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "delete"
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 1,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXDelete"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "frameAppKit" : {
+          "height" : 6,
+          "width" : 9,
+          "x" : -1674,
+          "y" : 1494
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3.1",
+          "path" : [
+            0,
+            0,
+            3,
+            1
+          ],
+          "pathString" : "0.0.3.1",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a",
+              "671b4a5be411d349baf729c0"
+            ],
+            "fingerprint" : "18d013fc1f4728f774e977b3",
+            "ordinalWithinParent" : 1,
+            "parentFingerprint" : "671b4a5be411d349baf729c0",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler",
+              "AXRulerMarker"
+            ],
+            "signature" : {
+              "role" : "AXRulerMarker",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRulerMarker",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 7,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 5,
+        "relationships" : {
+
+        },
+        "role" : "AXRulerMarker",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "delete"
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 17,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXDelete"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "frameAppKit" : {
+          "height" : 10,
+          "width" : 9,
+          "x" : -2250,
+          "y" : 1494
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3.2",
+          "path" : [
+            0,
+            0,
+            3,
+            2
+          ],
+          "pathString" : "0.0.3.2",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a",
+              "671b4a5be411d349baf729c0"
+            ],
+            "fingerprint" : "18d013fc1f4728f774e977b3",
+            "ordinalWithinParent" : 2,
+            "parentFingerprint" : "671b4a5be411d349baf729c0",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler",
+              "AXRulerMarker"
+            ],
+            "signature" : {
+              "role" : "AXRulerMarker",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRulerMarker",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 8,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 5,
+        "relationships" : {
+
+        },
+        "role" : "AXRulerMarker",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "delete"
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 1,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXDelete"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "frameAppKit" : {
+          "height" : 9,
+          "width" : 6,
+          "x" : -2210,
+          "y" : 1494
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3.3",
+          "path" : [
+            0,
+            0,
+            3,
+            3
+          ],
+          "pathString" : "0.0.3.3",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a",
+              "671b4a5be411d349baf729c0"
+            ],
+            "fingerprint" : "18d013fc1f4728f774e977b3",
+            "ordinalWithinParent" : 3,
+            "parentFingerprint" : "671b4a5be411d349baf729c0",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler",
+              "AXRulerMarker"
+            ],
+            "signature" : {
+              "role" : "AXRulerMarker",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRulerMarker",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 9,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 5,
+        "relationships" : {
+
+        },
+        "role" : "AXRulerMarker",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "delete"
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 16,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXDelete"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "frameAppKit" : {
+          "height" : 9,
+          "width" : 6,
+          "x" : -2174,
+          "y" : 1494
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3.4",
+          "path" : [
+            0,
+            0,
+            3,
+            4
+          ],
+          "pathString" : "0.0.3.4",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a",
+              "671b4a5be411d349baf729c0"
+            ],
+            "fingerprint" : "18d013fc1f4728f774e977b3",
+            "ordinalWithinParent" : 4,
+            "parentFingerprint" : "671b4a5be411d349baf729c0",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler",
+              "AXRulerMarker"
+            ],
+            "signature" : {
+              "role" : "AXRulerMarker",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRulerMarker",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 10,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 5,
+        "relationships" : {
+
+        },
+        "role" : "AXRulerMarker",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "delete"
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 16,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXDelete"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "frameAppKit" : {
+          "height" : 9,
+          "width" : 6,
+          "x" : -2138,
+          "y" : 1494
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3.5",
+          "path" : [
+            0,
+            0,
+            3,
+            5
+          ],
+          "pathString" : "0.0.3.5",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a",
+              "671b4a5be411d349baf729c0"
+            ],
+            "fingerprint" : "18d013fc1f4728f774e977b3",
+            "ordinalWithinParent" : 5,
+            "parentFingerprint" : "671b4a5be411d349baf729c0",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler",
+              "AXRulerMarker"
+            ],
+            "signature" : {
+              "role" : "AXRulerMarker",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRulerMarker",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 11,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 5,
+        "relationships" : {
+
+        },
+        "role" : "AXRulerMarker",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "delete"
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 17,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXDelete"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "frameAppKit" : {
+          "height" : 9,
+          "width" : 6,
+          "x" : -2102,
+          "y" : 1494
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3.6",
+          "path" : [
+            0,
+            0,
+            3,
+            6
+          ],
+          "pathString" : "0.0.3.6",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a",
+              "671b4a5be411d349baf729c0"
+            ],
+            "fingerprint" : "18d013fc1f4728f774e977b3",
+            "ordinalWithinParent" : 6,
+            "parentFingerprint" : "671b4a5be411d349baf729c0",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler",
+              "AXRulerMarker"
+            ],
+            "signature" : {
+              "role" : "AXRulerMarker",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRulerMarker",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 12,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 5,
+        "relationships" : {
+
+        },
+        "role" : "AXRulerMarker",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "delete"
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 17,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXDelete"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "frameAppKit" : {
+          "height" : 9,
+          "width" : 6,
+          "x" : -2066,
+          "y" : 1494
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3.7",
+          "path" : [
+            0,
+            0,
+            3,
+            7
+          ],
+          "pathString" : "0.0.3.7",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a",
+              "671b4a5be411d349baf729c0"
+            ],
+            "fingerprint" : "18d013fc1f4728f774e977b3",
+            "ordinalWithinParent" : 7,
+            "parentFingerprint" : "671b4a5be411d349baf729c0",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler",
+              "AXRulerMarker"
+            ],
+            "signature" : {
+              "role" : "AXRulerMarker",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRulerMarker",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 13,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 5,
+        "relationships" : {
+
+        },
+        "role" : "AXRulerMarker",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "delete"
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 17,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXDelete"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "frameAppKit" : {
+          "height" : 9,
+          "width" : 6,
+          "x" : -2030,
+          "y" : 1494
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3.8",
+          "path" : [
+            0,
+            0,
+            3,
+            8
+          ],
+          "pathString" : "0.0.3.8",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a",
+              "671b4a5be411d349baf729c0"
+            ],
+            "fingerprint" : "18d013fc1f4728f774e977b3",
+            "ordinalWithinParent" : 8,
+            "parentFingerprint" : "671b4a5be411d349baf729c0",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler",
+              "AXRulerMarker"
+            ],
+            "signature" : {
+              "role" : "AXRulerMarker",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRulerMarker",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 14,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 5,
+        "relationships" : {
+
+        },
+        "role" : "AXRulerMarker",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "delete"
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 17,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXDelete"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "frameAppKit" : {
+          "height" : 9,
+          "width" : 6,
+          "x" : -1994,
+          "y" : 1494
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3.9",
+          "path" : [
+            0,
+            0,
+            3,
+            9
+          ],
+          "pathString" : "0.0.3.9",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a",
+              "671b4a5be411d349baf729c0"
+            ],
+            "fingerprint" : "18d013fc1f4728f774e977b3",
+            "ordinalWithinParent" : 9,
+            "parentFingerprint" : "671b4a5be411d349baf729c0",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler",
+              "AXRulerMarker"
+            ],
+            "signature" : {
+              "role" : "AXRulerMarker",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRulerMarker",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 15,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 5,
+        "relationships" : {
+
+        },
+        "role" : "AXRulerMarker",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "delete"
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 17,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXDelete"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "frameAppKit" : {
+          "height" : 9,
+          "width" : 6,
+          "x" : -1958,
+          "y" : 1494
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3.10",
+          "path" : [
+            0,
+            0,
+            3,
+            10
+          ],
+          "pathString" : "0.0.3.10",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a",
+              "671b4a5be411d349baf729c0"
+            ],
+            "fingerprint" : "18d013fc1f4728f774e977b3",
+            "ordinalWithinParent" : 10,
+            "parentFingerprint" : "671b4a5be411d349baf729c0",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler",
+              "AXRulerMarker"
+            ],
+            "signature" : {
+              "role" : "AXRulerMarker",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRulerMarker",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 16,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 5,
+        "relationships" : {
+
+        },
+        "role" : "AXRulerMarker",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "delete"
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 17,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXDelete"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "frameAppKit" : {
+          "height" : 9,
+          "width" : 6,
+          "x" : -1922,
+          "y" : 1494
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3.11",
+          "path" : [
+            0,
+            0,
+            3,
+            11
+          ],
+          "pathString" : "0.0.3.11",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a",
+              "671b4a5be411d349baf729c0"
+            ],
+            "fingerprint" : "18d013fc1f4728f774e977b3",
+            "ordinalWithinParent" : 11,
+            "parentFingerprint" : "671b4a5be411d349baf729c0",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler",
+              "AXRulerMarker"
+            ],
+            "signature" : {
+              "role" : "AXRulerMarker",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRulerMarker",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 17,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 5,
+        "relationships" : {
+
+        },
+        "role" : "AXRulerMarker",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "delete"
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 17,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXDelete"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "frameAppKit" : {
+          "height" : 9,
+          "width" : 6,
+          "x" : -1886,
+          "y" : 1494
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3.12",
+          "path" : [
+            0,
+            0,
+            3,
+            12
+          ],
+          "pathString" : "0.0.3.12",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a",
+              "671b4a5be411d349baf729c0"
+            ],
+            "fingerprint" : "18d013fc1f4728f774e977b3",
+            "ordinalWithinParent" : 12,
+            "parentFingerprint" : "671b4a5be411d349baf729c0",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler",
+              "AXRulerMarker"
+            ],
+            "signature" : {
+              "role" : "AXRulerMarker",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRulerMarker",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 18,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 5,
+        "relationships" : {
+
+        },
+        "role" : "AXRulerMarker",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "delete"
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 16,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXDelete"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "frameAppKit" : {
+          "height" : 9,
+          "width" : 6,
+          "x" : -1850,
+          "y" : 1494
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3.13",
+          "path" : [
+            0,
+            0,
+            3,
+            13
+          ],
+          "pathString" : "0.0.3.13",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a",
+              "671b4a5be411d349baf729c0"
+            ],
+            "fingerprint" : "18d013fc1f4728f774e977b3",
+            "ordinalWithinParent" : 13,
+            "parentFingerprint" : "671b4a5be411d349baf729c0",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler",
+              "AXRulerMarker"
+            ],
+            "signature" : {
+              "role" : "AXRulerMarker",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRulerMarker",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 19,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 5,
+        "relationships" : {
+
+        },
+        "role" : "AXRulerMarker",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "delete"
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 17,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXDelete"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "frameAppKit" : {
+          "height" : 9,
+          "width" : 6,
+          "x" : -1814,
+          "y" : 1494
+        },
+        "identity" : {
+          "nodeID" : "n:0.0.3.14",
+          "path" : [
+            0,
+            0,
+            3,
+            14
+          ],
+          "pathString" : "0.0.3.14",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "aeea479831a48e8484cbf21a",
+              "671b4a5be411d349baf729c0"
+            ],
+            "fingerprint" : "18d013fc1f4728f774e977b3",
+            "ordinalWithinParent" : 14,
+            "parentFingerprint" : "671b4a5be411d349baf729c0",
+            "rolePath" : [
+              "AXWindow",
+              "AXScrollArea",
+              "AXRuler",
+              "AXRulerMarker"
+            ],
+            "signature" : {
+              "role" : "AXRulerMarker",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXRulerMarker",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 20,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 5,
+        "relationships" : {
+
+        },
+        "role" : "AXRulerMarker",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "delete"
+        ],
+        "value" : {
+          "kind" : "float",
+          "length" : 17,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+
+        ],
+        "childCount" : 9,
+        "childIndices" : [
+          22,
+          27,
+          28,
+          29,
+          30,
+          31,
+          33,
+          38,
+          39
+        ],
+        "childSource" : "children",
+        "depth" : 1,
+        "description" : "<redacted>",
+        "frameAppKit" : {
+          "height" : 36,
+          "width" : 586,
+          "x" : -2251,
+          "y" : 1509
+        },
+        "identity" : {
+          "nodeID" : "n:0.1",
+          "path" : [
+            0,
+            1
+          ],
+          "pathString" : "0.1",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af"
+            ],
+            "fingerprint" : "66cc2bf73b2568c4c646c7f4",
+            "ordinalWithinParent" : 1,
+            "parentFingerprint" : "5c1afa43eee9e5f581f6b3af",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "role" : "AXGroup",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXGroup"
+          }
+        },
+        "index" : 21,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 0,
+        "relationships" : {
+
+        },
+        "role" : "AXGroup",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "value" : {
+          "truncated" : false
+        }
+      },
+      {
+        "availableActions" : [
+
+        ],
+        "childCount" : 4,
+        "childIndices" : [
+          23,
+          24,
+          25,
+          26
+        ],
+        "childSource" : "children",
+        "depth" : 2,
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 22,
+          "width" : 87.5,
+          "x" : -2244,
+          "y" : 1516
+        },
+        "identity" : {
+          "nodeID" : "n:0.1.0",
+          "path" : [
+            0,
+            1,
+            0
+          ],
+          "pathString" : "0.1.0",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4"
+            ],
+            "fingerprint" : "f073211338558d197843b12c",
+            "ordinalWithinParent" : 0,
+            "parentFingerprint" : "66cc2bf73b2568c4c646c7f4",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXGroup"
+            ],
+            "signature" : {
+              "role" : "AXGroup",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXGroup"
+          }
+        },
+        "index" : 22,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 21,
+        "relationships" : {
+
+        },
+        "role" : "AXGroup",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "value" : {
+          "truncated" : false
+        }
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 20,
+          "width" : 21.5,
+          "x" : -2243,
+          "y" : 1516
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.1.0.0",
+          "path" : [
+            0,
+            1,
+            0,
+            0
+          ],
+          "pathString" : "0.1.0.0",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4",
+              "f073211338558d197843b12c"
+            ],
+            "fingerprint" : "02cba5ff4ee71d38960e16e3",
+            "ordinalWithinParent" : 0,
+            "parentFingerprint" : "f073211338558d197843b12c",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXGroup",
+              "AXCheckBox"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "help" : "<redacted>",
+              "role" : "AXCheckBox",
+              "roleDescription" : "<redacted>",
+              "subrole" : "AXSegment"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXCheckBox",
+            "subrole" : "AXSegment",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 23,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 22,
+        "relationships" : {
+
+        },
+        "role" : "AXCheckBox",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "subrole" : "AXSegment",
+        "value" : {
+          "kind" : "integer",
+          "length" : 1,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 20,
+          "width" : 22,
+          "x" : -2221.5,
+          "y" : 1516
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.1.0.1",
+          "path" : [
+            0,
+            1,
+            0,
+            1
+          ],
+          "pathString" : "0.1.0.1",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4",
+              "f073211338558d197843b12c"
+            ],
+            "fingerprint" : "84cfc71001a474f2ed6eb43c",
+            "ordinalWithinParent" : 1,
+            "parentFingerprint" : "f073211338558d197843b12c",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXGroup",
+              "AXCheckBox"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "help" : "<redacted>",
+              "role" : "AXCheckBox",
+              "roleDescription" : "<redacted>",
+              "subrole" : "AXSegment"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXCheckBox",
+            "subrole" : "AXSegment",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 24,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 22,
+        "relationships" : {
+
+        },
+        "role" : "AXCheckBox",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "subrole" : "AXSegment",
+        "value" : {
+          "kind" : "integer",
+          "length" : 1,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 20,
+          "width" : 21.5,
+          "x" : -2199.5,
+          "y" : 1516
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.1.0.2",
+          "path" : [
+            0,
+            1,
+            0,
+            2
+          ],
+          "pathString" : "0.1.0.2",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4",
+              "f073211338558d197843b12c"
+            ],
+            "fingerprint" : "f73933166f9d0860846a5212",
+            "ordinalWithinParent" : 2,
+            "parentFingerprint" : "f073211338558d197843b12c",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXGroup",
+              "AXCheckBox"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "help" : "<redacted>",
+              "role" : "AXCheckBox",
+              "roleDescription" : "<redacted>",
+              "subrole" : "AXSegment"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXCheckBox",
+            "subrole" : "AXSegment",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 25,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 22,
+        "relationships" : {
+
+        },
+        "role" : "AXCheckBox",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "subrole" : "AXSegment",
+        "value" : {
+          "kind" : "integer",
+          "length" : 1,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 20,
+          "width" : 22.5,
+          "x" : -2178,
+          "y" : 1516
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.1.0.3",
+          "path" : [
+            0,
+            1,
+            0,
+            3
+          ],
+          "pathString" : "0.1.0.3",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4",
+              "f073211338558d197843b12c"
+            ],
+            "fingerprint" : "2efd3659c0cf0ca19f6f898e",
+            "ordinalWithinParent" : 3,
+            "parentFingerprint" : "f073211338558d197843b12c",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXGroup",
+              "AXCheckBox"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "help" : "<redacted>",
+              "role" : "AXCheckBox",
+              "roleDescription" : "<redacted>",
+              "subrole" : "AXSegment"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXCheckBox",
+            "subrole" : "AXSegment",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 26,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 22,
+        "relationships" : {
+
+        },
+        "role" : "AXCheckBox",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "subrole" : "AXSegment",
+        "value" : {
+          "kind" : "integer",
+          "length" : 1,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          },
+          {
+            "category" : "custom",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "Name:Mostrar painel de cores\nTarget:0x0\nSelector:(null)"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 2,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 22,
+          "width" : 22,
+          "x" : -2153.5,
+          "y" : 1516
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.1.1",
+          "path" : [
+            0,
+            1,
+            1
+          ],
+          "pathString" : "0.1.1",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4"
+            ],
+            "fingerprint" : "d4e8d11f7c1a997370cf9958",
+            "ordinalWithinParent" : 1,
+            "parentFingerprint" : "66cc2bf73b2568c4c646c7f4",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXButton"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "help" : "<redacted>",
+              "role" : "AXButton",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXButton",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 27,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 21,
+        "relationships" : {
+
+        },
+        "role" : "AXButton",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "Mostrar painel de cores"
+        ],
+        "value" : {
+          "kind" : "string",
+          "length" : 6,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "string"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          },
+          {
+            "category" : "custom",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "Name:Mostrar painel de cores\nTarget:0x0\nSelector:(null)"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 2,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 22,
+          "width" : 22,
+          "x" : -2128.5,
+          "y" : 1516
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.1.2",
+          "path" : [
+            0,
+            1,
+            2
+          ],
+          "pathString" : "0.1.2",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4"
+            ],
+            "fingerprint" : "ccd4cfdad3c5effa9e4daf9d",
+            "ordinalWithinParent" : 2,
+            "parentFingerprint" : "66cc2bf73b2568c4c646c7f4",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXButton"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "help" : "<redacted>",
+              "role" : "AXButton",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXButton",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 28,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 21,
+        "relationships" : {
+
+        },
+        "role" : "AXButton",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "Mostrar painel de cores"
+        ],
+        "value" : {
+          "kind" : "string",
+          "length" : 6,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "string"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "menu",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXShowMenu"
+          },
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 2,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 22,
+          "width" : 82,
+          "x" : -2103.5,
+          "y" : 1516
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.1.3",
+          "path" : [
+            0,
+            1,
+            3
+          ],
+          "pathString" : "0.1.3",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4"
+            ],
+            "fingerprint" : "28c76e8c18827e6281e6524a",
+            "ordinalWithinParent" : 3,
+            "parentFingerprint" : "66cc2bf73b2568c4c646c7f4",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXPopUpButton"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "help" : "<redacted>",
+              "role" : "AXPopUpButton",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXPopUpButton",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 29,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : true,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 21,
+        "relationships" : {
+
+        },
+        "role" : "AXPopUpButton",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "value" : {
+          "kind" : "string",
+          "length" : 9,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "string"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "menu",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXShowMenu"
+          },
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 2,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 22,
+          "width" : 82,
+          "x" : -2018.5,
+          "y" : 1516
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.1.4",
+          "path" : [
+            0,
+            1,
+            4
+          ],
+          "pathString" : "0.1.4",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4"
+            ],
+            "fingerprint" : "cc0580c142033617f11c7684",
+            "ordinalWithinParent" : 4,
+            "parentFingerprint" : "66cc2bf73b2568c4c646c7f4",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXPopUpButton"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "help" : "<redacted>",
+              "role" : "AXPopUpButton",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXPopUpButton",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 30,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : true,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 21,
+        "relationships" : {
+
+        },
+        "role" : "AXPopUpButton",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "value" : {
+          "kind" : "string",
+          "length" : 6,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "string"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "menu",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXShowMenu"
+          },
+          {
+            "category" : "lifecycle",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXConfirm"
+          }
+        ],
+        "childCount" : 1,
+        "childIndices" : [
+          32
+        ],
+        "childSource" : "children",
+        "depth" : 2,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "expanded" : false,
+        "frameAppKit" : {
+          "height" : 22,
+          "width" : 52,
+          "x" : -1933.5,
+          "y" : 1516
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.1.5",
+          "path" : [
+            0,
+            1,
+            5
+          ],
+          "pathString" : "0.1.5",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4"
+            ],
+            "fingerprint" : "fc87fc8e6073a04dea1e740d",
+            "ordinalWithinParent" : 5,
+            "parentFingerprint" : "66cc2bf73b2568c4c646c7f4",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXComboBox"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "help" : "<redacted>",
+              "role" : "AXComboBox",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXComboBox",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 31,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : true,
+          "supportsCancel" : false,
+          "supportsConfirm" : true,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : true,
+          "supportsValueSet" : true
+        },
+        "isFocused" : false,
+        "isValueSettable" : true,
+        "parameterizedAttributes" : [
+          "AXAttributedStringForRange",
+          "AXBoundsForRange",
+          "AXLineForIndex",
+          "AXRTFForRange",
+          "AXRangeForIndex",
+          "AXRangeForLine",
+          "AXRangeForPosition",
+          "AXReplaceRangeWithText",
+          "AXStringForRange",
+          "AXStyleRangeForIndex"
+        ],
+        "parentIndex" : 21,
+        "relationships" : {
+
+        },
+        "role" : "AXComboBox",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "Confirm"
+        ],
+        "textExtraction" : {
+          "attributedText" : "<redacted>",
+          "availableModes" : [
+            "attributed-visible-text"
+          ],
+          "length" : 2,
+          "mode" : "attributed-visible-text",
+          "source" : "attributed-visible-range",
+          "supportedParameterizedAttributes" : [
+            "AXAttributedStringForRange",
+            "AXBoundsForRange",
+            "AXLineForIndex",
+            "AXRTFForRange",
+            "AXRangeForIndex",
+            "AXRangeForLine",
+            "AXRangeForPosition",
+            "AXReplaceRangeWithText",
+            "AXStringForRange",
+            "AXStyleRangeForIndex"
+          ],
+          "supportsTextMarkers" : false,
+          "text" : "<redacted>",
+          "truncated" : false
+        },
+        "value" : {
+          "kind" : "string",
+          "length" : 2,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "string"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 13.5,
+          "width" : 19.5,
+          "x" : -1905,
+          "y" : 1520.5
+        },
+        "identity" : {
+          "nodeID" : "n:0.1.5.0",
+          "path" : [
+            0,
+            1,
+            5,
+            0
+          ],
+          "pathString" : "0.1.5.0",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4",
+              "fc87fc8e6073a04dea1e740d"
+            ],
+            "fingerprint" : "e37a1ee7b1933e72ce491ff7",
+            "ordinalWithinParent" : 0,
+            "parentFingerprint" : "fc87fc8e6073a04dea1e740d",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXComboBox",
+              "AXButton"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "role" : "AXButton",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXButton"
+          }
+        },
+        "index" : 32,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 31,
+        "relationships" : {
+
+        },
+        "role" : "AXButton",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "value" : {
+          "truncated" : false
+        }
+      },
+      {
+        "availableActions" : [
+
+        ],
+        "childCount" : 4,
+        "childIndices" : [
+          34,
+          35,
+          36,
+          37
+        ],
+        "childSource" : "children",
+        "depth" : 2,
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 22,
+          "width" : 98,
+          "x" : -1878.5,
+          "y" : 1516
+        },
+        "identity" : {
+          "nodeID" : "n:0.1.6",
+          "path" : [
+            0,
+            1,
+            6
+          ],
+          "pathString" : "0.1.6",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4"
+            ],
+            "fingerprint" : "f073211338558d197843b12c",
+            "ordinalWithinParent" : 6,
+            "parentFingerprint" : "66cc2bf73b2568c4c646c7f4",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXGroup"
+            ],
+            "signature" : {
+              "role" : "AXGroup",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXGroup"
+          }
+        },
+        "index" : 33,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 21,
+        "relationships" : {
+
+        },
+        "role" : "AXGroup",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "value" : {
+          "truncated" : false
+        }
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 20,
+          "width" : 24.5,
+          "x" : -1877.5,
+          "y" : 1516
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.1.6.0",
+          "path" : [
+            0,
+            1,
+            6,
+            0
+          ],
+          "pathString" : "0.1.6.0",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4",
+              "f073211338558d197843b12c"
+            ],
+            "fingerprint" : "7d6251e1446b46bb20551196",
+            "ordinalWithinParent" : 0,
+            "parentFingerprint" : "f073211338558d197843b12c",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXGroup",
+              "AXCheckBox"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "help" : "<redacted>",
+              "role" : "AXCheckBox",
+              "roleDescription" : "<redacted>",
+              "subrole" : "AXSegment"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXCheckBox",
+            "subrole" : "AXSegment",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 34,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 33,
+        "relationships" : {
+
+        },
+        "role" : "AXCheckBox",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "subrole" : "AXSegment",
+        "value" : {
+          "kind" : "integer",
+          "length" : 1,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 20,
+          "width" : 24.5,
+          "x" : -1853,
+          "y" : 1516
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.1.6.1",
+          "path" : [
+            0,
+            1,
+            6,
+            1
+          ],
+          "pathString" : "0.1.6.1",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4",
+              "f073211338558d197843b12c"
+            ],
+            "fingerprint" : "077d1da8055902e4cf2a3c9f",
+            "ordinalWithinParent" : 1,
+            "parentFingerprint" : "f073211338558d197843b12c",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXGroup",
+              "AXCheckBox"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "help" : "<redacted>",
+              "role" : "AXCheckBox",
+              "roleDescription" : "<redacted>",
+              "subrole" : "AXSegment"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXCheckBox",
+            "subrole" : "AXSegment",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 35,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 33,
+        "relationships" : {
+
+        },
+        "role" : "AXCheckBox",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "subrole" : "AXSegment",
+        "value" : {
+          "kind" : "integer",
+          "length" : 1,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 20,
+          "width" : 24.5,
+          "x" : -1828.5,
+          "y" : 1516
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.1.6.2",
+          "path" : [
+            0,
+            1,
+            6,
+            2
+          ],
+          "pathString" : "0.1.6.2",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4",
+              "f073211338558d197843b12c"
+            ],
+            "fingerprint" : "6dd2323e04ef4d3200d68264",
+            "ordinalWithinParent" : 2,
+            "parentFingerprint" : "f073211338558d197843b12c",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXGroup",
+              "AXCheckBox"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "help" : "<redacted>",
+              "role" : "AXCheckBox",
+              "roleDescription" : "<redacted>",
+              "subrole" : "AXSegment"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXCheckBox",
+            "subrole" : "AXSegment",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 36,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 33,
+        "relationships" : {
+
+        },
+        "role" : "AXCheckBox",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "subrole" : "AXSegment",
+        "value" : {
+          "kind" : "integer",
+          "length" : 1,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 3,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 20,
+          "width" : 24.5,
+          "x" : -1804,
+          "y" : 1516
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.1.6.3",
+          "path" : [
+            0,
+            1,
+            6,
+            3
+          ],
+          "pathString" : "0.1.6.3",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4",
+              "f073211338558d197843b12c"
+            ],
+            "fingerprint" : "7bfe316f31585ac3afde8ec6",
+            "ordinalWithinParent" : 3,
+            "parentFingerprint" : "f073211338558d197843b12c",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXGroup",
+              "AXCheckBox"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "help" : "<redacted>",
+              "role" : "AXCheckBox",
+              "roleDescription" : "<redacted>",
+              "subrole" : "AXSegment"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXCheckBox",
+            "subrole" : "AXSegment",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 37,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 33,
+        "relationships" : {
+
+        },
+        "role" : "AXCheckBox",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "subrole" : "AXSegment",
+        "value" : {
+          "kind" : "integer",
+          "length" : 1,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "number"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "menu",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXShowMenu"
+          },
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 2,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 22,
+          "width" : 48,
+          "x" : -1777.5,
+          "y" : 1516
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.1.7",
+          "path" : [
+            0,
+            1,
+            7
+          ],
+          "pathString" : "0.1.7",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4"
+            ],
+            "fingerprint" : "a742e2bc6676d0840e7d2936",
+            "ordinalWithinParent" : 7,
+            "parentFingerprint" : "66cc2bf73b2568c4c646c7f4",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXMenuButton"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "help" : "<redacted>",
+              "role" : "AXMenuButton",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXMenuButton"
+          }
+        },
+        "index" : 38,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : true,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 21,
+        "relationships" : {
+
+        },
+        "role" : "AXMenuButton",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "value" : {
+          "truncated" : false
+        }
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "menu",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXShowMenu"
+          },
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 2,
+        "description" : "<redacted>",
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 22,
+          "width" : 53,
+          "x" : -1726.5,
+          "y" : 1516
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.1.8",
+          "path" : [
+            0,
+            1,
+            8
+          ],
+          "pathString" : "0.1.8",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "66cc2bf73b2568c4c646c7f4"
+            ],
+            "fingerprint" : "37c6c906aa9329436121d2de",
+            "ordinalWithinParent" : 8,
+            "parentFingerprint" : "66cc2bf73b2568c4c646c7f4",
+            "rolePath" : [
+              "AXWindow",
+              "AXGroup",
+              "AXPopUpButton"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "help" : "<redacted>",
+              "role" : "AXPopUpButton",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXPopUpButton",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 39,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : true,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 21,
+        "relationships" : {
+
+        },
+        "role" : "AXPopUpButton",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "value" : {
+          "kind" : "string",
+          "length" : 3,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "string"
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 1,
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 16,
+          "width" : 16,
+          "x" : -2243,
+          "y" : 1553
+        },
+        "identity" : {
+          "nodeID" : "n:0.2",
+          "path" : [
+            0,
+            2
+          ],
+          "pathString" : "0.2",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af"
+            ],
+            "fingerprint" : "1d0dbc26f69b2e0b8652de8d",
+            "ordinalWithinParent" : 2,
+            "parentFingerprint" : "5c1afa43eee9e5f581f6b3af",
+            "rolePath" : [
+              "AXWindow",
+              "AXButton"
+            ],
+            "signature" : {
+              "role" : "AXButton",
+              "roleDescription" : "<redacted>",
+              "subrole" : "AXCloseButton"
+            }
+          },
+          "signature" : {
+            "role" : "AXButton",
+            "subrole" : "AXCloseButton"
+          }
+        },
+        "index" : 40,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 0,
+        "relationships" : {
+
+        },
+        "role" : "AXButton",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "subrole" : "AXCloseButton",
+        "value" : {
+          "truncated" : false
+        }
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          },
+          {
+            "category" : "ax",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : false,
+            "label" : "<redacted>",
+            "rawName" : "AXZoomWindow"
+          },
+          {
+            "category" : "menu",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXShowMenu"
+          }
+        ],
+        "childCount" : 1,
+        "childIndices" : [
+          42
+        ],
+        "childSource" : "children",
+        "depth" : 1,
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 16,
+          "width" : 16,
+          "x" : -2197,
+          "y" : 1553
+        },
+        "help" : "<redacted>",
+        "identity" : {
+          "nodeID" : "n:0.3",
+          "path" : [
+            0,
+            3
+          ],
+          "pathString" : "0.3",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af"
+            ],
+            "fingerprint" : "f694bbdaf460f7dcd4544d07",
+            "ordinalWithinParent" : 3,
+            "parentFingerprint" : "5c1afa43eee9e5f581f6b3af",
+            "rolePath" : [
+              "AXWindow",
+              "AXButton"
+            ],
+            "signature" : {
+              "help" : "<redacted>",
+              "role" : "AXButton",
+              "roleDescription" : "<redacted>",
+              "subrole" : "AXFullScreenButton"
+            }
+          },
+          "signature" : {
+            "role" : "AXButton",
+            "subrole" : "AXFullScreenButton"
+          }
+        },
+        "index" : 41,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : true,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 0,
+        "relationships" : {
+
+        },
+        "role" : "AXButton",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+          "zoom the window"
+        ],
+        "subrole" : "AXFullScreenButton",
+        "value" : {
+          "truncated" : false
+        }
+      },
+      {
+        "availableActions" : [
+
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 2,
+        "frameAppKit" : {
+          "height" : 14,
+          "width" : 14,
+          "x" : -2196,
+          "y" : 1554
+        },
+        "identity" : {
+          "nodeID" : "n:0.3.0",
+          "path" : [
+            0,
+            3,
+            0
+          ],
+          "pathString" : "0.3.0",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af",
+              "f694bbdaf460f7dcd4544d07"
+            ],
+            "fingerprint" : "f073211338558d197843b12c",
+            "ordinalWithinParent" : 0,
+            "parentFingerprint" : "f694bbdaf460f7dcd4544d07",
+            "rolePath" : [
+              "AXWindow",
+              "AXButton",
+              "AXGroup"
+            ],
+            "signature" : {
+              "role" : "AXGroup",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXGroup"
+          }
+        },
+        "index" : 42,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 41,
+        "relationships" : {
+
+        },
+        "role" : "AXGroup",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "value" : {
+          "truncated" : false
+        }
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 1,
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 16,
+          "width" : 16,
+          "x" : -2220,
+          "y" : 1553
+        },
+        "identity" : {
+          "nodeID" : "n:0.4",
+          "path" : [
+            0,
+            4
+          ],
+          "pathString" : "0.4",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af"
+            ],
+            "fingerprint" : "d5003a9eb8e37c1d49be2b53",
+            "ordinalWithinParent" : 4,
+            "parentFingerprint" : "5c1afa43eee9e5f581f6b3af",
+            "rolePath" : [
+              "AXWindow",
+              "AXButton"
+            ],
+            "signature" : {
+              "role" : "AXButton",
+              "roleDescription" : "<redacted>",
+              "subrole" : "AXMinimizeButton"
+            }
+          },
+          "signature" : {
+            "role" : "AXButton",
+            "subrole" : "AXMinimizeButton"
+          }
+        },
+        "index" : 43,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 0,
+        "relationships" : {
+
+        },
+        "role" : "AXButton",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "subrole" : "AXMinimizeButton",
+        "value" : {
+          "truncated" : false
+        }
+      },
+      {
+        "availableActions" : [
+          {
+            "category" : "primary",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXPress"
+          },
+          {
+            "category" : "menu",
+            "description" : "<redacted>",
+            "hiddenFromSecondaryActions" : true,
+            "rawName" : "AXShowMenu"
+          }
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 1,
+        "description" : "<redacted>",
+        "enabled" : false,
+        "frameAppKit" : {
+          "height" : 18,
+          "width" : 12,
+          "x" : -2079,
+          "y" : 1552
+        },
+        "identity" : {
+          "nodeID" : "n:0.5",
+          "path" : [
+            0,
+            5
+          ],
+          "pathString" : "0.5",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af"
+            ],
+            "fingerprint" : "aed6b84911e40cb8b93c1ac4",
+            "ordinalWithinParent" : 5,
+            "parentFingerprint" : "5c1afa43eee9e5f581f6b3af",
+            "rolePath" : [
+              "AXWindow",
+              "AXMenuButton"
+            ],
+            "signature" : {
+              "description" : "<redacted>",
+              "role" : "AXMenuButton",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "description" : "<redacted>",
+            "role" : "AXMenuButton"
+          }
+        },
+        "index" : 44,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : true,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : true,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 0,
+        "relationships" : {
+
+        },
+        "role" : "AXMenuButton",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "value" : {
+          "truncated" : false
+        }
+      },
+      {
+        "availableActions" : [
+
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 1,
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 18,
+          "width" : 18,
+          "x" : -2170,
+          "y" : 1553
+        },
+        "identity" : {
+          "nodeID" : "n:0.6",
+          "path" : [
+            0,
+            6
+          ],
+          "pathString" : "0.6",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af"
+            ],
+            "fingerprint" : "8cbd35433b03bc3b15dfcbf2",
+            "ordinalWithinParent" : 6,
+            "parentFingerprint" : "5c1afa43eee9e5f581f6b3af",
+            "rolePath" : [
+              "AXWindow",
+              "AXImage"
+            ],
+            "signature" : {
+              "role" : "AXImage",
+              "roleDescription" : "<redacted>",
+              "title" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXImage",
+            "title" : "<redacted>"
+          }
+        },
+        "index" : 45,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXReplaceRangeWithText"
+        ],
+        "parentIndex" : 0,
+        "relationships" : {
+
+        },
+        "role" : "AXImage",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "title" : "<redacted>",
+        "value" : {
+          "truncated" : false
+        }
+      },
+      {
+        "availableActions" : [
+
+        ],
+        "childCount" : 0,
+        "childIndices" : [
+
+        ],
+        "childSource" : "children",
+        "depth" : 1,
+        "enabled" : true,
+        "frameAppKit" : {
+          "height" : 16,
+          "width" : 73,
+          "x" : -2151,
+          "y" : 1553
+        },
+        "identity" : {
+          "nodeID" : "n:0.7",
+          "path" : [
+            0,
+            7
+          ],
+          "pathString" : "0.7",
+          "refetch" : {
+            "ancestorFingerprints" : [
+              "5c1afa43eee9e5f581f6b3af"
+            ],
+            "fingerprint" : "1516f4ea514c07cb7f0ac8b5",
+            "ordinalWithinParent" : 7,
+            "parentFingerprint" : "5c1afa43eee9e5f581f6b3af",
+            "rolePath" : [
+              "AXWindow",
+              "AXStaticText"
+            ],
+            "signature" : {
+              "role" : "AXStaticText",
+              "roleDescription" : "<redacted>"
+            }
+          },
+          "signature" : {
+            "role" : "AXStaticText",
+            "valuePreview" : "<redacted>"
+          }
+        },
+        "index" : 46,
+        "interactionTraits" : {
+          "isPotentialScrollBar" : false,
+          "isPotentialScrollContainer" : false,
+          "isTextEntry" : false,
+          "supportsCancel" : false,
+          "supportsConfirm" : false,
+          "supportsDecrement" : false,
+          "supportsIncrement" : false,
+          "supportsOpen" : false,
+          "supportsPick" : false,
+          "supportsPress" : false,
+          "supportsRaise" : false,
+          "supportsScrollToShowDescendant" : false,
+          "supportsScrollToVisible" : false,
+          "supportsShowMenu" : false,
+          "supportsValueSet" : false
+        },
+        "isFocused" : false,
+        "isValueSettable" : false,
+        "parameterizedAttributes" : [
+          "AXAttributedStringForRange",
+          "AXBoundsForRange",
+          "AXLineForIndex",
+          "AXRTFForRange",
+          "AXRangeForIndex",
+          "AXRangeForLine",
+          "AXRangeForPosition",
+          "AXReplaceRangeWithText",
+          "AXStringForRange",
+          "AXStyleRangeForIndex"
+        ],
+        "parentIndex" : 0,
+        "relationships" : {
+
+        },
+        "role" : "AXStaticText",
+        "roleDescription" : "<redacted>",
+        "secondaryActions" : [
+
+        ],
+        "textExtraction" : {
+          "attributedText" : "<redacted>",
+          "availableModes" : [
+            "attributed-visible-text"
+          ],
+          "length" : 10,
+          "mode" : "attributed-visible-text",
+          "source" : "attributed-visible-range",
+          "supportedParameterizedAttributes" : [
+            "AXAttributedStringForRange",
+            "AXBoundsForRange",
+            "AXLineForIndex",
+            "AXRTFForRange",
+            "AXRangeForIndex",
+            "AXRangeForLine",
+            "AXRangeForPosition",
+            "AXReplaceRangeWithText",
+            "AXStringForRange",
+            "AXStyleRangeForIndex"
+          ],
+          "supportsTextMarkers" : false,
+          "text" : "<redacted>",
+          "truncated" : false
+        },
+        "value" : {
+          "kind" : "string",
+          "length" : 10,
+          "preview" : "<redacted>",
+          "truncated" : false
+        },
+        "valueType" : "string"
+      }
+    ],
+    "rootIndices" : [
+      0
+    ],
+    "truncated" : false
+  },
+  "targetPID" : 49863,
+  "window" : {
+    "bundleID" : "com.apple.TextEdit",
+    "frameAppKit" : {
+      "height" : 488,
+      "width" : 586,
+      "x" : -2251,
+      "y" : 1089
+    },
+    "launchDate" : "2026-09-02T18:20:39.411Z",
+    "pid" : 49863,
+    "resolutionStrategy" : "cached_window_id",
+    "title" : "<redacted>",
+    "windowID" : "w_PVE99106",
+    "windowNumber" : 28089
+  }
+}

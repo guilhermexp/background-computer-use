@@ -1,7 +1,18 @@
+import ApplicationServices
 import CryptoKit
 import Foundation
 
 enum InteractionToken {
+    /// AppKit title-bar controls. Their internal AX subtree (the zoom button's inner AXGroup,
+    /// for one) can differ between two consecutive reads of an otherwise idle window. They are
+    /// never the target an OCR anchor points at, so they must not participate in identity.
+    private static let windowChromeSubroles: Set<String> = [
+        String(kAXCloseButtonSubrole),
+        String(kAXMinimizeButtonSubrole),
+        String(kAXZoomButtonSubrole),
+        String(kAXFullScreenButtonSubrole),
+    ]
+
     static func make(
         windowID: String,
         title _: String,
@@ -17,13 +28,33 @@ enum InteractionToken {
             "profile:\(tree.profile ?? "nil")",
             "truncated:\(tree.truncated)",
         ]
-        components.append(contentsOf: tree.nodes.map(nodeComponent))
+        let retained = contentNodes(in: tree.nodes)
+        // Indices are re-based on the retained set so a chrome subtree growing or shrinking
+        // cannot shift the numbering of the content that follows it.
+        var rebased: [Int: Int] = [:]
+        for (position, node) in retained.enumerated() {
+            rebased[node.projectedIndex] = position
+        }
+        components.append(contentsOf: retained.map { nodeComponent($0, rebased: rebased) })
 
         let digest = SHA256.hash(data: Data(components.joined(separator: "|").utf8))
         return "it_" + digest.prefix(12).map { String(format: "%02x", $0) }.joined()
     }
 
-    private static func nodeComponent(_ node: AXPipelineV2SurfaceNodeDTO) -> String {
+    private static func contentNodes(in nodes: [AXPipelineV2SurfaceNodeDTO]) -> [AXPipelineV2SurfaceNodeDTO] {
+        var excluded = Set<Int>()
+        return nodes.filter { node in
+            let isChrome = node.rawSubrole.map(windowChromeSubroles.contains) ?? false
+            let underChrome = node.parentIndex.map(excluded.contains) ?? false
+            if isChrome || underChrome {
+                excluded.insert(node.projectedIndex)
+                return false
+            }
+            return true
+        }
+    }
+
+    private static func nodeComponent(_ node: AXPipelineV2SurfaceNodeDTO, rebased: [Int: Int]) -> String {
         let frame = node.frameAppKit.map {
             [stableNumber($0.x), stableNumber($0.y), stableNumber($0.width), stableNumber($0.height)]
                 .joined(separator: ",")
@@ -34,14 +65,15 @@ enum InteractionToken {
         let suggested = node.suggestedInteractionPointAppKit.map {
             "\(stableNumber($0.x)),\(stableNumber($0.y))"
         } ?? "nil"
+        let index: (Int) -> String = { rebased[$0].map(String.init) ?? "x" }
 
         var components: [String] = []
-        components.append(String(node.projectedIndex))
-        components.append(node.parentIndex.map(String.init) ?? "nil")
+        components.append(index(node.projectedIndex))
+        components.append(node.parentIndex.map(index) ?? "nil")
         components.append(String(node.depth))
-        components.append(String(node.primaryCanonicalIndex))
-        components.append(node.canonicalIndices.map(String.init).joined(separator: ","))
-        components.append(node.childIndices.map(String.init).joined(separator: ","))
+        // Canonical (raw-tree) indices are positional and shift whenever any earlier raw node
+        // appears or disappears; nodeID already carries the structural identity.
+        components.append(node.childIndices.map(index).joined(separator: ","))
         components.append(node.displayRole)
         components.append(node.rawRole ?? "")
         components.append(node.rawSubrole ?? "")

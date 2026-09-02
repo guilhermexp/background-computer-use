@@ -117,25 +117,37 @@ enum AXActionTargetKind {
     case click
 }
 
-struct AXActionTargetResolver {
-    private let executionOptions: ActionExecutionOptions
+protocol AXActionStateProviding {
+    func capture(
+        windowID: String,
+        includeMenuBar: Bool,
+        menuPathComponents: [String],
+        webTraversal: AXWebTraversalMode,
+        maxNodes: Int,
+        imageMode: ImageMode,
+        includeCursorOverlay: Bool?
+    ) throws -> AXActionStateCapture
+
+    func reread(
+        after capture: AXActionStateCapture,
+        imageMode: ImageMode
+    ) throws -> AXActionStateCapture
+}
+
+struct LiveAXActionStateProvider: AXActionStateProviding {
     private let windowResolver = WindowTargetResolver()
     private let statePipeline = StatePipelineExperiment()
-
-    init(executionOptions: ActionExecutionOptions = .visualCursorEnabled) {
-        self.executionOptions = executionOptions
-    }
 
     func capture(
         windowID: String,
         includeMenuBar: Bool,
-        menuPathComponents: [String] = [],
-        webTraversal: AXWebTraversalMode = .visible,
+        menuPathComponents: [String],
+        webTraversal: AXWebTraversalMode,
         maxNodes: Int,
-        imageMode: ImageMode = .omit,
-        includeCursorOverlay: Bool? = nil
+        imageMode: ImageMode,
+        includeCursorOverlay: Bool?
     ) throws -> AXActionStateCapture {
-        let shouldIncludeCursorOverlay = includeCursorOverlay ?? executionOptions.visualCursorEnabled
+        let overlayEnabled = includeCursorOverlay ?? true
         let resolved = try windowResolver.resolve(windowID: windowID)
         RendererAccessibilityBootstrap.prepare(
             application: resolved.appElement,
@@ -151,13 +163,13 @@ struct AXActionTargetResolver {
             webTraversal: webTraversal,
             maxNodes: maxNodes,
             imageMode: imageMode,
-            includeCursorOverlay: shouldIncludeCursorOverlay
+            includeCursorOverlay: overlayEnabled
         )
 
         return AXActionStateCapture(
             windowID: windowID,
             includeMenuBar: includeMenuBar,
-            includeCursorOverlay: shouldIncludeCursorOverlay,
+            includeCursorOverlay: overlayEnabled,
             menuPathComponents: menuPathComponents,
             webTraversal: webTraversal,
             maxNodes: maxNodes,
@@ -172,7 +184,10 @@ struct AXActionTargetResolver {
         )
     }
 
-    func reread(after capture: AXActionStateCapture, imageMode: ImageMode = .omit) throws -> AXActionStateCapture {
+    func reread(
+        after capture: AXActionStateCapture,
+        imageMode: ImageMode
+    ) throws -> AXActionStateCapture {
         try self.capture(
             windowID: capture.windowID,
             includeMenuBar: capture.includeMenuBar,
@@ -182,6 +197,43 @@ struct AXActionTargetResolver {
             imageMode: imageMode,
             includeCursorOverlay: capture.includeCursorOverlay
         )
+    }
+}
+
+struct AXActionTargetResolver {
+    private let executionOptions: ActionExecutionOptions
+    private let stateProvider: any AXActionStateProviding
+
+    init(
+        executionOptions: ActionExecutionOptions = .visualCursorEnabled,
+        stateProvider: any AXActionStateProviding = LiveAXActionStateProvider()
+    ) {
+        self.executionOptions = executionOptions
+        self.stateProvider = stateProvider
+    }
+
+    func capture(
+        windowID: String,
+        includeMenuBar: Bool,
+        menuPathComponents: [String] = [],
+        webTraversal: AXWebTraversalMode = .visible,
+        maxNodes: Int,
+        imageMode: ImageMode = .omit,
+        includeCursorOverlay: Bool? = nil
+    ) throws -> AXActionStateCapture {
+        try stateProvider.capture(
+            windowID: windowID,
+            includeMenuBar: includeMenuBar,
+            menuPathComponents: menuPathComponents,
+            webTraversal: webTraversal,
+            maxNodes: maxNodes,
+            imageMode: imageMode,
+            includeCursorOverlay: includeCursorOverlay ?? executionOptions.visualCursorEnabled
+        )
+    }
+
+    func reread(after capture: AXActionStateCapture, imageMode: ImageMode = .omit) throws -> AXActionStateCapture {
+        try stateProvider.reread(after: capture, imageMode: imageMode)
     }
 
     func stateTokenWarnings(suppliedStateToken: String?, liveStateToken: String) -> [String] {

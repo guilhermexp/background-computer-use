@@ -25,8 +25,12 @@ public final class ApprovalWindowPresenter: @unchecked Sendable {
         alert.messageText = copy.title
         alert.informativeText = copy.message
         alert.addButton(withTitle: copy.allowOnceLabel)
+            .identifier = NSUserInterfaceItemIdentifier("bcu.approval.allow-once")
         alert.addButton(withTitle: copy.alwaysAllowLabel)
+            .identifier = NSUserInterfaceItemIdentifier("bcu.approval.always-allow")
         alert.addButton(withTitle: copy.denyLabel)
+            .identifier = NSUserInterfaceItemIdentifier("bcu.approval.deny")
+        alert.window.identifier = NSUserInterfaceItemIdentifier("bcu.approval.window")
         alert.window.setAccessibilityLabel(copy.accessibilityLabel)
         if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: request.identity.bundleID) {
             alert.icon = NSWorkspace.shared.icon(forFile: appURL.path)
@@ -53,12 +57,11 @@ public final class ApprovalWindowPresenter: @unchecked Sendable {
         default:
             nil
         }
-        let sanitized = ApprovalDecisionPolicy.sanitize(decision, timedOut: timedOut)
         if let foregroundBeforeApproval,
            foregroundBeforeApproval.processIdentifier != ProcessInfo.processInfo.processIdentifier
         {
             _ = foregroundBeforeApproval.activate(options: [])
         }
-        return sanitized
+        return ApprovalDecisionPolicy.sanitize(decision, timedOut: timedOut)
     }
 }

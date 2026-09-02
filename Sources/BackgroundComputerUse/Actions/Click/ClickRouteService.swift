@@ -209,15 +209,22 @@ struct ClickRouteService {
     private let targetResolver: AXActionTargetResolver
     private let ocrRecognitionService: OCRRecognitionService
     private let settleDelay: TimeInterval = 0.35
-    private let coordinateTransport = NativeBackgroundClickTransport()
+    private let coordinateTransport: NativeBackgroundClickTransport
+    private let performAXAction: (String, AXUIElement) -> AXError
 
     init(
         executionOptions: ActionExecutionOptions = .visualCursorEnabled,
-        ocrRecognitionService: OCRRecognitionService = .live
+        ocrRecognitionService: OCRRecognitionService = .live,
+        targetResolver: AXActionTargetResolver? = nil,
+        coordinateTransport: NativeBackgroundClickTransport = NativeBackgroundClickTransport(),
+        performAXAction: @escaping (String, AXUIElement) -> AXError = AXActionRuntimeSupport.performAction
     ) {
         self.executionOptions = executionOptions
         self.ocrRecognitionService = ocrRecognitionService
-        targetResolver = AXActionTargetResolver(executionOptions: executionOptions)
+        self.targetResolver = targetResolver
+            ?? AXActionTargetResolver(executionOptions: executionOptions)
+        self.coordinateTransport = coordinateTransport
+        self.performAXAction = performAXAction
     }
 
     func click(request: ClickRequest) throws -> ClickResponse {
@@ -1988,7 +1995,7 @@ struct ClickRouteService {
             guard let actionName = plan.actionName, let element = plan.dispatchElement else {
                 return (false, "missing_dispatch_target", ["Missing AX action or dispatch element."])
             }
-            let result = AXActionRuntimeSupport.performAction(actionName, on: element)
+            let result = performAXAction(actionName, element)
             return (
                 result == .success,
                 AXActionRuntimeSupport.rawStatusString(for: result),
@@ -2281,7 +2288,7 @@ struct ClickRouteService {
                     role: AXActionRuntimeSupport.stringAttribute(candidate, attribute: kAXRoleAttribute as CFString),
                     label: candidateLabel,
                     frameTopLeft: frame,
-                    status: AXActionRuntimeSupport.performAction(kAXPressAction as String, on: candidate)
+                    status: performAXAction(kAXPressAction as String, candidate)
                 )
             )
         }

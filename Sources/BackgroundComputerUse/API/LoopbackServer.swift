@@ -69,6 +69,13 @@ final class LoopbackServer: @unchecked Sendable {
         }
     }
 
+    func stop() {
+        listener?.cancel()
+        listener = nil
+        baseURL = nil
+        startedAt = nil
+    }
+
     private func handle(connection: NWConnection) {
         let connectionQueue = DispatchQueue(
             label: "BackgroundComputerUse.LoopbackServer.Connection.\(UUID().uuidString)",
@@ -113,7 +120,8 @@ final class LoopbackServer: @unchecked Sendable {
                 send(response, on: connection)
 
             case .incomplete:
-                guard isComplete == false else {
+                let streamEndedWithoutPayload = isComplete && (data?.isEmpty ?? true)
+                guard streamEndedWithoutPayload == false else {
                     sendBadRequest(
                         on: connection,
                         message: "The HTTP request ended before the full payload arrived."
@@ -154,9 +162,7 @@ final class LoopbackServer: @unchecked Sendable {
             statusCode: 400,
             reasonPhrase: "Bad Request"
         )
-        connection.send(content: response.serialized(), completion: .contentProcessed { _ in
-            connection.cancel()
-        })
+        send(response, on: connection)
     }
 
     private func sendPayloadTooLarge(on connection: NWConnection) {
@@ -173,9 +179,7 @@ final class LoopbackServer: @unchecked Sendable {
             statusCode: 413,
             reasonPhrase: "Payload Too Large"
         )
-        connection.send(content: response.serialized(), completion: .contentProcessed { _ in
-            connection.cancel()
-        })
+        send(response, on: connection)
     }
 }
 

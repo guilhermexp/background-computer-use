@@ -63,18 +63,25 @@ public enum BackgroundComputerUseControlBridge {
     static func authorizeWindow(
         windowID: String,
         sessionID: String
-    ) -> AppPolicyDecision? {
+    ) -> WindowAuthorization? {
         guard ControlAuthorizationCenter.shared.isConnected else { return nil }
-        guard let resolved = try? WindowTargetResolver().resolve(windowID: windowID),
-              let identity = try? CodeSignatureIdentity().resolve(pid: resolved.app.processIdentifier)
-        else {
-            return .deny
+        let resolved: ResolvedWindowTarget
+        do {
+            resolved = try WindowTargetResolver().resolve(windowID: windowID)
+        } catch {
+            return .identityUnresolvable(reason: "window could not be resolved to a process (\(error))")
         }
-        return ControlAuthorizationCenter.shared.authorize(
+        let identity: AppIdentity
+        do {
+            identity = try CodeSignatureIdentity().resolve(pid: resolved.app.processIdentifier)
+        } catch {
+            return .identityUnresolvable(reason: "code signature of pid \(resolved.app.processIdentifier) is unusable (\(error))")
+        }
+        return .decision(ControlAuthorizationCenter.shared.authorize(
             identity: identity,
             pid: resolved.app.processIdentifier,
             sessionID: sessionID
-        )
+        ))
     }
 
     static func publishActivity(

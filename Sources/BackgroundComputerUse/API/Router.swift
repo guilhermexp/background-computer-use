@@ -6,11 +6,20 @@ struct RouterContext {
     let startedAt: Date?
 }
 
+/// Outcome of asking BCU Control whether an action may touch one window.
+/// `nil` from the policy closure means Control is not connected and no gate applies.
+enum WindowAuthorization: Sendable, Equatable {
+    case decision(AppPolicyDecision)
+    /// The target process has no code-signing identity Control can bind policy to,
+    /// or the window could not be resolved to a process at all.
+    case identityUnresolvable(reason: String)
+}
+
 struct RouterControlPolicy: Sendable {
     let readAllowed: @Sendable () -> Bool
     let mutationAllowed: @Sendable () -> Bool
     let arbitraryScriptAllowed: @Sendable () -> Bool
-    let authorizeWindow: @Sendable (String, String) -> AppPolicyDecision?
+    let authorizeWindow: @Sendable (String, String) -> WindowAuthorization?
 
     static func live(required: Bool) -> RouterControlPolicy {
         RouterControlPolicy(
@@ -27,7 +36,7 @@ struct RouterControlPolicy: Sendable {
                 BackgroundComputerUseControlBridge.authorizeWindow(
                     windowID: windowID,
                     sessionID: sessionID
-                ) ?? (required ? .deny : nil)
+                ) ?? (required ? .decision(.deny) : nil)
             }
         )
     }
@@ -84,7 +93,10 @@ struct Router {
                 HealthResponse(
                     ok: true,
                     contractVersion: ContractVersion.current,
-                    timestamp: Time.iso8601String(from: Date())
+                    timestamp: Time.iso8601String(from: Date()),
+                    build: RuntimeBuildIdentity.current,
+                    pid: ProcessInfo.processInfo.processIdentifier,
+                    startedAt: context.startedAt.map(Time.iso8601String)
                 )
             )
 
@@ -395,9 +407,10 @@ struct Router {
                let windowID = requestObject["window"] as? String
             {
                 let taskSessionID = request.headerValue(named: "X-Background-Computer-Use-Session") ?? "default"
-                if let decision = controlPolicy.authorizeWindow(windowID, taskSessionID),
-                   decision != .allowOnce, decision != .alwaysAllow
-                {
+                switch controlPolicy.authorizeWindow(windowID, taskSessionID) {
+                case nil, .decision(.allowOnce), .decision(.alwaysAllow):
+                    break
+                case let .decision(decision):
                     let response = runtimeBusyResponse(
                         error: "control_denied",
                         message: decision == .ask
@@ -406,6 +419,23 @@ struct Router {
                         statusCode: 403,
                         reasonPhrase: "Forbidden",
                         requestID: requestID
+                    )
+                    recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
+                    return response
+                case let .identityUnresolvable(reason):
+                    let response = HTTPResponse.json(
+                        ErrorResponse(
+                            error: "control_identity_unresolvable",
+                            message: "BCU Control cannot bind policy to the app owning window '\(windowID)': \(reason).",
+                            requestID: requestID,
+                            recovery: [
+                                "Inspect the target with `codesign -dv --verbose=2 <App.app>`; Control needs a valid signature (Developer ID, Apple platform, any certificate, or ad-hoc with a cdhash).",
+                                "Unsigned binaries cannot be authorized: sign them (even `codesign -s - --force --deep <App.app>`) and relaunch the target.",
+                                "Call POST /v1/list_windows again if the window closed before authorization.",
+                            ]
+                        ),
+                        statusCode: 403,
+                        reasonPhrase: "Forbidden"
                     )
                     recordArtifact(requestID: requestID, routeID: routeID, request: request, response: response)
                     return response

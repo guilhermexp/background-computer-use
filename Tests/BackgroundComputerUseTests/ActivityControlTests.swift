@@ -166,22 +166,14 @@ struct ActivityControlTests {
     }
 
     @Test
-    func synchronousActivityPublicationFitsUpdateBudget() {
-        let history = ActivityHistoryStore(capacity: 10)
-        let started = ContinuousClock.now
-        history.append(ActivityEnvelope(
-            id: "one",
-            sessionID: "session",
-            appBundleID: nil,
-            windowID: nil,
-            action: "click",
-            verdict: "success",
-            summary: "Verified",
-            screenshotPath: nil,
-            timestamp: Date()
-        ))
-        let elapsed = started.duration(to: .now)
-        #expect(elapsed < .milliseconds(150))
+    func appendPublishesSynchronouslyBeforeReturning() {
+        let history = ActivityHistoryStore(capacity: 2)
+
+        history.append(makeActivity(id: "one", windowID: "window-a"))
+        #expect(history.activities().map(\.id) == ["one"])
+
+        history.append(makeActivity(id: "two", windowID: "window-a"))
+        #expect(history.activities().map(\.id) == ["two", "one"])
     }
 
     @Test
@@ -192,7 +184,7 @@ struct ActivityControlTests {
                 readAllowed: { true },
                 mutationAllowed: { false },
                 arbitraryScriptAllowed: { false },
-                authorizeWindow: { _, _ in .deny }
+                authorizeWindow: { _, _ in .decision(.deny) }
             )
         )
         let action = try makeControlRequest(path: "/v1/click")
@@ -210,7 +202,7 @@ struct ActivityControlTests {
                 readAllowed: { false },
                 mutationAllowed: { false },
                 arbitraryScriptAllowed: { false },
-                authorizeWindow: { _, _ in .deny }
+                authorizeWindow: { _, _ in .decision(.deny) }
             )
         )
         let read = try makeControlRequest(path: "/v1/list_apps")
@@ -225,7 +217,7 @@ struct ActivityControlTests {
                 readAllowed: { true },
                 mutationAllowed: { true },
                 arbitraryScriptAllowed: { false },
-                authorizeWindow: { _, _ in .deny }
+                authorizeWindow: { _, _ in .decision(.deny) }
             )
         )
         let request = try makeControlRequest(path: "/v1/run_script")
@@ -236,6 +228,45 @@ struct ActivityControlTests {
         #expect(response.statusCode == 403)
         let payload = try #require(JSONSerialization.jsonObject(with: response.body) as? [String: Any])
         #expect(payload["error"] as? String == "control_policy_required")
+    }
+
+    @Test
+    func deniedWindowIdentityReportsControlDenied() throws {
+        let router = Router(
+            auth: .disabled,
+            controlPolicy: RouterControlPolicy(
+                readAllowed: { true },
+                mutationAllowed: { true },
+                arbitraryScriptAllowed: { false },
+                authorizeWindow: { _, _ in .decision(.deny) }
+            )
+        )
+        let request = try makeControlRequest(path: "/v1/click", body: #"{"window":"w_test"}"#)
+        let response = router.response(for: request, context: RouterContext(baseURL: nil, startedAt: nil))
+        #expect(response.statusCode == 403)
+        let payload = try #require(JSONSerialization.jsonObject(with: response.body) as? [String: Any])
+        #expect(payload["error"] as? String == "control_denied")
+    }
+
+    @Test
+    func unresolvableWindowIdentityReportsDistinctErrorWithReason() throws {
+        let router = Router(
+            auth: .disabled,
+            controlPolicy: RouterControlPolicy(
+                readAllowed: { true },
+                mutationAllowed: { true },
+                arbitraryScriptAllowed: { false },
+                authorizeWindow: { _, _ in .identityUnresolvable(reason: "unsignedCode") }
+            )
+        )
+        let request = try makeControlRequest(path: "/v1/click", body: #"{"window":"w_test"}"#)
+        let response = router.response(for: request, context: RouterContext(baseURL: nil, startedAt: nil))
+        #expect(response.statusCode == 403)
+        let payload = try #require(JSONSerialization.jsonObject(with: response.body) as? [String: Any])
+        #expect(payload["error"] as? String == "control_identity_unresolvable")
+        #expect((payload["message"] as? String)?.contains("unsignedCode") == true)
+        let recovery = try #require(payload["recovery"] as? [String])
+        #expect(recovery.contains { $0.contains("codesign") })
     }
 
     @Test
@@ -267,8 +298,8 @@ private func makeActivity(id: String, windowID: String) -> ActivityEnvelope {
     )
 }
 
-private func makeControlRequest(path: String) throws -> HTTPRequest {
-    let raw = "POST \(path) HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}"
+private func makeControlRequest(path: String, body: String = "{}") throws -> HTTPRequest {
+    let raw = "POST \(path) HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\n\r\n\(body)"
     guard case let .complete(request) = HTTPRequest.parse(Data(raw.utf8)) else {
         throw CocoaError(.fileReadCorruptFile)
     }

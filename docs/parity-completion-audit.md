@@ -2,6 +2,8 @@
 
 Date: 2026-08-28
 
+As of commit: `0110ffb`
+
 This audit treats completion as unproven unless current executable evidence covers the requirement.
 
 | ID | Requirement | Authoritative evidence | Status |
@@ -22,16 +24,13 @@ This audit treats completion as unproven unless current executable evidence cove
 
 ## Current gates
 
-- Python helpers: 19 tests passed after three retry-policy RED cycles, including failed dispatch,
-  missing required fields, and invalid field types.
-- OpenSpec strict: `fix-foreground-fallback-retry-safety` is valid.
-- SwiftFormat 0.62.1: the requested option-first command was rejected by the installed CLI; the
-  equivalent repository-wide lint reports 88/248 pre-existing files, while the 18 changed Swift
-  files pass 0/18.
-- Swift release build: pass.
-- Swift: 382 tests in 58 suites passed with `--no-parallel`. Two subprocess-success tests exceeded
-  their 2-second deadlines only under the fully concurrent runner and passed in isolated reruns;
-  the deterministic serial full suite is authoritative.
+- The audited pre-improvement baseline was 391 passing Swift tests; plan 001 added three deterministic
+  runtime-build-identity tests, bringing the baseline entering this gate to 394.
+- `./script/verify.sh` is authoritative for the unsigned build, complete Swift suite, and the three
+  pure-Python policy modules. Its atomic `verify-result.json` binds every lane to the commit, dirty
+  state, Swift toolchain, and macOS version.
+- Hosted CI invokes that same unsigned gate. Signed smoke, installation, permission-dependent UI
+  checks, and the live evidence below remain manual point-in-time qualification outside CI.
 - Signed universal build: pass; app/Core XPC are `x86_64 + arm64`, deep signature verification and
   designated-requirement checks pass, and the corrected app is installed/running.
 - Signed smoke: final rerun 30 pass, 0 fail, 0 skip. An earlier run had one transient Safari plain

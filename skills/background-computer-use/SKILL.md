@@ -88,7 +88,7 @@ Accessibility tree. `get_window_state` can return local OCR anchors that double 
 
 Loop:
 
-1. `POST /v1/get_window_state` with `{"includeOCR": true, "imageMode": "path"}`.
+1. `POST /v1/get_window_state` with `{"window":"WINDOW_ID", "includeOCR": true, "imageMode": "path"}`.
    Read `ocr.anchors[]`: each anchor carries `text`, model-facing `x`/`y`, `box`, and a ready-made
    `target` of `{"kind":"ocr_anchor","value":"ocr_..."}`. Also keep `interactionToken` from the *same*
    response.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="BackgroundComputerUse"
+APP_NAME="${BCU_APP_NAME:-BackgroundComputerUse}"
 INSTALL_DIR="${BACKGROUND_COMPUTER_USE_INSTALL_DIR:-$HOME/Applications}"
 APP_BUNDLE="${BCU_APP_BUNDLE:-$INSTALL_DIR/$APP_NAME.app}"
 if [ -n "${TMPDIR:-}" ]; then
@@ -56,6 +56,39 @@ print(value)
 PY
 }
 
+read_build_identity() {
+  python3 - "$MANIFEST_PATH" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.exists():
+    sys.exit(1)
+try:
+    value = json.loads(path.read_text()).get("build", {}).get("identity", "")
+except Exception:
+    sys.exit(1)
+if not value:
+    sys.exit(1)
+print(value)
+PY
+}
+
+expected_build_identity() {
+  python3 "$BCU_SOURCE_DIR/script/build_fingerprint.py" \
+    --repo "$BCU_SOURCE_DIR" \
+    --format json \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["identity"])'
+}
+
+source_identity_matches() {
+  local actual expected
+  actual="$(read_build_identity 2>/dev/null || true)"
+  expected="$(expected_build_identity)"
+  [ -n "$actual" ] && [ "$actual" = "$expected" ]
+}
+
 health_ok() {
   local base_url="$1"
   curl -fsS "$base_url/health" >/dev/null 2>&1
@@ -64,14 +97,18 @@ health_ok() {
 current_runtime_ok() {
   local base_url
   base_url="$(read_base_url 2>/dev/null || true)"
-  [ -n "$base_url" ] && health_ok "$base_url"
+  [ -n "$base_url" ] || return 1
+  health_ok "$base_url" || return 1
+  if [ -n "${BCU_SOURCE_DIR:-}" ]; then
+    source_identity_matches
+  fi
 }
 
 wait_for_runtime() {
   local base_url=""
   for _ in $(seq 1 "$WAIT_ATTEMPTS"); do
-    base_url="$(read_base_url 2>/dev/null || true)"
-    if [ -n "$base_url" ] && health_ok "$base_url"; then
+    if current_runtime_ok; then
+      base_url="$(read_base_url)"
       printf '%s\n' "$base_url"
       return 0
     fi
@@ -107,11 +144,12 @@ stop_stale_runtime() {
 
 start_from_source() {
   local source_dir="$1"
-  if [ ! -x "$source_dir/script/start.sh" ]; then
-    echo "BCU_SOURCE_DIR does not contain executable script/start.sh: $source_dir" >&2
+  local selected_script="${BCU_START_SCRIPT:-$source_dir/script/start.sh}"
+  if [ ! -x "$selected_script" ]; then
+    echo "BCU source start script is not executable: $selected_script" >&2
     return 1
   fi
-  "$source_dir/script/start.sh"
+  "$selected_script"
 }
 
 launch_installed_app() {
@@ -127,6 +165,12 @@ if current_runtime_ok; then
   BASE_URL="$(read_base_url)"
 else
   if [ -n "${BCU_SOURCE_DIR:-}" ]; then
+    ACTUAL_BUILD_IDENTITY="$(read_build_identity 2>/dev/null || true)"
+    EXPECTED_BUILD_IDENTITY="$(expected_build_identity)"
+    printf 'Refreshing source runtime: manifest identity=%s expected identity=%s\n' \
+      "${ACTUAL_BUILD_IDENTITY:-missing}" "$EXPECTED_BUILD_IDENTITY" >&2
+    stop_stale_runtime
+    rm -f "$MANIFEST_PATH"
     start_from_source "$BCU_SOURCE_DIR"
   elif launch_installed_app; then
     :

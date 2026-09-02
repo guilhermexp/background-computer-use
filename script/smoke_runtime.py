@@ -3,6 +3,7 @@ import argparse
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -21,6 +22,8 @@ DEFAULT_TIMEOUT = 30
 COLD_OCR_TIMEOUT = 90
 # A later worker must stay under this budget; anything slower is a real regression, not a cold start.
 WARM_OCR_BUDGET_SECONDS = 5.0
+# Every window read and web action shares one node ceiling; the fixture tree fits well inside it.
+MAX_NODES = 6500
 
 
 def list_windows_request(pid: int) -> dict:
@@ -54,11 +57,7 @@ def type_text_retry_contract_is_valid(payload: dict) -> bool:
     dispatch_succeeded = payload.get("dispatchSucceeded")
     if not isinstance(retry_safe, bool):
         return False
-    if (
-        "dispatchSucceeded" in payload
-        and dispatch_succeeded is not None
-        and not isinstance(dispatch_succeeded, bool)
-    ):
+    if dispatch_succeeded is not None and not isinstance(dispatch_succeeded, bool):
         return False
     if not isinstance(attempted, list) or not all(
         isinstance(strategy, str) and bool(strategy.strip()) for strategy in attempted
@@ -81,20 +80,44 @@ def controlled_type_fallback_is_valid(payload: dict) -> bool:
     return payload.get("classification") == "verifier_ambiguous"
 
 
-def attempted_ax_escalation(click: dict) -> bool:
-    if str(click.get("finalRoute")) == "coordinate_then_ax_hit_test" or str(
-        click.get("fallbackReason")
-    ) == "coordinate_unverified_using_ax_hit_test":
-        return True
-    if any(
-        isinstance(transport, dict) and transport.get("route") == "ax_perform_action"
-        for transport in click.get("transports", [])
-    ):
-        return True
-    return any(
-        isinstance(step, dict) and step.get("route") == "coordinate_then_ax_hit_test"
-        for step in click.get("routeSteps", [])
+def _numeric_marker(text: str, label: str) -> Optional[int]:
+    match = re.search(rf"{re.escape(label)}\s*(\d+)", text)
+    return int(match.group(1)) if match else None
+
+
+def _marker_increased(before: str, after: str, label: str) -> bool:
+    """A marker proves an effect only when both reads parse and the value grew."""
+    before_value = _numeric_marker(before, label)
+    after_value = _numeric_marker(after, label)
+    return before_value is not None and after_value is not None and after_value > before_value
+
+
+def scroll_marker_increased(before: str, after: str) -> bool:
+    return _marker_increased(before, after, "scroll-top:")
+
+
+def generation_incremented(before: str, after: str) -> bool:
+    return _marker_increased(before, after, "generation:")
+
+
+def strict_click_oracle_is_valid(payload: dict, before_marker: str, after_marker: str) -> bool:
+    return (
+        payload.get("classification") == "success"
+        and payload.get("ok") is True
+        and _marker_increased(before_marker, after_marker, "Button clicked ")
     )
+
+
+def lane_status_for_effect(name: str, payload: dict, oracle_observed: bool) -> str:
+    classification = payload.get("classification")
+    if classification == "success":
+        return "pass" if oracle_observed else "fail"
+    if (
+        name.endswith("-known-limitation")
+        and classification in {"effect_not_verified", "verifier_ambiguous"}
+    ):
+        return "known_limitation"
+    return "fail"
 
 
 class BCUClient:
@@ -167,6 +190,11 @@ class Smoke:
 
     def skip(self, name: str, detail: str) -> None:
         self.results.append({"name": name, "status": "skip", "detail": detail})
+
+    def known_limitation(self, name: str, detail: str) -> None:
+        if not name.endswith("-known-limitation"):
+            raise ValueError("known-limitation lane names must end in '-known-limitation'")
+        self.results.append({"name": name, "status": "known_limitation", "detail": detail})
 
     def call(
         self,
@@ -256,7 +284,7 @@ class Smoke:
             role_contains="text field",
         )
         button_target = self.find_target(state, ["BCU Smoke Button", "Smoke Button"], role_contains="button")
-        scroll_target = self.find_target(state, ["Row 1", "Row 2", "BCU Smoke Fixture"])
+        scroll_target = self.find_target(state, ["Row 40"], role_contains="static text")
 
         if input_target is not None and button_target is not None:
             self.pass_("chrome-find-input", json.dumps(input_target))
@@ -270,7 +298,7 @@ class Smoke:
                     "stateToken": state["stateToken"],
                     "target": input_target,
                     "value": "bcu-smoke-value",
-                    "maxNodes": 6500,
+                    "maxNodes": MAX_NODES,
                 },
             )
             if status == 200 and set_value.get("ok") is True:
@@ -279,25 +307,26 @@ class Smoke:
                 self.fail("chrome-set-value", f"HTTP {status}: {set_value}")
 
             state = self.get_state(window_id, "chrome-post-set-state", include_ocr=True) or state
+            click_marker_before = self.rendered_text(state)
             status, click = self.call(
                 "chrome-click",
                 "POST",
                 "/v1/click",
-                {
-                    "window": window_id,
-                    "stateToken": state["stateToken"],
-                    "target": button_target,
-                    "clickCount": 1,
-                    "imageMode": "path",
-                    "maxNodes": 6500,
-                },
+                self.click_body(window_id, state["stateToken"], button_target),
             )
             if status == 200:
                 self.check_verification_honesty("chrome-ax-click-honesty", click)
-            if status == 200 and click.get("ok") is True:
-                self.pass_("chrome-click", str(click.get("classification")))
+            post_click_state = self.await_page_oracle(
+                window_id,
+                status,
+                lambda after: strict_click_oracle_is_valid(click, click_marker_before, after),
+                include_ocr=True,
+            )
+            if post_click_state is not None:
+                self.pass_("chrome-click", "classification=success and Button clicked N increased")
+                state = post_click_state
             elif status is not None:
-                self.fail("chrome-click", f"HTTP {status}: {click}")
+                self.fail("chrome-click", f"strict click oracle failed; HTTP {status}: {click}")
         else:
             self.fail(
                 "chrome-find-ax-targets",
@@ -306,11 +335,12 @@ class Smoke:
 
         state = self.get_state(window_id, "chrome-post-click-state", include_ocr=True) or state
         scroll_target = (
-            self.find_target(state, ["Row 1", "Row 2", "BCU Smoke Fixture"])
+            self.find_target(state, ["Row 40"], role_contains="static text")
             or scroll_target
             or {"kind": "display_index", "value": 0}
         )
         self.pass_("chrome-find-scroll-target", json.dumps(scroll_target))
+        scroll_marker_before = self.rendered_text(state)
         status, scroll = self.call(
             "chrome-scroll-fractional",
             "POST",
@@ -321,13 +351,21 @@ class Smoke:
                 "target": scroll_target,
                 "direction": "down",
                 "pages": 0.25,
-                "maxNodes": 6500,
+                "maxNodes": MAX_NODES,
             },
         )
-        if status == 200 and scroll.get("classification") in {"success", "boundary", "verifier_ambiguous"}:
+        post_scroll_state = self.await_page_oracle(
+            window_id,
+            status,
+            lambda after: scroll_marker_increased(scroll_marker_before, after),
+        )
+        if (
+            post_scroll_state is not None
+            and scroll.get("classification") in {"success", "boundary"}
+        ):
             self.pass_("chrome-scroll-fractional", str(scroll.get("classification")))
         elif status is not None:
-            self.fail("chrome-scroll-fractional", f"HTTP {status}: {scroll}")
+            self.fail("chrome-scroll-fractional", f"strict scroll oracle failed; HTTP {status}: {scroll}")
 
     def check_warm_ocr_budget(self, window_id: str) -> None:
         """A warm OCR read must land inside the declared budget and attribute its own time."""
@@ -337,7 +375,7 @@ class Smoke:
             name,
             "POST",
             "/v1/get_window_state",
-            {"window": window_id, "imageMode": "path", "includeOCR": True, "maxNodes": 6500},
+            self.state_body(window_id, include_ocr=True),
             timeout=COLD_OCR_TIMEOUT,
         )
         if status is None:
@@ -357,17 +395,30 @@ class Smoke:
         self.pass_(name, detail)
 
     def reload_fixture(self, window_id: str) -> None:
-        """Reload the fixture document so the next lane starts from a pristine page."""
-        status, _ = self.call(
-            "chrome-fixture-reload",
+        """Reload and require both a verified key result and a generation increment."""
+        name = "chrome-reload-known-limitation"
+        before_state = self.read_state_without_result(window_id)
+        before_text = self.rendered_text(before_state or {})
+        status, response = self.call(
+            name,
             "POST",
             "/v1/press_key",
             {"window": window_id, "key": "command+r", "maxNodes": 200},
         )
-        if status != 200:
-            self.skip("chrome-fixture-reload", f"could not reload the fixture document (HTTP {status})")
-            return
-        time.sleep(2.0)
+        reloaded_state = self.await_page_oracle(
+            window_id,
+            status,
+            lambda after: generation_incremented(before_text, after),
+        )
+        oracle_observed = reloaded_state is not None
+        lane_status = lane_status_for_effect(name, response, oracle_observed)
+        detail = f"HTTP {status}; classification={response.get('classification')}; generationChanged={oracle_observed}"
+        if status != 200 or lane_status == "fail":
+            self.fail(name, detail)
+        elif lane_status == "known_limitation":
+            self.known_limitation(name, detail)
+        else:
+            self.pass_(name, detail)
 
     def scroll_fixture_to_top(self, window_id: str, state: dict) -> Optional[dict]:
         """Scroll the fixture document back to the top and return the fresh state."""
@@ -381,7 +432,7 @@ class Smoke:
                 "target": {"kind": "display_index", "value": 0},
                 "direction": "up",
                 "pages": 6,
-                "maxNodes": 6500,
+                "maxNodes": MAX_NODES,
             },
         )
         if status != 200:
@@ -415,15 +466,12 @@ class Smoke:
             "chrome-ocr-stale-guard",
             "POST",
             "/v1/click",
-            {
-                "window": window_id,
-                "stateToken": state["stateToken"],
-                "interactionToken": "it_STALE",
-                "target": button_anchor["target"],
-                "clickCount": 1,
-                "imageMode": "path",
-                "maxNodes": 6500,
-            },
+            self.click_body(
+                window_id,
+                state["stateToken"],
+                button_anchor["target"],
+                interaction_token="it_STALE",
+            ),
         )
         if status is None:
             return
@@ -441,20 +489,17 @@ class Smoke:
             return
         self.pass_("chrome-refresh-ocr-anchors")
 
-        clicked_before = self.find_ocr_anchor(state, ["Button clicked"]) is not None
+        clicked_before = self.rendered_text(state)
         status, click = self.call(
             "chrome-ocr-click",
             "POST",
             "/v1/click",
-            {
-                "window": window_id,
-                "stateToken": state["stateToken"],
-                "interactionToken": state["interactionToken"],
-                "target": button_anchor["target"],
-                "clickCount": 1,
-                "imageMode": "path",
-                "maxNodes": 6500,
-            },
+            self.click_body(
+                window_id,
+                state["stateToken"],
+                button_anchor["target"],
+                interaction_token=state["interactionToken"],
+            ),
         )
         if status is None:
             return
@@ -478,15 +523,12 @@ class Smoke:
                 "chrome-ocr-click-after-refresh",
                 "POST",
                 "/v1/click",
-                {
-                    "window": window_id,
-                    "stateToken": state["stateToken"],
-                    "interactionToken": state["interactionToken"],
-                    "target": button_anchor["target"],
-                    "clickCount": 1,
-                    "imageMode": "path",
-                    "maxNodes": 6500,
-                },
+                self.click_body(
+                    window_id,
+                    state["stateToken"],
+                    button_anchor["target"],
+                    interaction_token=state["interactionToken"],
+                ),
             )
             if status != 200 or click.get("fallbackReason") == "stale_coordinate_guard":
                 self.fail("chrome-ocr-click-after-refresh", f"HTTP {status}: {click}")
@@ -509,39 +551,19 @@ class Smoke:
 
         self.check_verification_honesty("chrome-ocr-click-honesty", click)
 
-        state = self.get_state(window_id, "chrome-post-ocr-click-state", include_ocr=True)
-        # Exact match for the oracle: "Button clicked" and "Button not clicked" differ by
-        # 4 edit operations, and the locator's fuzzy budget must not decide whether the
-        # click worked.
-        page_changed = (
-            state is not None
-            and clicked_before is False
-            and self.find_ocr_anchor(state, ["Button clicked"], budget=0) is not None
+        post_click_state = self.await_page_oracle(
+            window_id,
+            status,
+            lambda after: strict_click_oracle_is_valid(click, clicked_before, after),
+            include_ocr=True,
         )
-        escalated = attempted_ax_escalation(click)
-        if page_changed:
+        if post_click_state is not None:
             self.pass_("chrome-ocr-click", evidence)
-        elif escalated:
-            # The accessibility escalation ran and still proved nothing: that is a
-            # regression of the lane under test, not a documented limitation.
-            self.fail(
-                "chrome-ocr-click",
-                f"the accessibility escalation ran and the page still did not change ({evidence})",
-            )
-        elif classification == "success":
-            self.fail(
-                "chrome-ocr-click",
-                f"click reported success but the page never showed 'Button clicked' ({evidence})",
-            )
         else:
-            # Residual limitation, declared: Chromium discards the pid-directed synthetic
-            # mouse events, and no accessibility element under the OCR point was eligible
-            # to be pressed. Surfaces with no AX node (canvas, custom renderers) have no
-            # background pointer path at all.
             self.fail(
                 "chrome-ocr-click",
-                "the OCR lane proved no effect and no accessibility element under the point "
-                f"was pressed; on this fixture that is a regression ({evidence})",
+                "OCR click requires classification=success and an exact Button clicked N increment "
+                f"({evidence})",
             )
 
     def check_verification_honesty(self, name: str, click: dict) -> None:
@@ -582,7 +604,7 @@ class Smoke:
         can already be superseded by the time a click reaches the runtime. Re-reading is the documented
         recovery for a stale token; this is not a blind retry of a failed action.
         """
-        body = {"window": window_id, "imageMode": "path", "includeOCR": True, "maxNodes": 6500}
+        body = self.state_body(window_id, include_ocr=True)
         previous: Optional[dict] = None
         stable_count = 0
         for attempt in range(max(attempts, 1)):
@@ -671,6 +693,7 @@ class Smoke:
     body {{ font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 24px; }}
     input, button {{ font-size: 18px; margin: 8px 0; padding: 8px; }}
     .row {{ padding: 18px 10px; border-bottom: 1px solid #ddd; width: 420px; }}
+    .scroll-region {{ height: 180px; overflow: auto; border: 1px solid #777; }}
   </style>
 </head>
 <body>
@@ -680,7 +703,6 @@ class Smoke:
     id="bcu-smoke-input"
     aria-label="bcu-smoke-input"
     placeholder="Smoke input"
-    value=""
     oninput="document.getElementById('input-status').textContent='Input: '+this.value">
   <p id="input-status">Input: empty</p>
   <label for="bcu-ignored-ax-input">Ignored AX input</label>
@@ -694,15 +716,26 @@ class Smoke:
   <input
     id="bcu-paste-input"
     aria-label="bcu-paste-input"
-    placeholder="Paste input"
-    value="">
+    placeholder="Paste input">
   <button
     id="bcu-smoke-button"
-    onclick="this.dataset.count=String(Number(this.dataset.count||0)+1);document.getElementById('click-status').textContent='Button clicked '+this.dataset.count">
+    data-count="0"
+    onclick="this.dataset.count=String(Number(this.dataset.count)+1);document.getElementById('click-status').textContent='Button clicked '+this.dataset.count">
     BCU Smoke Button
   </button>
-  <p id="click-status">Button not clicked</p>
-  <main>{rows}</main>
+  <p id="click-status">Button clicked 0</p>
+  <div id="scroll-region" class="scroll-region" role="region" aria-label="BCU Scroll Region">
+    <main>{rows}</main>
+  </div>
+  <p id="scroll-marker">scroll-top:0</p>
+  <p id="generation-marker">generation:1</p>
+  <script>
+    const scroll=document.getElementById('scroll-region');
+    scroll.addEventListener('scroll',()=>document.getElementById('scroll-marker').textContent='scroll-top:'+Math.round(scroll.scrollTop));
+    const generation=Number(sessionStorage.getItem('generation')||'0')+1;
+    sessionStorage.setItem('generation',String(generation));
+    document.getElementById('generation-marker').textContent='generation:'+generation;
+  </script>
 </body>
 </html>
 """,
@@ -1049,6 +1082,36 @@ class Smoke:
             except FileNotFoundError:
                 pass
 
+    @staticmethod
+    def state_body(window_id: str, include_ocr: bool = False) -> dict:
+        body = {"window": window_id, "imageMode": "path", "maxNodes": MAX_NODES}
+        if include_ocr:
+            body["includeOCR"] = True
+        return body
+
+    @staticmethod
+    def click_body(
+        window_id: str,
+        state_token: str,
+        target: dict,
+        interaction_token: Optional[str] = None,
+    ) -> dict:
+        body = {
+            "window": window_id,
+            "stateToken": state_token,
+            "target": target,
+            "clickCount": 1,
+            "imageMode": "path",
+            "maxNodes": MAX_NODES,
+        }
+        if interaction_token is not None:
+            body["interactionToken"] = interaction_token
+        return body
+
+    @staticmethod
+    def rendered_text(state: dict) -> str:
+        return str(state.get("tree", {}).get("renderedText") or "")
+
     def get_state(
         self,
         window_id: str,
@@ -1056,16 +1119,53 @@ class Smoke:
         include_ocr: bool = False,
         timeout: float = DEFAULT_TIMEOUT,
     ) -> Optional[dict]:
-        body = {"window": window_id, "imageMode": "path", "maxNodes": 6500}
-        if include_ocr:
-            body["includeOCR"] = True
-        status, payload = self.call(name, "POST", "/v1/get_window_state", body, timeout=timeout)
+        status, payload = self.call(
+            name,
+            "POST",
+            "/v1/get_window_state",
+            self.state_body(window_id, include_ocr),
+            timeout=timeout,
+        )
         if status is None:
             return None
         if status == 200 and "stateToken" in payload:
             self.pass_(name)
             return payload
         self.fail(name, f"HTTP {status}: {payload}")
+        return None
+
+    def read_state_without_result(self, window_id: str, include_ocr: bool = False) -> Optional[dict]:
+        try:
+            status, payload = self.client.request(
+                "POST",
+                "/v1/get_window_state",
+                body=self.state_body(window_id, include_ocr),
+                timeout=COLD_OCR_TIMEOUT if include_ocr else DEFAULT_TIMEOUT,
+            )
+        except Exception:
+            return None
+        return payload if status == 200 and "stateToken" in payload else None
+
+    def await_page_oracle(
+        self,
+        window_id: str,
+        status: Optional[int],
+        oracle,
+        include_ocr: bool = False,
+        attempts: int = 30,
+    ) -> Optional[dict]:
+        """Poll rendered text until the page-side oracle holds.
+
+        Returns the state that satisfied the oracle, so no caller re-evaluates it; None
+        means the action request itself failed or the effect never appeared in the page.
+        """
+        if status != 200:
+            return None
+        for _ in range(attempts):
+            state = self.read_state_without_result(window_id, include_ocr=include_ocr)
+            if state is not None and oracle(self.rendered_text(state)):
+                return state
+            time.sleep(0.1)
         return None
 
     def find_target(
@@ -1155,10 +1255,17 @@ class Smoke:
         passes = sum(1 for result in self.results if result["status"] == "pass")
         failures = sum(1 for result in self.results if result["status"] == "fail")
         skips = sum(1 for result in self.results if result["status"] == "skip")
+        known_limitations = sum(
+            1 for result in self.results if result["status"] == "known_limitation"
+        )
+        passed = failures == 0 and skips == 0
         return {
             "failures": failures,
             "passes": passes,
             "skips": skips,
+            "knownLimitations": known_limitations,
+            "passed": passed,
+            "fullyQualified": passed and known_limitations == 0,
             "results": self.results,
         }
 
@@ -1177,7 +1284,7 @@ def main() -> int:
         for result in summary["results"]:
             print(f"{result['status']:>4} {result['name']} {result['detail']}")
         print(json.dumps(summary, sort_keys=True))
-    return 1 if summary["failures"] else 0
+    return 0 if summary["passed"] else 1
 
 
 if __name__ == "__main__":

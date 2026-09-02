@@ -6,3 +6,4 @@ dist/
 runtime-manifest.json
 .claude/
 __pycache__/
+/verify-result.json

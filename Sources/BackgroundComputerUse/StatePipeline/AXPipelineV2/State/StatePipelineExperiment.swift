@@ -69,6 +69,7 @@ struct StatePipelineCaptureResult {
 enum StatePipelineExperimentError: Error, CustomStringConvertible {
     case invalidFixture(String)
     case invalidScenario(String)
+    case invalidFixtureExportDirectory(String)
 
     var description: String {
         switch self {
@@ -76,6 +77,8 @@ enum StatePipelineExperimentError: Error, CustomStringConvertible {
             return "Fixture could not be decoded: \(path)"
         case let .invalidScenario(path):
             return "Scenario could not be decoded: \(path)"
+        case let .invalidFixtureExportDirectory(path):
+            return "Fixture export directory must be an absolute non-empty path: \(path)"
         }
     }
 }
@@ -467,11 +470,19 @@ struct StatePipelineExperiment {
             notes: responseNotes
         )
 
+#if DEBUG
+        try exportFixtureIfRequested(fixture)
+#endif
+
         return StatePipelineCaptureResult(
             envelope: envelope,
             fixture: fixture,
             liveElementsByCanonicalIndex: liveCapture.liveElementsByCanonicalIndex
         )
+    }
+
+    private func exportFixtureIfRequested(_ fixture: StatePipelineFixture) throws {
+        try AXFixtureExporter().exportIfRequested(fixture)
     }
 
     func replayFixture(_ fixture: StatePipelineFixture, imageMode _: ImageMode = .path) -> StatePipelineEnvelope {

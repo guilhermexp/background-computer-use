@@ -35,8 +35,15 @@ enum RendererAccessibilityBootstrap {
         }
     }
 
-    static func dispatchWorker(_ work: @escaping @Sendable () -> Void) {
-        DispatchQueue.global(qos: .userInitiated).async(execute: work)
+    typealias WorkerEnqueue = @Sendable (@escaping @Sendable () -> Void) -> Void
+
+    static func dispatchWorker(
+        _ work: @escaping @Sendable () -> Void,
+        enqueue: WorkerEnqueue = { work in
+            DispatchQueue.global(qos: .userInitiated).async(execute: work)
+        }
+    ) {
+        enqueue(work)
     }
 
     static func prepare(

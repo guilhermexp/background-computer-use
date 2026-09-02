@@ -95,7 +95,7 @@ macOS permissions attach to the signed host application. The bundled HTTP runtim
 6. `POST /v1/get_window_state`
 7. Optionally call `POST /v1/annotate_window` when you need a numbered screenshot-to-target map.
 8. Optionally stream visible agent feedback with `/v1/cursor_feedback`.
-9. Act with `/v1/click`, `/v1/scroll`, `/v1/type_text`, `/v1/press_key`, `/v1/set_value`, `/v1/perform_secondary_action`, `/v1/drag`, `/v1/resize`, or `/v1/set_window_frame`.
+9. Act with `/v1/click`, `/v1/scroll`, `/v1/type_text`, `/v1/paste`, `/v1/press_key`, `/v1/set_value`, `/v1/perform_secondary_action`, `/v1/drag`, `/v1/resize`, or `/v1/set_window_frame`.
 10. Read state again.
 
 For visual work, request screenshots with `imageMode: "path"` or `imageMode: "base64"` and inspect them whenever possible. The AX tree is useful for semantic targeting, but screenshots are the visual ground truth; AX state and verifier summaries can lag, omit visual-only state, or be incomplete in some apps.
@@ -115,6 +115,7 @@ Core routes:
 - `GET /v1/routes`
 - `POST /v1/list_apps`
 - `POST /v1/list_windows`
+- `POST /v1/launch_app`
 - `POST /v1/cursor_feedback`
 - `POST /v1/get_window_state`
 - `POST /v1/find_elements`
@@ -126,6 +127,7 @@ Core routes:
 - `POST /v1/resize`
 - `POST /v1/set_window_frame`
 - `POST /v1/type_text`
+- `POST /v1/paste`
 - `POST /v1/press_key`
 - `POST /v1/set_value`
 - `POST /v1/wait_for`
@@ -195,7 +197,7 @@ Type into a text target:
 curl -s -X POST "$BASE/v1/type_text" \
   -H "X-Background-Computer-Use-Token: $TOKEN" \
   -H 'content-type: application/json' \
-  -d '{"window":"WINDOW_ID","target":{"kind":"display_index","value":4},"text":"hello","imageMode":"path"}' | python3 -m json.tool
+  -d '{"window":"WINDOW_ID","target":{"kind":"display_index","value":4},"text":"hello"}' | python3 -m json.tool
 ```
 
 Action routes show the on-screen agent cursor by default when the HTTP runtime has visual cursors enabled. If the request omits `cursor`, the runtime reuses the stable default session:

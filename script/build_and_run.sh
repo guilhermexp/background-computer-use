@@ -63,6 +63,9 @@ fi
 
 cd "$ROOT_DIR"
 
+IFS=$'\t' read -r BCU_BUILD_IDENTITY BCU_BUILD_COMMIT BCU_BUILD_DIRTY BCU_SOURCES_SHA256 \
+  < <(python3 "$ROOT_DIR/script/build_fingerprint.py" --repo "$ROOT_DIR" --format tsv)
+
 if [ "$MODE" != "build" ]; then
   pkill -x "$APP_NAME" >/dev/null 2>&1 || true
 fi
@@ -121,6 +124,14 @@ cat >"$INFO_PLIST" <<PLIST
   <string>NSApplication</string>
   <key>LSUIElement</key>
   <true/>
+  <key>BCUBuildIdentity</key>
+  <string>$BCU_BUILD_IDENTITY</string>
+  <key>BCUBuildCommit</key>
+  <string>$BCU_BUILD_COMMIT</string>
+  <key>BCUBuildDirty</key>
+  <$BCU_BUILD_DIRTY/>
+  <key>BCUSourcesSHA256</key>
+  <string>$BCU_SOURCES_SHA256</string>
 </dict>
 </plist>
 PLIST

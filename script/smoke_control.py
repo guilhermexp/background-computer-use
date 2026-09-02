@@ -1,19 +1,33 @@
 #!/usr/bin/env python3
-"""Signed BCU Control/Core XPC smoke, including crash-state rehydration."""
+"""Signed BCU Control/Core XPC smoke, including real ad-hoc identity decisions."""
 
 from __future__ import annotations
 
 import concurrent.futures
 import json
 import os
+import shutil
 import signal
 import subprocess
+import tempfile
 import time
+import uuid
+from pathlib import Path
+from typing import Optional
 
 try:
     from script.smoke_runtime import BCUClient
 except ModuleNotFoundError:
     from smoke_runtime import BCUClient
+
+
+APPROVAL_WINDOW_ID = "bcu.approval.window"
+ALLOW_ONCE_ID = "bcu.approval.allow-once"
+ALWAYS_ALLOW_ID = "bcu.approval.always-allow"
+DENY_ID = "bcu.approval.deny"
+ROOT = Path(__file__).resolve().parents[1]
+FIXTURE_DIR = ROOT / "Tests/Fixtures/Apps/BCUElectronFixture"
+ELECTRON_APP = FIXTURE_DIR / "node_modules/electron/dist/Electron.app"
 
 
 def mutation_is_blocked(status: int, payload: dict) -> bool:
@@ -85,48 +99,232 @@ def core_pids() -> list[int]:
     )
     return [int(line) for line in result.stdout.splitlines() if line.strip().isdigit()]
 
+def activate_finder_foreground(client: BCUClient) -> None:
+    subprocess.run(
+        ["/usr/bin/open", "-a", "Finder"],
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    for _ in range(100):
+        status, payload = client.request("POST", "/v1/list_apps", {})
+        frontmost = payload.get("frontmostApp") if status == 200 else None
+        if isinstance(frontmost, dict) and frontmost.get("bundleID") == "com.apple.finder":
+            return
+        time.sleep(0.05)
+    raise RuntimeError("Finder did not become the unrelated foreground application")
 
-def launch_with_optional_approval(client: BCUClient, bundle_id: str, session_id: str) -> tuple[int, dict]:
+
+def click_approval_button(identifier: str) -> str:
+    escaped = identifier.replace('"', '\\"')
+    return osascript(
+        'tell application "System Events" to tell process "BackgroundComputerUse"\n'
+        'repeat with candidateWindow in windows\n'
+        'try\n'
+        f'if value of attribute "AXIdentifier" of candidateWindow is "{APPROVAL_WINDOW_ID}" then\n'
+        'set candidates to every button of entire contents of candidateWindow\n'
+        'repeat with candidateButton in candidates\n'
+        'try\n'
+        f'if value of attribute "AXIdentifier" of candidateButton is "{escaped}" then\n'
+        'click candidateButton\n'
+        'return "clicked"\n'
+        'end if\n'
+        'end try\n'
+        'end repeat\n'
+        'return "window"\n'
+        'end if\n'
+        'end try\n'
+        'end repeat\n'
+        'return "missing"\n'
+        'end tell'
+    )
+
+
+def request_with_approval(
+    client: BCUClient,
+    method: str,
+    path: str,
+    body: dict,
+    button_identifier: str,
+    require_window: bool = True,
+) -> tuple[int, dict]:
+    saw_window = False
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(
-            client.request,
-            "POST",
-            "/v1/launch_app",
-            {"bundleID": bundle_id, "sessionID": session_id},
-            True,
-            45,
-        )
-        for _ in range(60):
+        future = executor.submit(client.request, method, path, body, True, 45)
+        for _ in range(120):
             if future.done():
                 break
-            result = subprocess.run(
-                [
-                    "/usr/bin/osascript",
-                    "-e",
-                    'tell application "System Events" to tell process "BackgroundComputerUse"',
-                    "-e",
-                    "repeat with candidateWindow in windows",
-                    "-e",
-                    'if exists button "Permitir uma vez" of candidateWindow then',
-                    "-e",
-                    'click button "Permitir uma vez" of candidateWindow',
-                    "-e",
-                    "return \"approved\"",
-                    "-e",
-                    "end if",
-                    "-e",
-                    "end repeat",
-                    "-e",
-                    "end tell",
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
-            if result.returncode == 0 and result.stdout.strip():
+            state = click_approval_button(button_identifier)
+            saw_window = saw_window or state in {"window", "clicked"}
+            if state == "clicked":
                 break
+            time.sleep(0.05)
+        status, payload = future.result(timeout=45)
+    if require_window and not saw_window:
+        raise RuntimeError(f"approval window {APPROVAL_WINDOW_ID} never appeared")
+    return status, payload
+
+
+class AdHocFixture:
+    def __init__(self, root: Path, name: str) -> None:
+        if not ELECTRON_APP.is_dir():
+            raise RuntimeError(f"Pinned Electron is missing at {ELECTRON_APP}")
+        self.app = root / f"{name}.app"
+        shutil.copytree(ELECTRON_APP, self.app, symlinks=True)
+        unique_resource = self.app / "Contents/Resources" / f"identity-{uuid.uuid4().hex}"
+        unique_resource.write_text("identity-only\n")
+        subprocess.run(
+            ["/usr/bin/codesign", "--force", "--deep", "--sign", "-", str(self.app)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.process = subprocess.Popen(
+            [str(self.app / "Contents/MacOS/Electron"), str(FIXTURE_DIR)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+        self.window_id: Optional[str] = None
+        self.target: Optional[dict] = None
+        self.state_token: Optional[str] = None
+
+    def resolve(self, client: BCUClient) -> None:
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            if self.process.poll() is not None:
+                stderr = self.process.stderr.read() if self.process.stderr else ""
+                raise RuntimeError(f"ad-hoc fixture exited before discovery: {stderr.strip()}")
+            status, apps = client.request("POST", "/v1/list_apps", {})
+            running = apps.get("runningApps", []) if status == 200 else []
+            if len([app for app in running if app.get("pid") == self.process.pid]) == 1:
+                status, windows = client.request("POST", "/v1/list_windows", {"pid": self.process.pid})
+                candidates = windows.get("windows", []) if status == 200 else []
+                if candidates:
+                    self.window_id = candidates[0].get("windowID")
+                    break
             time.sleep(0.1)
-        return future.result(timeout=45)
+        if not self.window_id:
+            raise RuntimeError(f"could not resolve exact ad-hoc fixture pid {self.process.pid}")
+        status, found = client.request(
+            "POST",
+            "/v1/find_elements",
+            {"window": self.window_id, "role": "button", "text": "BCU Fixture Button", "maxNodes": 6500},
+        )
+        matches = found.get("matches", []) if status == 200 else []
+        if not matches:
+            raise RuntimeError(f"fixture button was not found: HTTP {status} {found}")
+        match = matches[0]
+        if isinstance(match.get("nodeID"), str) and match["nodeID"]:
+            self.target = {"kind": "node_id", "value": match["nodeID"]}
+        elif isinstance(match.get("displayIndex"), int):
+            self.target = {"kind": "display_index", "value": match["displayIndex"]}
+        else:
+            raise RuntimeError(f"fixture button match was untargetable: {match}")
+        self.state_token = found.get("stateToken")
+
+    def click_body(self) -> dict:
+        return {
+            "window": self.window_id,
+            "stateToken": self.state_token,
+            "target": self.target,
+            "clickCount": 1,
+            "imageMode": "omit",
+            "maxNodes": 6500,
+        }
+
+    def marker_is_clicked(self, client: BCUClient) -> bool:
+        for _ in range(30):
+            status, state = client.request(
+                "POST",
+                "/v1/get_window_state",
+                {"window": self.window_id, "imageMode": "omit", "maxNodes": 6500},
+            )
+            rendered = str((state.get("tree") or {}).get("renderedText") or "")
+            if status == 200 and "clicked:true" in rendered:
+                return True
+            time.sleep(0.1)
+        return False
+
+    def remove_signature(self) -> None:
+        subprocess.run(
+            ["/usr/bin/codesign", "--remove-signature", str(self.app)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    def stop(self) -> None:
+        if self.process.poll() is not None:
+            return
+        try:
+            os.killpg(self.process.pid, signal.SIGTERM)
+            self.process.wait(timeout=5)
+        except (ProcessLookupError, subprocess.TimeoutExpired):
+            if self.process.poll() is None:
+                os.killpg(self.process.pid, signal.SIGKILL)
+                self.process.wait(timeout=5)
+
+
+def run_identity_decisions(client: BCUClient) -> list[dict]:
+    results: list[dict] = []
+    with tempfile.TemporaryDirectory(prefix="bcu-control-identities-") as directory:
+        root = Path(directory)
+        fixtures: list[AdHocFixture] = []
+
+        def start(name: str) -> AdHocFixture:
+            fixture = AdHocFixture(root, name)
+            fixtures.append(fixture)
+            fixture.resolve(client)
+            return fixture
+
+        try:
+            allow_once = start("BCUAllowOnce")
+            status, payload = request_with_approval(
+                client,
+                "POST",
+                "/v1/click",
+                allow_once.click_body(),
+                ALLOW_ONCE_ID,
+            )
+            if status != 200 or payload.get("classification") != "success" or not allow_once.marker_is_clicked(client):
+                raise RuntimeError(f"allow-once click was not verified: HTTP {status} {payload}")
+            results.append({"name": "adhoc_allow_once", "status": "pass"})
+            allow_once.stop()
+
+            denied = start("BCUDeny")
+            status, payload = request_with_approval(
+                client,
+                "POST",
+                "/v1/click",
+                denied.click_body(),
+                DENY_ID,
+            )
+            if status != 403 or payload.get("error") != "control_denied":
+                raise RuntimeError(f"deny decision was not enforced: HTTP {status} {payload}")
+            results.append({"name": "adhoc_deny", "status": "pass"})
+            denied.stop()
+
+            invalid = start("BCUInvalidIdentity")
+            status, payload = request_with_approval(
+                client,
+                "POST",
+                "/v1/launch_app",
+                {"appPath": str(invalid.app), "sessionID": "control-identity-prime"},
+                ALLOW_ONCE_ID,
+            )
+            if status != 200:
+                raise RuntimeError(f"identity-prime launch failed: HTTP {status} {payload}")
+            invalid.remove_signature()
+            status, payload = client.request("POST", "/v1/click", invalid.click_body())
+            if status != 403 or payload.get("error") != "control_identity_unresolvable":
+                raise RuntimeError(f"invalid identity was not surfaced: HTTP {status} {payload}")
+            results.append({"name": "adhoc_identity_unresolvable", "status": "pass"})
+        finally:
+            for fixture in fixtures:
+                fixture.stop()
+    return results
 
 
 def main() -> int:
@@ -170,14 +368,19 @@ def main() -> int:
         choose_menu_item("Retomar")
         resumed = True
         wait_for_menu_item("Pausar")
-        launch_status, launch_payload = launch_with_optional_approval(
+        activate_finder_foreground(client)
+        launch_status, launch_payload = request_with_approval(
             client,
-            "com.apple.Safari",
-            "core-xpc-smoke-resumed",
+            "POST",
+            "/v1/launch_app",
+            {"bundleID": "com.apple.Safari", "sessionID": "core-xpc-smoke-resumed"},
+            ALLOW_ONCE_ID,
+            require_window=False,
         )
         if not launch_is_background_safe(launch_status, launch_payload):
             raise RuntimeError(f"resumed launch failed: {launch_status} {launch_payload}")
         results.append({"name": "resume_after_core_crash", "status": "pass"})
+        results.extend(run_identity_decisions(client))
 
         print(json.dumps({"passed": True, "results": results}, sort_keys=True))
         return 0

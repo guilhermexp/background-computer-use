@@ -94,7 +94,8 @@ let package = Package(
                 "BackgroundComputerUseLockedInstaller",
                 .product(name: "Testing", package: "swift-testing"),
             ],
-            path: "Tests/BackgroundComputerUseTests"
+            path: "Tests/BackgroundComputerUseTests",
+            resources: [.copy("Fixtures")]
         ),
     ]
 )

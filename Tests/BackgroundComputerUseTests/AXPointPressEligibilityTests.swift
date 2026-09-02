@@ -49,16 +49,17 @@ struct AXPointPressEligibilityTests {
 
     @Test
     func rendererBootstrapWorkerDispatchDoesNotBlockTheCaller() {
-        let finished = DispatchSemaphore(value: 0)
-        let startedAt = Date()
+        let probe = WorkerDispatchProbe()
 
-        RendererAccessibilityBootstrap.dispatchWorker {
-            Thread.sleep(forTimeInterval: 0.15)
-            finished.signal()
-        }
+        RendererAccessibilityBootstrap.dispatchWorker(
+            { probe.markRan() },
+            enqueue: { work in probe.capture(work) }
+        )
 
-        #expect(Date().timeIntervalSince(startedAt) < 0.05)
-        #expect(finished.wait(timeout: .now() + 1) == .success)
+        #expect(probe.hasCapturedWork)
+        #expect(probe.hasRun == false)
+        probe.runCaptured()
+        #expect(probe.hasRun)
     }
 
     @Test
@@ -180,5 +181,36 @@ struct AXPointPressEligibilityTests {
                 enabled: true
             ) == false
         )
+    }
+}
+
+private final class WorkerDispatchProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var capturedWork: (@Sendable () -> Void)?
+    private var ran = false
+
+    var hasCapturedWork: Bool {
+        lock.withLock { capturedWork != nil }
+    }
+
+    var hasRun: Bool {
+        lock.withLock { ran }
+    }
+
+    func capture(_ work: @escaping @Sendable () -> Void) {
+        lock.withLock {
+            capturedWork = work
+        }
+    }
+
+    func markRan() {
+        lock.withLock {
+            ran = true
+        }
+    }
+
+    func runCaptured() {
+        let work = lock.withLock { capturedWork }
+        work?()
     }
 }

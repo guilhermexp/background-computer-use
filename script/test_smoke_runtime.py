@@ -2,7 +2,11 @@ import unittest
 
 from script.smoke_runtime import (
     controlled_type_fallback_is_valid,
+    generation_incremented,
+    lane_status_for_effect,
     safari_adaptive_type_strategy_is_valid,
+    scroll_marker_increased,
+    strict_click_oracle_is_valid,
     text_result_is_background_safe,
     type_text_retry_contract_is_valid,
 )
@@ -191,6 +195,54 @@ class TypeTextRetryContractTests(unittest.TestCase):
             "foregroundFallbackUsed": True,
             "verification": {"exactValueMatch": False},
         }))
+
+
+class StrictLiveOraclePolicyTests(unittest.TestCase):
+    def test_click_requires_success_and_changed_marker(self) -> None:
+        success = {"classification": "success", "ok": True}
+        self.assertTrue(strict_click_oracle_is_valid(success, "Button clicked 0", "Button clicked 1"))
+        self.assertFalse(strict_click_oracle_is_valid(success, "Button clicked 0", "Button clicked 0"))
+        self.assertFalse(strict_click_oracle_is_valid(
+            {"classification": "verifier_ambiguous", "ok": True},
+            "Button clicked 0",
+            "Button clicked 1",
+        ))
+
+    def test_ordinary_ambiguous_lane_fails(self) -> None:
+        self.assertEqual(
+            lane_status_for_effect("chrome-click", {"classification": "verifier_ambiguous"}, False),
+            "fail",
+        )
+
+    def test_named_ambiguous_lane_is_known_limitation(self) -> None:
+        self.assertEqual(
+            lane_status_for_effect(
+                "chrome-reload-known-limitation",
+                {"classification": "verifier_ambiguous"},
+                False,
+            ),
+            "known_limitation",
+        )
+
+    def test_success_without_oracle_fails_even_for_limitation_lane(self) -> None:
+        self.assertEqual(
+            lane_status_for_effect(
+                "chrome-reload-known-limitation",
+                {"classification": "success"},
+                False,
+            ),
+            "fail",
+        )
+
+    def test_scroll_requires_numeric_increase(self) -> None:
+        self.assertTrue(scroll_marker_increased("scroll-top:0", "scroll-top:42"))
+        self.assertFalse(scroll_marker_increased("scroll-top:42", "scroll-top:42"))
+        self.assertFalse(scroll_marker_increased("missing", "scroll-top:42"))
+
+    def test_reload_requires_generation_increment(self) -> None:
+        self.assertTrue(generation_incremented("generation:1", "generation:2"))
+        self.assertFalse(generation_incremented("generation:2", "generation:2"))
+        self.assertFalse(generation_incremented("generation:x", "generation:3"))
 
 
 if __name__ == "__main__":
