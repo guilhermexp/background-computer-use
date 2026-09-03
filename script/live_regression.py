@@ -38,9 +38,24 @@ def state_text(state: dict) -> str:
     return str((state.get("tree") or {}).get("renderedText") or "")
 
 
-def scroll_top(state: dict) -> Optional[int]:
-    match = re.search(r"scroll-top:(\d+)", state_text(state))
+def page_scroll(state: dict) -> Optional[int]:
+    match = re.search(r"page-scroll:(\d+)", state_text(state))
     return int(match.group(1)) if match else None
+
+
+def scroll_container_target(state: dict) -> Optional[dict]:
+    """Pick a node the runtime itself reports as a scroll container.
+
+    Chromium exposes no AX node for the fixture's inner overflow region, so the
+    document/web area is the only surface a background scroll can move.
+    """
+    for node in (state.get("tree") or {}).get("nodes", []):
+        if (node.get("interactionTraits") or {}).get("isPotentialScrollContainer") is not True:
+            continue
+        index = node.get("displayIndex")
+        if isinstance(index, int):
+            return {"kind": "display_index", "value": index}
+    return None
 
 
 def ocr_comparable(text: object) -> str:
@@ -344,17 +359,19 @@ class LiveRegression:
         )
 
     def scroll_lane(self) -> None:
-        target = self.find_target("static text", "Row 40")
         state = self.state()
-        before_value = scroll_top(state)
+        target = scroll_container_target(state)
+        if target is None:
+            raise RuntimeError("no scroll container was exposed for the fixture window")
+        before_value = page_scroll(state)
 
         def increased(item: dict) -> bool:
-            current = scroll_top(item)
+            current = page_scroll(item)
             return current is not None and before_value is not None and current > before_value
 
         def oracle(_: dict) -> tuple[bool, object]:
             matched, fresh = self.poll_state(increased)
-            return matched, {"before": before_value, "after": scroll_top(fresh)}
+            return matched, {"before": before_value, "after": page_scroll(fresh)}
 
         self.action(
             "scroll-marker-increase",

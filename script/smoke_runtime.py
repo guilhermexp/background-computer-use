@@ -96,6 +96,10 @@ def scroll_marker_increased(before: str, after: str) -> bool:
     return _marker_increased(before, after, "scroll-top:")
 
 
+def page_scroll_marker_increased(before: str, after: str) -> bool:
+    return _marker_increased(before, after, "page-scroll:")
+
+
 def generation_incremented(before: str, after: str) -> bool:
     return _marker_increased(before, after, "generation:")
 
@@ -284,7 +288,7 @@ class Smoke:
             role_contains="text field",
         )
         button_target = self.find_target(state, ["BCU Smoke Button", "Smoke Button"], role_contains="button")
-        scroll_target = self.find_target(state, ["Row 40"], role_contains="static text")
+        scroll_target = self.find_scroll_target(state)
 
         if input_target is not None and button_target is not None:
             self.pass_("chrome-find-input", json.dumps(input_target))
@@ -334,12 +338,25 @@ class Smoke:
             )
 
         state = self.get_state(window_id, "chrome-post-click-state", include_ocr=True) or state
-        scroll_target = (
-            self.find_target(state, ["Row 40"], role_contains="static text")
-            or scroll_target
-            or {"kind": "display_index", "value": 0}
-        )
+        scroll_target = self.find_scroll_target(state) or scroll_target
+        if scroll_target is None:
+            self.fail(
+                "chrome-find-scroll-target",
+                "no scroll container was exposed for the fixture window",
+            )
+            return
         self.pass_("chrome-find-scroll-target", json.dumps(scroll_target))
+
+        # Chromium does not expose the fixture's inner overflow div (#scroll-region,
+        # role=region) in the accessibility tree, so no AX target can move it from the
+        # background. Record that gap instead of pretending the scroll engine failed.
+        if self.find_target(state, ["BCU Scroll Region"]) is None:
+            self.known_limitation(
+                "chrome-inner-scroll-known-limitation",
+                "Chromium exposes no AX node for the inner overflow region, so only the "
+                "document scroll surface is reachable in background.",
+            )
+
         scroll_marker_before = self.rendered_text(state)
         status, scroll = self.call(
             "chrome-scroll-fractional",
@@ -357,7 +374,7 @@ class Smoke:
         post_scroll_state = self.await_page_oracle(
             window_id,
             status,
-            lambda after: scroll_marker_increased(scroll_marker_before, after),
+            lambda after: page_scroll_marker_increased(scroll_marker_before, after),
         )
         if (
             post_scroll_state is not None
@@ -729,9 +746,18 @@ class Smoke:
   </div>
   <p id="scroll-marker">scroll-top:0</p>
   <p id="generation-marker">generation:1</p>
+  <p id="page-scroll-marker">page-scroll:0</p>
+  <!-- Page-level filler: Chromium does not expose the inner overflow div above as an
+       AX node, so only the document/web area is reachable as a scroll target. The
+       page marker below is the one a background scroll can actually prove. -->
+  <div class="page-filler">{rows}</div>
   <script>
     const scroll=document.getElementById('scroll-region');
     scroll.addEventListener('scroll',()=>document.getElementById('scroll-marker').textContent='scroll-top:'+Math.round(scroll.scrollTop));
+    const pageMarker=document.getElementById('page-scroll-marker');
+    const renderPageScroll=()=>{{pageMarker.textContent='page-scroll:'+Math.round(window.scrollY);}};
+    window.addEventListener('scroll',renderPageScroll,{{passive:true}});
+    renderPageScroll();
     const generation=Number(sessionStorage.getItem('generation')||'0')+1;
     sessionStorage.setItem('generation',String(generation));
     document.getElementById('generation-marker').textContent='generation:'+generation;
@@ -1173,6 +1199,7 @@ class Smoke:
         state: dict,
         needles: list[str],
         require_value_settable: bool = False,
+        require_scroll_container: bool = False,
         role_contains: Optional[str] = None,
     ) -> Optional[dict]:
         nodes = state.get("tree", {}).get("nodes", [])
@@ -1185,12 +1212,40 @@ class Smoke:
                 continue
             if require_value_settable and node.get("interactionTraits", {}).get("supportsValueSet") is not True:
                 continue
+            if (
+                require_scroll_container
+                and node.get("interactionTraits", {}).get("isPotentialScrollContainer") is not True
+            ):
+                continue
             display_index = node.get("displayIndex")
             if isinstance(display_index, int):
                 return {"kind": "display_index", "value": display_index}
             node_id = node.get("nodeID")
             if isinstance(node_id, str) and node_id:
                 return {"kind": "node_id", "value": node_id}
+        return None
+
+    def find_scroll_target(self, state: dict) -> Optional[dict]:
+        """Resolve a scroll surface the runtime can actually move.
+
+        Prefer the fixture's labelled region when Chromium exposes it; otherwise fall
+        back to whatever node the runtime itself reports as a scroll container (the web
+        area). The window root is never accepted: it is not a scroll container, and
+        targeting it turns a targeting miss into a bogus scroll failure.
+        """
+        labelled = self.find_target(
+            state,
+            ["BCU Scroll Region", "scroll-region"],
+            require_scroll_container=True,
+        )
+        if labelled is not None:
+            return labelled
+        for node in state.get("tree", {}).get("nodes", []):
+            if node.get("interactionTraits", {}).get("isPotentialScrollContainer") is not True:
+                continue
+            display_index = node.get("displayIndex")
+            if isinstance(display_index, int):
+                return {"kind": "display_index", "value": display_index}
         return None
 
     @staticmethod

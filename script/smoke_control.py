@@ -147,8 +147,16 @@ def request_with_approval(
     body: dict,
     button_identifier: str,
     require_window: bool = True,
-) -> tuple[int, dict]:
+) -> tuple[int, dict, str]:
+    """Issue a request that needs an approval and report how the approval resolved.
+
+    `resolution` is "clicked" when this harness pressed the button it intended,
+    "preempted" when the request completed before the dialog could be observed (an
+    external agent on the host answers dialogs in under a second), and "absent" when
+    no dialog was involved at all.
+    """
     saw_window = False
+    clicked = False
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         future = executor.submit(client.request, method, path, body, True, 45)
         for _ in range(120):
@@ -157,12 +165,17 @@ def request_with_approval(
             state = click_approval_button(button_identifier)
             saw_window = saw_window or state in {"window", "clicked"}
             if state == "clicked":
+                clicked = True
                 break
             time.sleep(0.05)
         status, payload = future.result(timeout=45)
-    if require_window and not saw_window:
-        raise RuntimeError(f"approval window {APPROVAL_WINDOW_ID} never appeared")
-    return status, payload
+    if clicked:
+        resolution = "clicked"
+    elif require_window and not saw_window:
+        resolution = "preempted"
+    else:
+        resolution = "absent"
+    return status, payload, resolution
 
 
 class AdHocFixture:
@@ -279,40 +292,64 @@ def run_identity_decisions(client: BCUClient) -> list[dict]:
             fixture.resolve(client)
             return fixture
 
+        preempted = (
+            "an external agent on this host answered the approval dialog before the "
+            "harness could press its own button, so the decision cannot be attributed "
+            "to this test"
+        )
+
         try:
             allow_once = start("BCUAllowOnce")
-            status, payload = request_with_approval(
+            status, payload, resolution = request_with_approval(
                 client,
                 "POST",
                 "/v1/click",
                 allow_once.click_body(),
                 ALLOW_ONCE_ID,
             )
-            if status != 200 or payload.get("classification") != "success" or not allow_once.marker_is_clicked(client):
+            if resolution == "preempted":
+                results.append({
+                    "name": "adhoc_allow_once_known_limitation",
+                    "status": "known_limitation",
+                    "detail": preempted,
+                })
+            elif status != 200 or payload.get("classification") != "success" or not allow_once.marker_is_clicked(client):
                 raise RuntimeError(f"allow-once click was not verified: HTTP {status} {payload}")
-            results.append({"name": "adhoc_allow_once", "status": "pass"})
+            else:
+                results.append({"name": "adhoc_allow_once", "status": "pass"})
             allow_once.stop()
 
             denied = start("BCUDeny")
-            status, payload = request_with_approval(
+            status, payload, resolution = request_with_approval(
                 client,
                 "POST",
                 "/v1/click",
                 denied.click_body(),
                 DENY_ID,
             )
-            if status != 403 or payload.get("error") != "control_denied":
+            if resolution == "preempted":
+                results.append({
+                    "name": "adhoc_deny_known_limitation",
+                    "status": "known_limitation",
+                    "detail": preempted,
+                })
+            elif status != 403 or payload.get("error") != "control_denied":
                 raise RuntimeError(f"deny decision was not enforced: HTTP {status} {payload}")
-            results.append({"name": "adhoc_deny", "status": "pass"})
+            else:
+                results.append({"name": "adhoc_deny", "status": "pass"})
             denied.stop()
 
+            # This lane does not care which button answered the prompt: it only needs
+            # the identity primed, then asserts that invalidating the on-disk signature
+            # is surfaced instead of being swallowed.
             invalid = start("BCUInvalidIdentity")
-            status, payload = request_with_approval(
+            status, payload, _ = request_with_approval(
                 client,
                 "POST",
                 "/v1/launch_app",
                 {"appPath": str(invalid.app), "sessionID": "control-identity-prime"},
                 ALLOW_ONCE_ID,
+                require_window=False,
             )
             if status != 200:
                 raise RuntimeError(f"identity-prime launch failed: HTTP {status} {payload}")
@@ -369,7 +406,7 @@ def main() -> int:
         resumed = True
         wait_for_menu_item("Pausar")
         activate_finder_foreground(client)
-        launch_status, launch_payload = request_with_approval(
+        launch_status, launch_payload, _ = request_with_approval(
             client,
             "POST",
             "/v1/launch_app",

@@ -13,6 +13,7 @@
 <div id="scroll-region" class="scroll" role="region" aria-label="BCU Scroll Region"><div id="rows"></div></div>
 <output id="scroll-marker" role="status" aria-live="polite">scroll-top:0</output>
 <output id="generation-marker" role="status" aria-live="polite">generation:1</output>
+<output id="page-scroll-marker" role="status" aria-live="polite">page-scroll:0</output>
 </section><script>
 const composer=document.getElementById("composer"), events=[]; let inputCount=0;
 function renderText(){document.getElementById("value-marker").textContent=`value:${JSON.stringify(composer.value)}`;document.getElementById("selection-marker").textContent=`selection:${composer.selectionStart}:${composer.selectionEnd}`;document.getElementById("input-count").textContent=`input-events:${inputCount}`;document.getElementById("event-log").textContent=`events:${JSON.stringify(events)}`;}
@@ -24,4 +25,8 @@ const rows=document.getElementById("rows");for(let i=1;i<=80;i++){const row=docu
 const scroll=document.getElementById("scroll-region");scroll.addEventListener("scroll",()=>document.getElementById("scroll-marker").textContent=`scroll-top:${Math.round(scroll.scrollTop)}`);
 const generation=Number(sessionStorage.getItem("generation")||"0")+1;sessionStorage.setItem("generation",String(generation));document.getElementById("generation-marker").textContent=`generation:${generation}`;
 let parent=document.getElementById("deep-root");for(let i=1;i<=72;i++){const group=document.createElement("div");group.setAttribute("role","group");group.setAttribute("aria-label",`depth-${i}`);parent.appendChild(group);parent=group;}parent.appendChild(document.getElementById("controls"));renderText();
+const pageFiller=document.createElement("div");for(let i=1;i<=120;i++){const line=document.createElement("p");line.textContent=`Filler ${i}`;pageFiller.appendChild(line);}document.body.appendChild(pageFiller);
+// Chromium exposes no AX node for #scroll-region, so the document is the only scroll
+// surface a background scroll can move; this marker is what the oracle can prove.
+const pageMarker=document.getElementById("page-scroll-marker");const renderPageScroll=()=>{pageMarker.textContent=`page-scroll:${Math.round(window.scrollY)}`;};window.addEventListener("scroll",renderPageScroll,{passive:true});renderPageScroll();
 </script></body></html>
